@@ -366,6 +366,12 @@ V1 exposes a small generic tool surface:
 - `record_evidence`
 - `record_question`
 - `update_question`
+- `task_register`
+- `task_status_report`
+- `control_message`
+- `control_ack`
+- `task_inbox`
+- `task_status`
 - `gate_request`
 - `emit_plan`
 - `mission_status`
@@ -537,6 +543,16 @@ V2 can add:
 - Tool-output compaction provider
 - Context compression provider
 - Native optimization primitives integrated into evidence recording and plan emission
+- Live sub-orchestrator control with task heartbeat, mailbox, direction-change pause/ack, and immediate interrupts
+
+Implemented v2 control-plane tools:
+
+- `task_register`: creates a tracked active task.
+- `task_status_report`: records heartbeat, current flow, summary, and touched paths.
+- `control_message`: sends query, advisory, direction-change, or interrupt messages.
+- `control_ack`: acknowledges a control message and records response.
+- `task_inbox`: lists pending or acknowledged task messages.
+- `task_status`: returns task state and mailbox counts.
 
 The repo-level v2 contract is documented in `docs/architecture/v2-v3-orchestration.md` and `docs/contracts/capability-manifest.md`.
 

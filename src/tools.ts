@@ -1,8 +1,12 @@
 import type {
   EvidenceInput,
   PlanInput,
+  ControlAckInput,
+  ControlMessageInput,
   QuestionInput,
   QuestionUpdate,
+  TaskRegistrationInput,
+  TaskStatusInput,
   WormholeKernel,
 } from "./kernel.js";
 import { optimizeText, type OptimizationKind } from "./optimization.js";
@@ -30,6 +34,37 @@ export function createToolHandlers(kernel: WormholeKernel) {
     updateQuestion(input: { missionId: string; questionId: string } & QuestionUpdate) {
       const { missionId, questionId, ...update } = input;
       return kernel.updateQuestion(missionId, questionId, update);
+    },
+
+    taskRegister(input: { missionId: string } & TaskRegistrationInput) {
+      const { missionId, ...task } = input;
+      return kernel.registerTask(missionId, task);
+    },
+
+    taskStatusReport(input: { missionId: string; taskId: string } & TaskStatusInput) {
+      const { missionId, taskId, ...status } = input;
+      return kernel.reportTaskStatus(missionId, taskId, status);
+    },
+
+    controlMessage(input: { missionId: string } & ControlMessageInput) {
+      const { missionId, ...message } = input;
+      return kernel.sendControlMessage(missionId, message);
+    },
+
+    controlAck(
+      input: { missionId: string; taskId: string; messageId: string } & ControlAckInput,
+    ) {
+      const { missionId, taskId, messageId, ...ack } = input;
+      return kernel.ackControlMessage(missionId, taskId, messageId, ack);
+    },
+
+    taskInbox(input: { missionId: string; taskId: string; includeAcknowledged?: boolean }) {
+      const { missionId, taskId, ...options } = input;
+      return kernel.listTaskInbox(missionId, taskId, options);
+    },
+
+    taskStatus(input: { missionId: string; taskId: string }) {
+      return kernel.taskStatus(input.missionId, input.taskId);
     },
 
     gateRequest(input: { missionId: string }) {

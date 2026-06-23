@@ -29,4 +29,15 @@ describe("capability manifest", () => {
       }),
     );
   });
+
+  it("declares live sub-orchestrator control as implemented", () => {
+    const manifest = createDefaultCapabilityManifest();
+
+    expect(manifest.capabilities).toContainEqual(
+      expect.objectContaining({
+        id: "v2.live-sub-orchestrator-control",
+        status: "implemented",
+      }),
+    );
+  });
 });

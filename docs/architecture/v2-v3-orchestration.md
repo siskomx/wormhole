@@ -9,7 +9,7 @@ V1 proves the evidence loop. V2 introduces bounded parallel orchestration. V3 in
 | Track | Status | Purpose |
 | --- | --- | --- |
 | V1 | Implemented foundation | Local MCP planning kernel, JSONL state, evidence records, question ledger, gate, Markdown plan artifact, benchmark fixtures. |
-| V2 | Partly implemented | First-party optimization primitives plus planned four-layer sub-orchestration, Codex plugin support, task DAGs, and mergeable artifacts. |
+| V2 | Partly implemented | First-party optimization primitives, live sub-orchestrator control, and planned four-layer sub-orchestration, Codex plugin support, task DAGs, and mergeable artifacts. |
 | V3 | Planned contract | Adaptive model/provider routing, connector marketplace, UI/workbench, richer artifact types, model-pool providers. |
 
 ## Four-Layer Ceiling
@@ -52,6 +52,28 @@ Every child task returns:
 - Budget used
 
 Parents merge child outputs through structured evidence and artifacts, not raw scratch text.
+
+## Live Control Plane
+
+Active sub-orchestrators communicate through a mailbox and heartbeat protocol.
+
+- `task_register` creates a tracked task at layer 1-4.
+- `task_status_report` records heartbeat, current flow, summary, and touched paths.
+- `control_message` sends `query`, `advisory`, `direction_change`, or `interrupt` messages.
+- `control_ack` acknowledges messages and records the child response.
+- `task_inbox` lists pending or acknowledged messages for a task.
+- `task_status` reports current task state and mailbox counts.
+
+Message modes have different execution policies:
+
+| Mode | Effective policy | Behavior |
+| --- | --- | --- |
+| `query` | `next_checkpoint` | Non-blocking; task continues and answers through inbox/checkpoint flow. |
+| `advisory` | `next_checkpoint` | Non-blocking; task incorporates context at the next checkpoint. |
+| `direction_change` | `pause_until_ack` | Task pauses, acknowledges the new direction, revises local plan, then resumes. |
+| `interrupt` | `immediate_stop` | Task stops immediately and must acknowledge before further coordination. |
+
+All task registrations, status reports, control messages, and acknowledgements are appended to the JSONL event log and replay into projected state.
 
 ## Parallelism Model
 

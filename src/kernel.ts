@@ -56,6 +56,76 @@ export type GateResult = {
   reasons: string[];
 };
 
+export type TaskLayer = 1 | 2 | 3 | 4;
+
+export type TaskStatus =
+  | "registered"
+  | "running"
+  | "blocked"
+  | "needs_input"
+  | "paused"
+  | "interrupted"
+  | "completed"
+  | "failed";
+
+export type ControlMessageMode = "query" | "advisory" | "direction_change" | "interrupt";
+
+export type ControlPolicy = "next_checkpoint" | "pause_until_ack" | "immediate_stop";
+
+export type TaskRegistrationInput = {
+  parentTaskId?: string;
+  layer: TaskLayer;
+  name: string;
+  objective: string;
+  assignedTo?: string;
+};
+
+export type TaskRecord = TaskRegistrationInput & {
+  taskId: string;
+  missionId: string;
+  status: TaskStatus;
+  createdAt: string;
+  heartbeatAt?: string;
+  currentFlow?: string;
+  summary?: string;
+  touchedPaths?: string[];
+};
+
+export type TaskStatusInput = {
+  status: TaskStatus;
+  currentFlow?: string;
+  summary: string;
+  touchedPaths?: string[];
+};
+
+export type ControlMessageInput = {
+  targetTaskId: string;
+  mode: ControlMessageMode;
+  content: string;
+  sender: string;
+  ackRequired?: boolean;
+};
+
+export type ControlMessage = {
+  messageId: string;
+  missionId: string;
+  targetTaskId: string;
+  mode: ControlMessageMode;
+  effectivePolicy: ControlPolicy;
+  content: string;
+  sender: string;
+  ackRequired: boolean;
+  sentAt: string;
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+  response?: string;
+};
+
+export type ControlAckInput = {
+  acknowledgedBy: string;
+  response?: string;
+};
+
 export type PlanInput = {
   recommendedApproach: string;
   implementationSteps: string[];
@@ -88,6 +158,8 @@ type MissionState = {
   questions: QuestionRecord[];
   gate?: GateResult;
   artifacts: PlanArtifact[];
+  tasks: TaskRecord[];
+  controlMessages: ControlMessage[];
   events: EventRecord[];
 };
 
@@ -126,6 +198,8 @@ export function createInMemoryKernel(
         evidence: [],
         questions: [],
         artifacts: [],
+        tasks: [],
+        controlMessages: [],
         events: [],
       };
       state.mission = mission;
@@ -168,6 +242,90 @@ export function createInMemoryKernel(
       case "artifact.emitted":
         state.artifacts.push(event.payload as PlanArtifact);
         break;
+      case "task.registered":
+        state.tasks.push(event.payload as TaskRecord);
+        break;
+      case "task.status_reported": {
+        const report = event.payload as { taskId: string; update: TaskStatusInput; heartbeatAt: string };
+        applyTaskStatusReport(state, report.taskId, report.update, report.heartbeatAt);
+        break;
+      }
+      case "control.message_sent": {
+        const message = event.payload as ControlMessage;
+        state.controlMessages.push(message);
+        applyMessagePolicy(state, message);
+        break;
+      }
+      case "control.message_acknowledged": {
+        const message = event.payload as ControlMessage;
+        const existing = getControlMessage(state, message.messageId);
+        Object.assign(existing, message);
+        applyAcknowledgementPolicy(state, existing);
+        break;
+      }
+    }
+  }
+
+  function getTask(state: MissionState, taskId: string): TaskRecord {
+    const task = state.tasks.find((candidate) => candidate.taskId === taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${taskId}`);
+    }
+    return task;
+  }
+
+  function getControlMessage(state: MissionState, messageId: string): ControlMessage {
+    const message = state.controlMessages.find((candidate) => candidate.messageId === messageId);
+    if (!message) {
+      throw new Error(`Control message not found: ${messageId}`);
+    }
+    return message;
+  }
+
+  function deriveControlPolicy(mode: ControlMessageMode): {
+    ackRequired: boolean;
+    effectivePolicy: ControlPolicy;
+  } {
+    switch (mode) {
+      case "query":
+      case "advisory":
+        return { ackRequired: false, effectivePolicy: "next_checkpoint" };
+      case "direction_change":
+        return { ackRequired: true, effectivePolicy: "pause_until_ack" };
+      case "interrupt":
+        return { ackRequired: true, effectivePolicy: "immediate_stop" };
+    }
+  }
+
+  function applyTaskStatusReport(
+    state: MissionState,
+    taskId: string,
+    update: TaskStatusInput,
+    heartbeatAt: string,
+  ): TaskRecord {
+    const task = getTask(state, taskId);
+    task.status = update.status;
+    task.currentFlow = update.currentFlow;
+    task.summary = update.summary;
+    task.touchedPaths = update.touchedPaths;
+    task.heartbeatAt = heartbeatAt;
+    return task;
+  }
+
+  function applyMessagePolicy(state: MissionState, message: ControlMessage): void {
+    const task = getTask(state, message.targetTaskId);
+    if (message.effectivePolicy === "pause_until_ack") {
+      task.status = "paused";
+    }
+    if (message.effectivePolicy === "immediate_stop") {
+      task.status = "interrupted";
+    }
+  }
+
+  function applyAcknowledgementPolicy(state: MissionState, message: ControlMessage): void {
+    const task = getTask(state, message.targetTaskId);
+    if (message.effectivePolicy === "pause_until_ack" && task.status === "paused") {
+      task.status = "running";
     }
   }
 
@@ -293,6 +451,8 @@ export function createInMemoryKernel(
         evidence: [],
         questions: [],
         artifacts: [],
+        tasks: [],
+        controlMessages: [],
         events: [],
       };
       missions.set(mission.missionId, state);
@@ -366,6 +526,112 @@ export function createInMemoryKernel(
       state.questions.push(record);
       appendEvent(state, "question.recorded", record);
       return record;
+    },
+
+    registerTask(missionId: string, input: TaskRegistrationInput): TaskRecord {
+      const state = getMissionState(missionId);
+      if (input.layer < 1 || input.layer > 4) {
+        throw new Error("Task layer must be between 1 and 4");
+      }
+      if (input.parentTaskId) {
+        const parent = getTask(state, input.parentTaskId);
+        if (input.layer <= parent.layer) {
+          throw new Error("Child task layer must be deeper than its parent task layer");
+        }
+      }
+      const task: TaskRecord = {
+        taskId: randomUUID(),
+        missionId,
+        status: "registered",
+        createdAt: new Date().toISOString(),
+        ...input,
+      };
+      state.tasks.push(task);
+      appendEvent(state, "task.registered", task);
+      return task;
+    },
+
+    reportTaskStatus(
+      missionId: string,
+      taskId: string,
+      input: TaskStatusInput,
+    ): TaskRecord {
+      const state = getMissionState(missionId);
+      const heartbeatAt = new Date().toISOString();
+      const task = applyTaskStatusReport(state, taskId, input, heartbeatAt);
+      appendEvent(state, "task.status_reported", {
+        taskId,
+        update: input,
+        heartbeatAt,
+      });
+      return task;
+    },
+
+    sendControlMessage(missionId: string, input: ControlMessageInput): ControlMessage {
+      const state = getMissionState(missionId);
+      getTask(state, input.targetTaskId);
+      const defaults = deriveControlPolicy(input.mode);
+      const message: ControlMessage = {
+        messageId: randomUUID(),
+        missionId,
+        targetTaskId: input.targetTaskId,
+        mode: input.mode,
+        effectivePolicy: defaults.effectivePolicy,
+        content: input.content,
+        sender: input.sender,
+        ackRequired: input.ackRequired ?? defaults.ackRequired,
+        sentAt: new Date().toISOString(),
+      };
+      state.controlMessages.push(message);
+      applyMessagePolicy(state, message);
+      appendEvent(state, "control.message_sent", message);
+      return message;
+    },
+
+    ackControlMessage(
+      missionId: string,
+      taskId: string,
+      messageId: string,
+      input: ControlAckInput,
+    ): ControlMessage {
+      const state = getMissionState(missionId);
+      const message = getControlMessage(state, messageId);
+      if (message.targetTaskId !== taskId) {
+        throw new Error(`Control message ${messageId} does not target task ${taskId}`);
+      }
+      message.acknowledgedAt = new Date().toISOString();
+      message.acknowledgedBy = input.acknowledgedBy;
+      message.response = input.response;
+      applyAcknowledgementPolicy(state, message);
+      appendEvent(state, "control.message_acknowledged", message);
+      return message;
+    },
+
+    listTaskInbox(
+      missionId: string,
+      taskId: string,
+      input: { includeAcknowledged?: boolean } = {},
+    ): ControlMessage[] {
+      const state = getMissionState(missionId);
+      getTask(state, taskId);
+      return state.controlMessages.filter(
+        (message) =>
+          message.targetTaskId === taskId &&
+          (input.includeAcknowledged || !message.acknowledgedAt),
+      );
+    },
+
+    taskStatus(missionId: string, taskId: string) {
+      const state = getMissionState(missionId);
+      const task = getTask(state, taskId);
+      const inbox = state.controlMessages.filter((message) => message.targetTaskId === taskId);
+      return {
+        task,
+        inboxCount: inbox.filter((message) => !message.acknowledgedAt).length,
+        pendingAckCount: inbox.filter(
+          (message) => message.ackRequired && !message.acknowledgedAt,
+        ).length,
+      };
     },
 
     updateQuestion(

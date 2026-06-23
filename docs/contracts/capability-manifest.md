@@ -28,6 +28,9 @@ The manifest is intentionally client-neutral. Codex, Claude Code, and future con
 
 V1 capabilities must be executable and tested.
 
-V2 capabilities can be implemented incrementally. The first implemented v2 capability is `v2.first-party-optimization-primitives`, which provides deterministic local command-output compaction, context compression, dense summaries, and minimality review.
+V2 capabilities can be implemented incrementally. Implemented v2 capabilities include:
+
+- `v2.first-party-optimization-primitives`: deterministic local command-output compaction, context compression, dense summaries, and minimality review.
+- `v2.live-sub-orchestrator-control`: task registration, heartbeat/status reporting, mailbox messages, direction-change pause/ack, and immediate interrupts.
 
 V3 capabilities may be planned, but they must have stable names, scope boundaries, and compatibility expectations so implementation can proceed without redesigning the architecture.

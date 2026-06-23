@@ -99,6 +99,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Four-layer orchestration with parent-owned budgets, child manifests, and mergeable artifacts.",
       },
       {
+        id: "v2.live-sub-orchestrator-control",
+        track: "v2",
+        status: "implemented",
+        description: "Task registration, heartbeat/status reporting, mailbox messages, direction-change pause/ack, and immediate interrupts for active sub-orchestrators.",
+      },
+      {
         id: "v2.context-compression",
         track: "v2",
         status: "implemented",

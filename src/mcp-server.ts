@@ -93,6 +93,103 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
   );
 
   server.registerTool(
+    "task_register",
+    {
+      description: "Register an active sub-orchestrator or worker task.",
+      inputSchema: {
+        missionId: z.string(),
+        parentTaskId: z.string().optional(),
+        layer: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+        name: z.string(),
+        objective: z.string(),
+        assignedTo: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.taskRegister(input)),
+  );
+
+  server.registerTool(
+    "task_status_report",
+    {
+      description: "Report heartbeat, status, current flow, and touched paths for an active task.",
+      inputSchema: {
+        missionId: z.string(),
+        taskId: z.string(),
+        status: z.enum([
+          "registered",
+          "running",
+          "blocked",
+          "needs_input",
+          "paused",
+          "interrupted",
+          "completed",
+          "failed",
+        ]),
+        currentFlow: z.string().optional(),
+        summary: z.string(),
+        touchedPaths: z.array(z.string()).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.taskStatusReport(input)),
+  );
+
+  server.registerTool(
+    "control_message",
+    {
+      description: "Send a query, advisory note, direction change, or interrupt to an active task.",
+      inputSchema: {
+        missionId: z.string(),
+        targetTaskId: z.string(),
+        mode: z.enum(["query", "advisory", "direction_change", "interrupt"]),
+        content: z.string(),
+        sender: z.string(),
+        ackRequired: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.controlMessage(input)),
+  );
+
+  server.registerTool(
+    "control_ack",
+    {
+      description: "Acknowledge a control message and optionally include the revised local plan.",
+      inputSchema: {
+        missionId: z.string(),
+        taskId: z.string(),
+        messageId: z.string(),
+        acknowledgedBy: z.string(),
+        response: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.controlAck(input)),
+  );
+
+  server.registerTool(
+    "task_inbox",
+    {
+      description: "List pending or acknowledged control messages for a task.",
+      inputSchema: {
+        missionId: z.string(),
+        taskId: z.string(),
+        includeAcknowledged: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.taskInbox(input)),
+  );
+
+  server.registerTool(
+    "task_status",
+    {
+      description: "Return current task status and mailbox counts.",
+      inputSchema: {
+        missionId: z.string(),
+        taskId: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.taskStatus(input)),
+  );
+
+  server.registerTool(
     "gate_request",
     {
       description: "Evaluate whether the mission can emit its final plan.",
