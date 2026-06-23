@@ -1,0 +1,7 @@
+{
+  "name": "small-web-api-fixture",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}

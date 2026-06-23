@@ -1,0 +1,15 @@
+{
+  "id": "cli-service-integration",
+  "title": "Add webhook notification integration",
+  "category": "cli_service_integration",
+  "repoSource": "benchmarks/repos/cli-service",
+  "fixtureHash": "sha256:7cc3bd05fbfd81ca398b32c84cd445cef33700737b2c3cb6ff2f4f0d6663d7fd",
+  "taskPrompt": "Plan how to add an optional webhook notification after a successful sync command without changing the default CLI behavior.",
+  "allowedPaths": ["package.json", "src/cli.ts", "src/sync.ts", "src/notifier.ts"],
+  "expectedPlanningConcerns": [
+    "optional configuration",
+    "network failure handling",
+    "preserving existing stdout contract"
+  ],
+  "rubricFile": "benchmarks/rubric.json"
+}

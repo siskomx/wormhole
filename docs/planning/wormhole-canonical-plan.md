@@ -145,6 +145,7 @@ V1 includes:
 - Claude Code first
 - One local MCP server
 - MCP server is the v1 kernel
+- Repo-local Codex plugin metadata for local MCP attachment
 - Existing-repo planning missions only
 - Bounded sequential loop
 - JSONL append-only event log
@@ -159,7 +160,7 @@ V1 excludes:
 
 - Parallel execution
 - Dynamic sub-orchestrators
-- Codex adapter implementation
+- Codex-specific runtime behavior beyond plugin metadata
 - SQLite storage
 - Content-addressed cache
 - Full evidence graph
@@ -168,6 +169,7 @@ V1 excludes:
 - Reconciliation engine
 - UI/workbench
 - Runtime DS9-themed API names
+- External connector marketplace packaging
 - Built-in third-party compression/provider integrations
 
 ## V1 Runtime Model
@@ -253,10 +255,10 @@ V1 event types:
 
 Every event includes:
 
-- `event_id`
-- `mission_id`
+- `eventId`
+- `missionId`
 - `type`
-- `created_at`
+- `createdAt`
 - `payload`
 
 ## V1 Evidence Records
@@ -265,17 +267,17 @@ Evidence records are intentionally simple.
 
 Each evidence record includes:
 
-- `evidence_id`
-- `mission_id`
-- `source_type`
-- `source_path`
-- `line_start`
-- `line_end`
-- `retrieval_method`
+- `evidenceId`
+- `missionId`
+- `sourceType`
+- `sourcePath`
+- `lineStart`
+- `lineEnd`
+- `retrievalMethod`
 - `summary`
-- `recorded_at`
+- `recordedAt`
 
-Supported `source_type` values:
+Supported `sourceType` values:
 
 - `file`
 - `command_output`
@@ -294,12 +296,12 @@ V1 verifies that cited files exist. It does not verify that every cited file sem
 
 Each question record includes:
 
-- `question_id`
-- `mission_id`
+- `questionId`
+- `missionId`
 - `question`
 - `blocking`
 - `rationale`
-- `assumption_fallback`
+- `assumptionFallback`
 - `status`
 
 Supported statuses:
@@ -377,6 +379,8 @@ The evaluation answers whether Wormhole is better than unaided Claude Code for e
 ### Benchmark Suite
 
 The v1 repo must include a frozen benchmark suite before claiming success.
+
+The repository stores those fixtures under `benchmarks/fixtures`, with checked-in sample repositories under `benchmarks/repos` and the reviewer rubric at `benchmarks/rubric.json`.
 
 The suite consists of five pinned existing-repo planning tasks stored as data in the repository.
 
@@ -504,10 +508,10 @@ These are not v1:
 - Claim-level contradiction detection
 - Citation entailment verification
 - SQLite persistence
-- Codex adapter
+- Codex-specific adapter logic beyond repo-local plugin metadata
 - UI/workbench
 - Policy marketplace
-- Connector packaging
+- External connector marketplace packaging
 - Built-in RTK/Headroom/Caveman/Ponytail integrations
 - Learned/model-pool orchestration
 
@@ -524,6 +528,8 @@ V2 can add:
 - Richer policy modules
 - Tool-output compaction provider
 - Context compression provider
+
+The repo-level v2 contract is documented in `docs/architecture/v2-v3-orchestration.md` and `docs/contracts/capability-manifest.md`.
 
 ## V3 Direction
 
@@ -544,6 +550,8 @@ V3 can add:
 - Balanced vs deep mission modes
 - Adaptive routing scores from benchmark results
 - Optional model-pool orchestration providers
+
+The repo-level v3 contract is documented in `docs/architecture/v2-v3-orchestration.md`.
 
 ## Future Model-Pool Orchestration
 

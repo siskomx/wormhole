@@ -1,0 +1,35 @@
+{
+  "version": "1.0.0",
+  "dimensions": [
+    {
+      "id": "evidence_coverage",
+      "name": "Evidence coverage",
+      "description": "The plan cites the files, commands, and constraints needed to justify the recommendation.",
+      "scale": [1, 2, 3, 4, 5]
+    },
+    {
+      "id": "correctness",
+      "name": "Correctness",
+      "description": "The plan matches the fixture code and does not invent APIs, files, or behavior.",
+      "scale": [1, 2, 3, 4, 5]
+    },
+    {
+      "id": "assumption_handling",
+      "name": "Assumption handling",
+      "description": "The plan identifies unresolved choices and provides explicit fallback assumptions when needed.",
+      "scale": [1, 2, 3, 4, 5]
+    },
+    {
+      "id": "risk_awareness",
+      "name": "Risk awareness",
+      "description": "The plan surfaces realistic implementation, testing, migration, and operational risks.",
+      "scale": [1, 2, 3, 4, 5]
+    },
+    {
+      "id": "implementation_specificity",
+      "name": "Implementation specificity",
+      "description": "The plan gives concrete, ordered steps that a coding agent can execute in the repository.",
+      "scale": [1, 2, 3, 4, 5]
+    }
+  ]
+}

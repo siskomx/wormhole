@@ -48,6 +48,22 @@ export type GateResult = {
   reasons: string[];
 };
 
+export type PlanInput = {
+  recommendedApproach: string;
+  implementationSteps: string[];
+  risks: string[];
+  verificationPlan: string[];
+};
+
+export type PlanArtifact = {
+  artifactId: string;
+  missionId: string;
+  emittedAt: string;
+  format: "markdown";
+  content: string;
+  evidenceIds: string[];
+};
+
 export type EventRecord = {
   eventId: string;
   missionId: string;
@@ -62,12 +78,15 @@ type MissionState = {
   evidence: EvidenceRecord[];
   questions: QuestionRecord[];
   gate?: GateResult;
+  artifacts: PlanArtifact[];
   events: EventRecord[];
 };
 
 export type WormholeKernel = ReturnType<typeof createInMemoryKernel>;
 
-export function createInMemoryKernel(options: { eventLog?: EventLog } = {}) {
+export function createInMemoryKernel(
+  options: { eventLog?: EventLog; initialEvents?: EventRecord[] } = {},
+) {
   const missions = new Map<string, MissionState>();
 
   function getMissionState(missionId: string): MissionState {
@@ -89,6 +108,165 @@ export function createInMemoryKernel(options: { eventLog?: EventLog } = {}) {
     options.eventLog?.append(state.events[state.events.length - 1]);
   }
 
+  function replayEvent(event: EventRecord): void {
+    if (event.type === "mission.started") {
+      const mission = event.payload as Mission;
+      const state: MissionState = missions.get(mission.missionId) ?? {
+        mission,
+        roundsStarted: 0,
+        evidence: [],
+        questions: [],
+        artifacts: [],
+        events: [],
+      };
+      state.mission = mission;
+      state.events.push(event);
+      missions.set(mission.missionId, state);
+      return;
+    }
+
+    const state = getMissionState(event.missionId);
+    state.events.push(event);
+
+    switch (event.type) {
+      case "round.started": {
+        const payload = event.payload as { round?: number };
+        state.roundsStarted = Math.max(state.roundsStarted, payload.round ?? 0);
+        break;
+      }
+      case "evidence.recorded":
+        state.evidence.push(event.payload as EvidenceRecord);
+        break;
+      case "question.recorded":
+        state.questions.push(event.payload as QuestionRecord);
+        break;
+      case "question.updated": {
+        const updated = event.payload as QuestionRecord;
+        const index = state.questions.findIndex(
+          (question) => question.questionId === updated.questionId,
+        );
+        if (index >= 0) {
+          state.questions[index] = updated;
+        } else {
+          state.questions.push(updated);
+        }
+        break;
+      }
+      case "gate.opened":
+      case "gate.closed":
+        state.gate = event.payload as GateResult;
+        break;
+      case "artifact.emitted":
+        state.artifacts.push(event.payload as PlanArtifact);
+        break;
+    }
+  }
+
+  function formatEvidenceSource(record: EvidenceRecord): string {
+    if (record.sourceType === "file" && record.sourcePath) {
+      const range =
+        record.lineStart && record.lineEnd
+          ? `:${record.lineStart}-${record.lineEnd}`
+          : record.lineStart
+            ? `:${record.lineStart}`
+            : "";
+      return `${record.sourcePath}${range}`;
+    }
+    return record.sourcePath
+      ? `${record.sourceType}:${record.sourcePath}`
+      : record.sourceType;
+  }
+
+  function formatBullets(items: string[]): string {
+    return items.length > 0
+      ? items.map((item) => `- ${item}`).join("\n")
+      : "- None recorded.";
+  }
+
+  function formatSteps(items: string[]): string {
+    return items.length > 0
+      ? items.map((item, index) => `${index + 1}. ${item}`).join("\n")
+      : "1. No implementation steps provided.";
+  }
+
+  function isEvidenceFresh(state: MissionState, record: EvidenceRecord): boolean {
+    if (record.sourceType !== "file" || !record.sourcePath) {
+      return true;
+    }
+    return existsSync(path.resolve(state.mission.repoRoot, record.sourcePath));
+  }
+
+  function renderPlan(
+    state: MissionState,
+    input: PlanInput,
+    supportingEvidenceIds: Set<string>,
+  ): string {
+    let supportingIndex = 0;
+    const evidenceSummary =
+      state.evidence.length > 0
+        ? state.evidence
+            .map((record) => {
+              const isSupporting = supportingEvidenceIds.has(record.evidenceId);
+              const marker = isSupporting ? `[E${++supportingIndex}]` : "[stale]";
+              const staleNote = isSupporting
+                ? ""
+                : "; stale source, excluded from supporting citations";
+              return (
+                `- ${marker} ${formatEvidenceSource(record)}: ${record.summary} ` +
+                `(retrieved with ${record.retrievalMethod}; evidenceId ${record.evidenceId}${staleNote})`
+              );
+            })
+            .join("\n")
+        : "- No evidence recorded.";
+
+    const questions =
+      state.questions.length > 0
+        ? state.questions
+            .map((question, index) => {
+              const fallback = question.assumptionFallback
+                ? `\n  - Assumption fallback: ${question.assumptionFallback}`
+                : "";
+              return (
+                `- Q${index + 1}: ${question.question}\n` +
+                `  - Status: ${question.status}\n` +
+                `  - Blocking: ${question.blocking ? "yes" : "no"}\n` +
+                `  - Rationale: ${question.rationale}${fallback}`
+              );
+            })
+            .join("\n")
+        : "- None recorded.";
+
+    return [
+      "# Wormhole Plan",
+      "",
+      "## Objective",
+      state.mission.objective,
+      "",
+      "## Repo evidence summary",
+      evidenceSummary,
+      "",
+      "## Open questions and assumptions",
+      questions,
+      "",
+      "## Recommended approach",
+      input.recommendedApproach,
+      "",
+      "## Implementation steps",
+      formatSteps(input.implementationSteps),
+      "",
+      "## Risks",
+      formatBullets(input.risks),
+      "",
+      "## Verification plan",
+      formatBullets(input.verificationPlan),
+      "",
+    ].join("\n");
+  }
+
+  for (const event of options.initialEvents ?? []) {
+    replayEvent(event);
+  }
+
   return {
     startMission(input: { objective: string; repoRoot: string }): Mission {
       const mission: Mission = {
@@ -101,6 +279,7 @@ export function createInMemoryKernel(options: { eventLog?: EventLog } = {}) {
         roundsStarted: 0,
         evidence: [],
         questions: [],
+        artifacts: [],
         events: [],
       };
       missions.set(mission.missionId, state);
@@ -199,6 +378,30 @@ export function createInMemoryKernel(options: { eventLog?: EventLog } = {}) {
       return result;
     },
 
+    emitPlan(missionId: string, input: PlanInput): PlanArtifact {
+      const state = getMissionState(missionId);
+      if (state.gate?.open !== true) {
+        throw new Error("Gate must be open before emitting a plan");
+      }
+      const supportingEvidence = state.evidence.filter((record) =>
+        isEvidenceFresh(state, record),
+      );
+      const supportingEvidenceIds = new Set(
+        supportingEvidence.map((record) => record.evidenceId),
+      );
+      const artifact: PlanArtifact = {
+        artifactId: randomUUID(),
+        missionId,
+        emittedAt: new Date().toISOString(),
+        format: "markdown",
+        content: renderPlan(state, input, supportingEvidenceIds),
+        evidenceIds: supportingEvidence.map((record) => record.evidenceId),
+      };
+      state.artifacts.push(artifact);
+      appendEvent(state, "artifact.emitted", artifact);
+      return artifact;
+    },
+
     missionStatus(missionId: string) {
       const state = getMissionState(missionId);
       return {
@@ -208,6 +411,7 @@ export function createInMemoryKernel(options: { eventLog?: EventLog } = {}) {
         openQuestionCount: state.questions.filter((question) => question.status === "open")
           .length,
         gate: state.gate,
+        artifactCount: state.artifacts.length,
       };
     },
   };

@@ -1,0 +1,7 @@
+{
+  "name": "cli-service-fixture",
+  "type": "module",
+  "bin": {
+    "fixture-sync": "./src/cli.ts"
+  }
+}

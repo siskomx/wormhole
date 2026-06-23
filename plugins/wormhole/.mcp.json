@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "wormhole": {
+      "command": "node",
+      "args": ["../../dist/src/cli.js"]
+    }
+  }
+}

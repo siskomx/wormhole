@@ -1,0 +1,15 @@
+{
+  "id": "frontend-behavior-change",
+  "title": "Persist settings panel theme changes",
+  "category": "frontend_behavior_change",
+  "repoSource": "benchmarks/repos/frontend-app",
+  "fixtureHash": "sha256:43dc479baf164b27002b2dc7d86e623d6d735799cd8617d1e6e38790a3a6c441",
+  "taskPrompt": "Plan how to persist the settings panel theme selection to local storage while keeping the current controlled React state behavior.",
+  "allowedPaths": ["package.json", "src/settings-panel.tsx", "src/theme.ts"],
+  "expectedPlanningConcerns": [
+    "initialization from local storage",
+    "controlled component state",
+    "browser-only storage access in tests"
+  ],
+  "rubricFile": "benchmarks/rubric.json"
+}

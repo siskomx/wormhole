@@ -1,0 +1,15 @@
+{
+  "id": "small-web-api-feature",
+  "title": "Add idempotent audit event endpoint",
+  "category": "small_web_api_feature",
+  "repoSource": "benchmarks/repos/small-web-api",
+  "fixtureHash": "sha256:2051ce0305042109e223d677bbac7f235fae2dba21a89638c78cefb43f7d134e",
+  "taskPrompt": "Plan how to add an idempotent POST /audit-events endpoint that validates event type and actor id before persisting events.",
+  "allowedPaths": ["package.json", "src/server.ts", "src/audit-store.ts"],
+  "expectedPlanningConcerns": [
+    "route shape and validation",
+    "idempotency key storage",
+    "unit and HTTP smoke coverage"
+  ],
+  "rubricFile": "benchmarks/rubric.json"
+}

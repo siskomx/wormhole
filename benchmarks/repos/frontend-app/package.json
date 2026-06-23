@@ -1,0 +1,7 @@
+{
+  "name": "frontend-app-fixture",
+  "type": "module",
+  "dependencies": {
+    "react": "^19.0.0"
+  }
+}

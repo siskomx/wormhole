@@ -1,0 +1,26 @@
+{
+  "name": "wormhole",
+  "version": "0.1.0",
+  "description": "Evidence-gated planning orchestration for AI coding agents.",
+  "author": {
+    "name": "Wormhole Maintainers",
+    "url": "https://github.com/"
+  },
+  "license": "MIT",
+  "keywords": ["mcp", "orchestration", "planning", "codex", "claude-code"],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Wormhole",
+    "shortDescription": "Evidence-gated planning for coding agents.",
+    "longDescription": "Wormhole provides a local MCP planning kernel with JSONL state, evidence records, open-question gates, and Markdown plan artifacts. V2 and V3 define four-layer orchestration, plugin portability, and adaptive routing contracts.",
+    "developerName": "Wormhole Maintainers",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write", "MCP"],
+    "defaultPrompt": [
+      "Plan this repo change with Wormhole evidence gates.",
+      "Run a Wormhole mission for this feature idea.",
+      "Emit a cited implementation plan for this repo."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

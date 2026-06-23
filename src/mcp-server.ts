@@ -103,6 +103,21 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
   );
 
   server.registerTool(
+    "emit_plan",
+    {
+      description: "Emit the final evidence-cited Markdown plan after the gate opens.",
+      inputSchema: {
+        missionId: z.string(),
+        recommendedApproach: z.string(),
+        implementationSteps: z.array(z.string()),
+        risks: z.array(z.string()),
+        verificationPlan: z.array(z.string()),
+      },
+    },
+    async (input) => jsonResult(tools.emitPlan(input)),
+  );
+
+  server.registerTool(
     "mission_status",
     {
       description: "Return projected mission status.",

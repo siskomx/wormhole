@@ -1,0 +1,15 @@
+{
+  "id": "test-module-improvement",
+  "title": "Improve price calculation tests",
+  "category": "module_test_improvement",
+  "repoSource": "benchmarks/repos/test-module",
+  "fixtureHash": "sha256:04bf8f1060c1363b0c07657cbebf0e0cbd507ef6900b6abe8b7bb380de591730",
+  "taskPrompt": "Plan how to improve coverage for the price calculator around discounts, tax rounding, and invalid input handling.",
+  "allowedPaths": ["package.json", "src/price.ts", "tests/price.test.ts"],
+  "expectedPlanningConcerns": [
+    "boundary cases",
+    "rounding behavior",
+    "error-path assertions"
+  ],
+  "rubricFile": "benchmarks/rubric.json"
+}

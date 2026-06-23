@@ -1,0 +1,20 @@
+{
+  "name": "wormhole-local",
+  "interface": {
+    "displayName": "Wormhole Local"
+  },
+  "plugins": [
+    {
+      "name": "wormhole",
+      "source": {
+        "source": "local",
+        "path": "./plugins/wormhole"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import type {
   EvidenceInput,
+  PlanInput,
   QuestionInput,
   QuestionUpdate,
   WormholeKernel,
@@ -32,6 +33,11 @@ export function createToolHandlers(kernel: WormholeKernel) {
 
     gateRequest(input: { missionId: string }) {
       return kernel.requestGate(input.missionId);
+    },
+
+    emitPlan(input: { missionId: string } & PlanInput) {
+      const { missionId, ...plan } = input;
+      return kernel.emitPlan(missionId, plan);
     },
 
     missionStatus(input: { missionId: string }) {

@@ -1,0 +1,19 @@
+{
+  "id": "multi-module-migration",
+  "title": "Migrate shared config shape",
+  "category": "multi_module_migration",
+  "repoSource": "benchmarks/repos/multi-module",
+  "fixtureHash": "sha256:f0c5ed5b39f9b53a78df11b4890df679261961b57048466a1d60ac50a5ed35ad",
+  "taskPrompt": "Plan a migration from flat service config keys to a nested config object across the core and API modules.",
+  "allowedPaths": [
+    "packages/core/src/config.ts",
+    "packages/core/src/index.ts",
+    "packages/api/src/handler.ts"
+  ],
+  "expectedPlanningConcerns": [
+    "backward compatibility",
+    "cross-module imports",
+    "migration and verification order"
+  ],
+  "rubricFile": "benchmarks/rubric.json"
+}
