@@ -1,0 +1,610 @@
+# Wormhole Canonical Plan
+
+Date: 2026-06-23
+
+## Status
+
+This is the canonical merged plan for Wormhole. It supersedes:
+
+- `outputs/wormhole-plan-log.md`
+- `outputs/wormhole-final-v1-plan.md`
+
+Those files remain useful as discussion history. This document is the implementation baseline.
+
+## Executive Summary
+
+Wormhole is an evidence-first orchestration system for AI coding agents.
+
+The long-term goal is to support new projects, existing repositories, feature expansion, product planning, UI/UX planning, system design, implementation planning, review, and eventually bounded execution through sub-orchestrators.
+
+The v1 goal is narrower and falsifiable:
+
+> Prove whether an evidence-aware loop with an open-question ledger and batch gate produces better existing-repo design and implementation plans than unaided Claude Code.
+
+V1 is a local Claude Code MCP server. In v1, that MCP server is also the kernel. It owns mission state, event logging, evidence records, open questions, and gate enforcement. Claude Code still drives reasoning and tool use; Wormhole enforces workflow order through MCP tool responses.
+
+## Core Thesis
+
+Wormhole should not start as a multi-agent framework.
+
+Wormhole should start as a stateful evidence engine.
+
+The technical moat is:
+
+- Evidence capture
+- Open-question tracking
+- Provenance
+- Gate/stopping criteria
+- Durable event logging
+- Evaluation against a baseline
+
+Parallel agents, deeper layering, Codex support, UI, and connector ecosystems are useful only if the core evidence loop proves valuable first.
+
+## Product Scope
+
+Wormhole should eventually support:
+
+- New repo or greenfield project planning
+- Existing repo or brownfield system planning
+- Adding features to existing code
+- Expanding an existing product
+- Rewriting or migrating a system
+- Design-only planning
+- Business/product planning
+- UI/UX planning
+- Technical architecture planning
+- Implementation-ready planning
+- Verification and review
+- Controlled execution after approval
+
+The same generic loop applies across mission types:
+
+1. Gather evidence.
+2. Track open questions.
+3. Reason over options.
+4. Decide whether enough is known.
+5. Produce the next useful artifact.
+6. Act only when approved.
+
+The evidence sources change by mission type.
+
+For a new project, evidence comes from human answers, business goals, target users, constraints, compliance needs, workflows, and design preferences.
+
+For an existing repo, evidence comes from source files, dependency files, tests, docs, configs, git history, entry points, runtime setup, and existing conventions.
+
+For feature expansion, Wormhole combines user intent with codebase evidence.
+
+## Name And Theme
+
+Project name: Wormhole.
+
+DS9-inspired naming is allowed in documentation and future UI flavor, but formal APIs stay generic.
+
+Allowed flavor terms:
+
+- Mission: top-level run
+- Station: local runtime or host
+- Runabout: future delegated worker
+- Quadrant: bounded context area
+- Pylon: future workflow branch or trace span
+- Airlock: approval/safety gate
+- Promenade: future UI/workbench
+- Docking Port: adapter or connector
+
+Do not use franchise-specific names in package IDs, protocol fields, tool names, or formal contracts.
+
+## Architecture Principles
+
+### Evidence First
+
+Evidence, questions, decisions, risks, and artifacts are the core objects. Agents and verbs are secondary.
+
+### Prompt Modules, Not Prompt Monoliths
+
+Wormhole should not become one giant instruction file.
+
+Reusable behavior should live in versioned modules:
+
+- Routing ladders
+- Safety policies
+- Tool-use policies
+- Adapter capability manifests
+- Rubrics
+- Artifact templates
+- Evidence schemas
+- Gate/stopping criteria
+
+Routing and policy decisions should be inspectable, testable, and event-logged.
+
+### MCP Is An Interface
+
+Long term, MCP is an interface to Wormhole, not the whole kernel.
+
+For v1 only, the MCP server is the kernel to avoid premature process boundaries.
+
+### One Parameterized Workflow
+
+Do not create separate hardcoded flows for vague ideas, existing repos, migrations, bugfixes, and new features.
+
+Use one workflow with pluggable evidence sources.
+
+### Thin Payload, Strong Control State
+
+Future master orchestrators should avoid raw payloads, but must keep authoritative control state.
+
+They should not hold raw code dumps, full tool outputs, full artifacts, full diffs, or agent scratch work.
+
+They must hold mission objective, constraints, budgets, task state, gate state, open-question state, evidence indexes, risk state, and event positions.
+
+Summaries are for human display. Gate logic must use structured state.
+
+## Canonical V1 Scope
+
+V1 includes:
+
+- Claude Code first
+- One local MCP server
+- MCP server is the v1 kernel
+- Existing-repo planning missions only
+- Bounded sequential loop
+- JSONL append-only event log
+- In-memory state projection
+- Simple typed evidence records
+- Open-question ledger
+- Batch gate
+- One evidence-cited Markdown plan artifact
+- Evaluation against unaided Claude Code
+
+V1 excludes:
+
+- Parallel execution
+- Dynamic sub-orchestrators
+- Codex adapter implementation
+- SQLite storage
+- Content-addressed cache
+- Full evidence graph
+- Claim normalization
+- Entailment verification
+- Reconciliation engine
+- UI/workbench
+- Runtime DS9-themed API names
+- Built-in third-party compression/provider integrations
+
+## V1 Runtime Model
+
+### Kernel Boundary
+
+In v1, the local MCP server is the kernel.
+
+There is no separate kernel process, no IPC layer, and no daemon beyond the MCP server process.
+
+The MCP server owns:
+
+- Mission state
+- Event log appends
+- State projection
+- Evidence records
+- Open-question records
+- Loop round count
+- Gate state
+- Artifact emission state
+
+Claude Code owns:
+
+- Natural-language reasoning
+- Choosing which MCP tool to call next
+- Reading repo files through its normal tools
+- Supplying evidence observations to Wormhole
+- Drafting the final plan through the Wormhole workflow
+
+Wormhole v1 does not invoke the model directly.
+
+### Loop Ownership
+
+The loop is host-driven and kernel-enforced.
+
+Claude Code follows the loop protocol:
+
+1. Start mission.
+2. Start round.
+3. Gather repo evidence.
+4. Record evidence.
+5. Reason over gaps.
+6. Record open questions.
+7. Repeat gather/reason when useful.
+8. Request gate.
+9. Emit final plan.
+
+The MCP server enforces:
+
+- Mission must exist before evidence is recorded.
+- Evidence must be recorded before gate.
+- Gate must run before final artifact emission.
+- Max gather/reason rounds is 3.
+- Early exit is allowed after round 1 if no blocking questions remain.
+- Final artifact cannot be emitted while the gate is closed.
+
+If Claude Code calls tools out of order, the MCP server returns a structured refusal with the required next state transition.
+
+## V1 State Model
+
+State is stored as a single append-only JSONL event log.
+
+The current mission state is projected in memory from the log.
+
+There is one source of truth: the JSONL log.
+
+### Required Event Types
+
+V1 event types:
+
+- `mission.started`
+- `mission.updated`
+- `round.started`
+- `round.completed`
+- `evidence.recorded`
+- `question.recorded`
+- `question.updated`
+- `gate.requested`
+- `gate.closed`
+- `gate.opened`
+- `artifact.emitted`
+- `error.recorded`
+
+Every event includes:
+
+- `event_id`
+- `mission_id`
+- `type`
+- `created_at`
+- `payload`
+
+## V1 Evidence Records
+
+Evidence records are intentionally simple.
+
+Each evidence record includes:
+
+- `evidence_id`
+- `mission_id`
+- `source_type`
+- `source_path`
+- `line_start`
+- `line_end`
+- `retrieval_method`
+- `summary`
+- `recorded_at`
+
+Supported `source_type` values:
+
+- `file`
+- `command_output`
+- `user_input`
+- `derived_note`
+
+Path existence is checked when evidence is recorded and again when the artifact is emitted.
+
+If path verification fails at record time, the evidence record is rejected and an `error.recorded` event is appended.
+
+If path verification fails at artifact time, the record is marked stale in the output and excluded from plan-supporting citations.
+
+V1 verifies that cited files exist. It does not verify that every cited file semantically entails every claim.
+
+## Open-Question Ledger
+
+Each question record includes:
+
+- `question_id`
+- `mission_id`
+- `question`
+- `blocking`
+- `rationale`
+- `assumption_fallback`
+- `status`
+
+Supported statuses:
+
+- `open`
+- `answered`
+- `accepted_as_assumption`
+- `deferred`
+
+A question is blocking when its answer could change:
+
+- The recommended architecture
+- The affected implementation area
+- The sequence of implementation steps
+- The risk level
+- The verification strategy
+
+Questions that only refine wording, naming, or low-impact preferences are non-blocking in v1.
+
+## Batch Gate
+
+V1 uses a batch gate, not interactive mid-run prompting.
+
+The gate opens when:
+
+- At least one evidence record exists.
+- No open blocking questions remain, or every blocking question has an assumption fallback.
+- The mission has not exceeded 3 gather/reason rounds.
+- The final artifact has not already been emitted.
+
+If blocking questions remain, the final plan must include them with assumption fallbacks. The user can then answer, accept assumptions, or ask for another pass.
+
+The gate closes when:
+
+- No evidence exists.
+- Blocking questions exist without assumption fallbacks.
+- The loop exceeded the round limit.
+- Required state is missing or malformed.
+
+## V1 Final Artifact
+
+V1 emits one Markdown artifact: an evidence-cited existing-repo plan.
+
+Required sections:
+
+1. Objective
+2. Repo evidence summary
+3. Open questions and assumptions
+4. Recommended approach
+5. Implementation steps
+6. Risks
+7. Verification plan
+
+The artifact should cite evidence records inline using source paths and line ranges where available.
+
+## V1 MCP Tool Surface
+
+V1 exposes a small generic tool surface:
+
+- `mission_start`
+- `round_start`
+- `record_evidence`
+- `record_question`
+- `update_question`
+- `gate_request`
+- `emit_plan`
+- `mission_status`
+
+DS9-inspired names stay out of tool contracts.
+
+## V1 Evaluation Plan
+
+The evaluation answers whether Wormhole is better than unaided Claude Code for existing-repo planning.
+
+### Benchmark Suite
+
+The v1 repo must include a frozen benchmark suite before claiming success.
+
+The suite consists of five pinned existing-repo planning tasks stored as data in the repository.
+
+Each task fixture includes:
+
+- Repo source
+- Repo commit or fixture hash
+- Task prompt
+- Allowed files or repo root
+- Expected planning concerns
+- Reviewer rubric file
+
+Initial benchmark categories:
+
+1. Add a feature to a small web API.
+2. Modify behavior in a frontend app.
+3. Add integration work to a CLI or service.
+4. Improve tests for an existing module.
+5. Plan a migration or refactor in a small multi-module repo.
+
+Fixtures can be checked-in sample repos or SHA-pinned public repos copied into a fixture cache. The benchmark runner must not depend on moving branch tips.
+
+### Baseline Protocol
+
+For each benchmark task:
+
+1. Run unaided Claude Code with the same task prompt.
+2. Run Wormhole with the same task prompt and repo.
+3. Capture both final plans.
+4. Remove identifying labels.
+5. Review blindly against the rubric.
+
+### Rubric
+
+Use five dimensions:
+
+- Evidence coverage
+- Correctness
+- Assumption handling
+- Risk awareness
+- Implementation specificity
+
+Each dimension is scored from 1 to 5.
+
+### Success Criterion
+
+Wormhole v1 is successful if:
+
+- Wormhole wins or ties unaided Claude Code on at least 4 of 5 dimensions in at least 3 of 5 benchmark tasks.
+- Wormhole has no severe correctness regression.
+
+A severe correctness regression means the Wormhole plan recommends an implementation path that is clearly incompatible with the repo evidence, omits a critical blocking risk visible in the repo, or invents a nonexistent core architecture as if it were real.
+
+## Optimization Layer
+
+Wormhole should support token and complexity reduction as capability categories, not hardwired dependencies.
+
+The optimization layer is separate from the evidence source of truth.
+
+Capability categories:
+
+- Tool-output compaction
+- Context/evidence compression
+- Response style compression
+- Minimality/YAGNI policy
+
+Inspired mappings:
+
+- RTK-like behavior: compact command outputs before evidence ingestion.
+- Headroom-like behavior: compress context, logs, RAG chunks, and stored views.
+- Caveman-like behavior: terse output profile for user-facing responses.
+- Ponytail-like behavior: minimality policy/rubric that discourages overbuilding.
+
+Rules:
+
+- Compression must not destroy provenance.
+- Raw source handles must remain available.
+- Compressed views are aids for the model, not the source of truth.
+- Minimality policy can influence planning and review, but must not bypass safety, correctness, or user requirements.
+
+V1 should only define extension points and may include a simple built-in minimality rubric.
+
+V2 can add RTK-like command-output compaction and Headroom-like context compression providers.
+
+V3 can support a provider registry or marketplace.
+
+Reference projects:
+
+- [rtk-ai/rtk](https://github.com/rtk-ai/rtk)
+- [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom)
+- [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman)
+- [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)
+
+## Routing And Policy
+
+Wormhole should use deterministic routing ladders for common decisions:
+
+- Whether to answer directly, gather evidence, or ask a clarifying question
+- Whether a visual artifact is needed
+- Whether to use an available adapter/tool or fall back to another source
+- Whether a request needs current external data
+- Whether a task is low-stakes enough for a fast path
+- Whether a side effect requires an Airlock approval gate
+
+Routing decisions should be logged as events with the selected route and rejected alternatives.
+
+Tool and MCP results should be ingested by structure, not fragile text parsing. Result blocks, artifacts, citations, and tool outputs should become typed evidence records with provenance.
+
+Capability discovery should happen before tool selection. Codex, Claude Code, future UI clients, and third-party connectors should each declare what they can do. Wormhole should negotiate from those manifests instead of assuming every host supports the same behavior.
+
+Gathering depth should scale with ambiguity and stakes. Simple requests should use a fast path; high-impact or ambiguous missions should trigger broader evidence gathering, stronger gates, and more review.
+
+## Explicit V1 Deferrals
+
+These are not v1:
+
+- Parallel DAG execution
+- L1/L2/L3 Runabout orchestration
+- Dynamic spawning
+- Admission control
+- Read/write-set locks
+- MVCC snapshots
+- Content-addressed evidence cache
+- Full evidence graph
+- Claim-level contradiction detection
+- Citation entailment verification
+- SQLite persistence
+- Codex adapter
+- UI/workbench
+- Policy marketplace
+- Connector packaging
+- Built-in RTK/Headroom/Caveman/Ponytail integrations
+
+## V2 Direction
+
+V2 can add:
+
+- Static DAG parallelism
+- Domain Runabouts
+- Read/write-set declarations
+- Basic reconciliation
+- Content-addressed evidence cache
+- Codex adapter
+- Richer policy modules
+- Tool-output compaction provider
+- Context compression provider
+
+## V3 Direction
+
+V3 can add:
+
+- Dynamic sub-orchestrators
+- Deeper layered execution up to hard max depth 4
+- Full evidence graph
+- MVCC snapshots
+- Lease expiry
+- UI/workbench
+- Connector ecosystem
+- Provider registry
+- More artifact types
+- Greenfield product discovery
+- Controlled execution after approval
+
+## Future Layering Model
+
+Future layered orchestration should be capability-based, not mandatory.
+
+The target model:
+
+- L0 Master: thin payload, strong control state
+- L1 Domain Runabouts: codebase, architecture, UX, security, testing, planning, naming
+- L2 Task Runabouts: focused jobs within a domain
+- L3 Tool/Worker Agents: file reads, tests, commands, artifact drafting, patches
+
+Parallelism must be DAG-based with dependencies, read/write sets, budgets, and admission control.
+
+This is deferred until the v1 loop proves useful.
+
+## Known Failure Modes
+
+Highest-risk issues:
+
+- Building infrastructure before proving product value
+- Silent context divergence from stale evidence
+- Confident fabrication under citation pressure
+- Summary lossiness at orchestration boundaries
+- Reconciliation gaps between parallel branches
+- Fan-out and budget runaway
+- Deadlocks from dynamic dependencies
+- Duplicate work across domain workers
+- Discovery loops with no convergence gate
+- Artifact theater: impressive docs without actionable decisions
+- Host capability mismatch between Codex and Claude Code
+- Compression hiding evidence needed for correctness
+
+## Guardrails
+
+V1 guardrails:
+
+- Sequential loop only
+- Max 3 gather/reason rounds
+- JSONL as single source of truth
+- Evidence before gate
+- Gate before artifact
+- Path existence checks
+- Blocking questions surfaced with assumption fallbacks
+- Batch review only
+
+Future guardrails:
+
+- Hard depth ceiling, likely 4
+- Default depth 1-2
+- Fan-out caps
+- Per-branch budgets
+- Concurrency token bucket
+- Verified citations
+- Content-addressed evidence cache
+- Read/write-set checks
+- Idempotency keys
+- Snapshot versions
+- Stop-and-report failure behavior
+- Human approval for risky actions
+
+## Final Architecture Statement
+
+Wormhole v1 is a local Claude Code MCP server that provides durable evidence-aware planning state for existing repositories.
+
+It does not try to beat general agents by using more agents. It tests whether a small amount of structure, evidence recording, open-question tracking, and gate enforcement can produce better repo-aware plans.
+
+If v1 wins the benchmark, the larger Wormhole orchestration system is justified. If it does not, parallel sub-orchestration would only make a weak loop more expensive.
+
