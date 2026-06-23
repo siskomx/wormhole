@@ -509,6 +509,7 @@ These are not v1:
 - Policy marketplace
 - Connector packaging
 - Built-in RTK/Headroom/Caveman/Ponytail integrations
+- Learned/model-pool orchestration
 
 ## V2 Direction
 
@@ -539,6 +540,52 @@ V3 can add:
 - More artifact types
 - Greenfield product discovery
 - Controlled execution after approval
+- Model/provider capability manifests
+- Balanced vs deep mission modes
+- Adaptive routing scores from benchmark results
+- Optional model-pool orchestration providers
+
+## Future Model-Pool Orchestration
+
+Sakana Fugu validates the long-term direction for Wormhole, but it should not expand v1 scope.
+
+Fugu presents a multi-agent system as one model/API, dynamically coordinating a pool of models for complex coding, reasoning, research, and review tasks. Its public materials describe learned orchestration rather than hand-authored workflows, model/provider opt-outs for compliance, and two operating modes: a balanced default and an ultra/deeper mode for harder tasks.
+
+Wormhole should treat this as a future roadmap signal:
+
+- Keep v1 focused on evidence-aware existing-repo planning.
+- Preserve the longer-term goal of adaptive orchestration.
+- Use benchmark results to decide when deeper orchestration is justified.
+- Add model/provider capability manifests before using model pools.
+- Support allowlists and denylists for provider, model, privacy, and compliance constraints.
+- Treat model-pool orchestration as an optional provider, not as the Wormhole kernel.
+
+The first future role taxonomy should stay small:
+
+- Thinker: reason, decompose, critique plans, and identify gaps.
+- Worker: gather evidence, execute scoped steps, or produce concrete artifacts.
+- Verifier: review completeness, correctness, risk, and gate readiness.
+
+These roles map to Wormhole's existing operation model:
+
+- Thinker maps to `reason`.
+- Worker maps to `gather` and future `act`.
+- Verifier maps to `review` and gate checks.
+
+Future routing should remain bounded:
+
+- Every model-pool run has a turn budget.
+- Verification can terminate the run early.
+- Budget exhaustion produces a partial result with explicit uncertainty.
+- Provider/model choices are logged as events.
+- Learned routing can suggest actions, but Wormhole's evidence, gate, approval, and policy state remain authoritative.
+
+Relevant external references:
+
+- Sakana Fugu: `https://sakana.ai/fugu/`
+- Sakana Fugu Technical Report: `https://arxiv.org/abs/2606.21228`
+- TRINITY: `https://ar5iv.labs.arxiv.org/html/2512.04695`
+- Conductor: `https://arxiv.org/abs/2512.04388`
 
 ## Future Layering Model
 
@@ -607,4 +654,3 @@ Wormhole v1 is a local Claude Code MCP server that provides durable evidence-awa
 It does not try to beat general agents by using more agents. It tests whether a small amount of structure, evidence recording, open-question tracking, and gate enforcement can produce better repo-aware plans.
 
 If v1 wins the benchmark, the larger Wormhole orchestration system is justified. If it does not, parallel sub-orchestration would only make a weak loop more expensive.
-
