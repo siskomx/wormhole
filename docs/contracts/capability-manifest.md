@@ -32,5 +32,15 @@ V2 capabilities can be implemented incrementally. Implemented v2 capabilities in
 
 - `v2.first-party-optimization-primitives`: deterministic local command-output compaction, context compression, dense summaries, and minimality review.
 - `v2.live-sub-orchestrator-control`: task registration, heartbeat/status reporting, mailbox messages, direction-change pause/ack, and immediate interrupts.
+- `v2.parallel-sub-orchestrators`: four-layer task records plus static DAG scheduling with read/write lock separation.
+- `v2.content-addressed-evidence-cache`: SHA-256 addressed raw evidence storage.
+- `v2.reconciliation-engine`: provenance merge and read/write conflict detection.
+- `v2.benchmark-runner`: unaided versus Wormhole run capture and anonymized review-pair generation.
+- `v2.codex-runtime-adapter`: Codex plugin/runtime adapter config generation and validation.
 
-V3 capabilities may be planned, but they must have stable names, scope boundaries, and compatibility expectations so implementation can proceed without redesigning the architecture.
+Implemented v3 capabilities include:
+
+- `v3.adaptive-routing-model-selection`: fast/balanced/deep mode selection and model choice from provider manifests.
+- `v3.connector-registry`: capability-based connector discovery and selection.
+
+Future v3 extensions may still add UI/workbench behavior, richer artifact types, and learned model-pool providers.

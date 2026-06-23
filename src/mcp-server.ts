@@ -243,5 +243,118 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
     async (input) => jsonResult(tools.optimizeText(input)),
   );
 
+  const scheduledTaskSchema = z.object({
+    taskId: z.string(),
+    objective: z.string(),
+    layer: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+    dependencies: z.array(z.string()),
+    readSet: z.array(z.string()),
+    writeSet: z.array(z.string()),
+  });
+
+  server.registerTool(
+    "cache_evidence",
+    {
+      description: "Store raw evidence content in the content-addressed evidence cache.",
+      inputSchema: {
+        cacheRoot: z.string(),
+        content: z.string(),
+        mediaType: z.string(),
+        source: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.cacheEvidence(input)),
+  );
+
+  server.registerTool(
+    "schedule_tasks",
+    {
+      description: "Create DAG execution waves while respecting dependencies and read/write locks.",
+      inputSchema: {
+        tasks: z.array(scheduledTaskSchema),
+      },
+    },
+    async (input) => jsonResult(tools.scheduleTasks(input)),
+  );
+
+  server.registerTool(
+    "reconcile_artifacts",
+    {
+      description: "Merge child artifacts and surface read/write-set conflicts for parent review.",
+      inputSchema: {
+        proposals: z.array(
+          z.object({
+            artifactId: z.string(),
+            taskId: z.string(),
+            summary: z.string(),
+            evidenceIds: z.array(z.string()),
+            readSet: z.array(z.string()),
+            writeSet: z.array(z.string()),
+            risks: z.array(z.string()),
+          }),
+        ),
+      },
+    },
+    async (input) => jsonResult(tools.reconcileArtifacts(input)),
+  );
+
+  server.registerTool(
+    "route_mission",
+    {
+      description: "Select fast, balanced, or deep orchestration and a model from declared capabilities.",
+      inputSchema: {
+        taskCategory: z.string(),
+        ambiguity: z.enum(["low", "medium", "high"]),
+        risk: z.enum(["low", "medium", "high"]),
+        repoSize: z.enum(["small", "medium", "large"]),
+        requiresPrivacy: z.boolean(),
+        models: z.array(
+          z.object({
+            providerId: z.string(),
+            modelId: z.string(),
+            strengths: z.array(z.string()),
+            maxDepth: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+            costTier: z.enum(["low", "medium", "high"]),
+            privacy: z.enum(["local", "external"]),
+          }),
+        ),
+      },
+    },
+    async (input) => jsonResult(tools.routeMission(input)),
+  );
+
+  server.registerTool(
+    "codex_adapter_config",
+    {
+      description: "Generate the Codex plugin/runtime adapter config for a Wormhole repo.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.codexAdapterConfig(input)),
+  );
+
+  server.registerTool(
+    "select_connector",
+    {
+      description: "Select a connector by target and required capabilities from a declared connector registry.",
+      inputSchema: {
+        connectors: z.array(
+          z.object({
+            connectorId: z.string(),
+            target: z.string(),
+            transport: z.enum(["mcp-stdio", "plugin-manifest", "http", "connector-contract"]),
+            capabilities: z.array(z.string()),
+            installation: z.enum(["available", "installed", "disabled"]),
+            authentication: z.enum(["on_install", "on_use", "none"]),
+          }),
+        ),
+        target: z.string(),
+        requiredCapabilities: z.array(z.string()),
+      },
+    },
+    async (input) => jsonResult(tools.selectConnector(input)),
+  );
+
   return server;
 }

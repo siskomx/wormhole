@@ -376,6 +376,12 @@ V1 exposes a small generic tool surface:
 - `emit_plan`
 - `mission_status`
 - `optimize_text`
+- `cache_evidence`
+- `schedule_tasks`
+- `reconcile_artifacts`
+- `route_mission`
+- `codex_adapter_config`
+- `select_connector`
 
 DS9-inspired names stay out of tool contracts.
 
@@ -511,23 +517,22 @@ Gathering depth should scale with ambiguity and stakes. Simple requests should u
 
 These are not v1:
 
-- Parallel DAG execution
-- L1/L2/L3 Runabout orchestration
+- Dynamic DAG mutation beyond declared task inputs
+- Autonomous L1/L2/L3 Runabout process spawning without a declared scheduler plan
 - Dynamic spawning
 - Admission control
-- Read/write-set locks
+- Runtime filesystem lock enforcement beyond scheduler wave separation
 - MVCC snapshots
-- Content-addressed evidence cache
 - Full evidence graph
 - Claim-level contradiction detection
 - Citation entailment verification
 - SQLite persistence
-- Codex-specific adapter logic beyond repo-local plugin metadata
+- Codex-specific UI behavior beyond adapter config generation
 - UI/workbench
 - Policy marketplace
 - External connector marketplace packaging
 - External RTK/Headroom/Caveman/Ponytail adapters
-- Learned/model-pool orchestration
+- Learned/model-pool orchestration beyond deterministic routing/model selection
 
 ## V2 Direction
 
@@ -544,6 +549,9 @@ V2 can add:
 - Context compression provider
 - Native optimization primitives integrated into evidence recording and plan emission
 - Live sub-orchestrator control with task heartbeat, mailbox, direction-change pause/ack, and immediate interrupts
+- Benchmark comparison runner with anonymized review pairs
+- Deterministic adaptive routing and model selection
+- Connector registry and capability-based connector selection
 
 Implemented v2 control-plane tools:
 

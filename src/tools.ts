@@ -10,6 +10,21 @@ import type {
   WormholeKernel,
 } from "./kernel.js";
 import { optimizeText, type OptimizationKind } from "./optimization.js";
+import { createEvidenceCache } from "./evidence-cache.js";
+import { reconcileArtifacts, type ArtifactProposal } from "./reconciliation.js";
+import { createDagSchedule, type ScheduledTask } from "./scheduler.js";
+import {
+  createProviderRegistry,
+  selectRoutingPlan,
+  type ModelDescriptor,
+  type RepoSize,
+  type RoutingLevel,
+} from "./adaptive-routing.js";
+import { createCodexAdapterConfig } from "./codex-adapter.js";
+import {
+  createConnectorRegistry,
+  type ConnectorDescriptor,
+} from "./connector-registry.js";
 
 export function createToolHandlers(kernel: WormholeKernel) {
   return {
@@ -78,6 +93,61 @@ export function createToolHandlers(kernel: WormholeKernel) {
 
     optimizeText(input: { kind: OptimizationKind; content: string }) {
       return optimizeText(input);
+    },
+
+    cacheEvidence(input: {
+      cacheRoot: string;
+      content: string;
+      mediaType: string;
+      source: string;
+    }) {
+      return createEvidenceCache(input.cacheRoot).put(input.content, {
+        mediaType: input.mediaType,
+        source: input.source,
+      });
+    },
+
+    scheduleTasks(input: { tasks: ScheduledTask[] }) {
+      return createDagSchedule(input.tasks);
+    },
+
+    reconcileArtifacts(input: { proposals: ArtifactProposal[] }) {
+      return reconcileArtifacts(input.proposals);
+    },
+
+    routeMission(input: {
+      taskCategory: string;
+      ambiguity: RoutingLevel;
+      risk: RoutingLevel;
+      repoSize: RepoSize;
+      requiresPrivacy: boolean;
+      models: ModelDescriptor[];
+    }) {
+      return selectRoutingPlan(
+        {
+          taskCategory: input.taskCategory,
+          ambiguity: input.ambiguity,
+          risk: input.risk,
+          repoSize: input.repoSize,
+          requiresPrivacy: input.requiresPrivacy,
+        },
+        createProviderRegistry(input.models),
+      );
+    },
+
+    codexAdapterConfig(input: { repoRoot: string }) {
+      return createCodexAdapterConfig(input.repoRoot);
+    },
+
+    selectConnector(input: {
+      connectors: ConnectorDescriptor[];
+      target: string;
+      requiredCapabilities: string[];
+    }) {
+      return createConnectorRegistry(input.connectors).select({
+        target: input.target,
+        requiredCapabilities: input.requiredCapabilities,
+      });
     },
 
     missionStatus(input: { missionId: string }) {

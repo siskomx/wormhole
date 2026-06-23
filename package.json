@@ -6,6 +6,7 @@
   "description": "Evidence-aware planning state for AI coding agents.",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "benchmarks:run": "tsx scripts/run-benchmarks.ts",
     "benchmarks:validate": "tsx scripts/validate-benchmarks.ts",
     "test": "vitest run tests",
     "typecheck": "tsc -p tsconfig.json --noEmit"

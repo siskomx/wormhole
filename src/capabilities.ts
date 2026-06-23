@@ -95,8 +95,8 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
       {
         id: "v2.parallel-sub-orchestrators",
         track: "v2",
-        status: "planned",
-        description: "Four-layer orchestration with parent-owned budgets, child manifests, and mergeable artifacts.",
+        status: "implemented",
+        description: "Four-layer task records plus deterministic DAG scheduling with dependency waves and read/write lock separation.",
       },
       {
         id: "v2.live-sub-orchestrator-control",
@@ -121,6 +121,42 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         track: "v2",
         status: "planned",
         description: "Optional adapters for external optimization systems while keeping Wormhole-native primitives as the baseline.",
+      },
+      {
+        id: "v2.content-addressed-evidence-cache",
+        track: "v2",
+        status: "implemented",
+        description: "SHA-256 addressed evidence cache for raw source content and replayable provenance handles.",
+      },
+      {
+        id: "v2.reconciliation-engine",
+        track: "v2",
+        status: "implemented",
+        description: "Artifact reconciliation with provenance merge and read/write conflict detection.",
+      },
+      {
+        id: "v2.benchmark-runner",
+        track: "v2",
+        status: "implemented",
+        description: "Benchmark comparison runner that captures unaided and Wormhole plans and emits anonymized review pairs.",
+      },
+      {
+        id: "v2.codex-runtime-adapter",
+        track: "v2",
+        status: "implemented",
+        description: "Codex adapter config generation and validation for local plugin/runtime attachment.",
+      },
+      {
+        id: "v3.adaptive-routing-model-selection",
+        track: "v3",
+        status: "implemented",
+        description: "Deterministic fast/balanced/deep routing and model selection from provider capability manifests.",
+      },
+      {
+        id: "v3.connector-registry",
+        track: "v3",
+        status: "implemented",
+        description: "Connector registry and capability-based connector selection.",
       },
       {
         id: "v3.adaptive-model-pool",

@@ -9,8 +9,8 @@ V1 proves the evidence loop. V2 introduces bounded parallel orchestration. V3 in
 | Track | Status | Purpose |
 | --- | --- | --- |
 | V1 | Implemented foundation | Local MCP planning kernel, JSONL state, evidence records, question ledger, gate, Markdown plan artifact, benchmark fixtures. |
-| V2 | Partly implemented | First-party optimization primitives, live sub-orchestrator control, and planned four-layer sub-orchestration, Codex plugin support, task DAGs, and mergeable artifacts. |
-| V3 | Planned contract | Adaptive model/provider routing, connector marketplace, UI/workbench, richer artifact types, model-pool providers. |
+| V2 | Implemented foundation | First-party optimization primitives, live sub-orchestrator control, four-layer task records, static DAG scheduling, content-addressed evidence cache, reconciliation, Codex adapter config, and benchmark comparison runner. |
+| V3 | Implemented foundation | Adaptive model/provider routing and connector registry. UI/workbench, richer artifact types, and learned model-pool providers remain future extensions. |
 
 ## Four-Layer Ceiling
 
@@ -77,15 +77,22 @@ All task registrations, status reports, control messages, and acknowledgements a
 
 ## Parallelism Model
 
-V2 parallelism is static DAG parallelism first.
+V2 parallelism is static DAG parallelism first and is implemented through `createDagSchedule` and `runDagSchedule`.
 
 - Tasks declare dependencies.
 - Tasks declare read and write sets.
-- Write tasks require Airlock approval before side effects.
+- Conflicting write sets are separated into later waves.
+- Write tasks can be routed through Airlock approval before side effects.
 - Merge points reconcile artifacts and questions before the next gate.
-- Fan-out is capped per layer and per mission.
+- Fan-out is capped per layer and per mission by the scheduler caller.
 
-Dynamic spawning is deferred until after static DAG behavior is benchmarked.
+Dynamic spawning beyond declared DAG inputs remains a future extension.
+
+## Reconciliation And Cache
+
+Child artifacts merge through `reconcileArtifacts`, which preserves evidence provenance and surfaces read/write conflicts for parent review.
+
+Raw source content can be stored through `createEvidenceCache`, which writes content-addressed SHA-256 records and allows compressed views to remain separate from the source of truth.
 
 ## Connector Model
 
@@ -114,7 +121,7 @@ External RTK, Headroom, Caveman, or Ponytail adapters can be added later. The Wo
 
 ## V3 Adaptive Routing
 
-V3 can add Fugu-inspired adaptive routing only after v1/v2 benchmarks exist.
+V3 includes deterministic Fugu-inspired routing through `selectRoutingPlan`.
 
 Routing inputs:
 
@@ -136,7 +143,11 @@ Routing outputs:
 - Model/provider selection
 - Refusal or approval requirement
 
-Every routing decision is event-logged with selected and rejected options.
+Every routing decision returns selected and rejected model data so callers can event-log the decision.
+
+## Connector Registry
+
+The connector registry lets Wormhole select a compatible target by declared capabilities rather than assuming every host supports the same tools. `createConnectorRegistry` supports Codex, Claude Code, and future connectors with installation and authentication policy metadata.
 
 ## Non-Negotiable Guardrails
 

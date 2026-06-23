@@ -40,4 +40,23 @@ describe("capability manifest", () => {
       }),
     );
   });
+
+  it("declares the remaining v2 and v3 foundations as implemented", () => {
+    const manifest = createDefaultCapabilityManifest();
+    const implementedIds = manifest.capabilities
+      .filter((capability) => capability.status === "implemented")
+      .map((capability) => capability.id);
+
+    expect(implementedIds).toEqual(
+      expect.arrayContaining([
+        "v2.parallel-sub-orchestrators",
+        "v2.content-addressed-evidence-cache",
+        "v2.reconciliation-engine",
+        "v2.benchmark-runner",
+        "v2.codex-runtime-adapter",
+        "v3.adaptive-routing-model-selection",
+        "v3.connector-registry",
+      ]),
+    );
+  });
 });
