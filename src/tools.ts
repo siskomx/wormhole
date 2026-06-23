@@ -25,6 +25,12 @@ import {
   createConnectorRegistry,
   type ConnectorDescriptor,
 } from "./connector-registry.js";
+import { createArtifactRecord, type ArtifactRecordInput } from "./artifacts.js";
+import {
+  createWorkbenchSnapshot,
+  renderWorkbenchHtml,
+  type WorkbenchSnapshotInput,
+} from "./workbench.js";
 
 export function createToolHandlers(kernel: WormholeKernel) {
   return {
@@ -148,6 +154,18 @@ export function createToolHandlers(kernel: WormholeKernel) {
         target: input.target,
         requiredCapabilities: input.requiredCapabilities,
       });
+    },
+
+    createArtifact(input: ArtifactRecordInput) {
+      return createArtifactRecord(input);
+    },
+
+    renderWorkbench(input: WorkbenchSnapshotInput) {
+      const snapshot = createWorkbenchSnapshot(input);
+      return {
+        snapshot,
+        html: renderWorkbenchHtml(snapshot),
+      };
     },
 
     missionStatus(input: { missionId: string }) {

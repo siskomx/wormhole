@@ -42,5 +42,9 @@ Implemented v3 capabilities include:
 
 - `v3.adaptive-routing-model-selection`: fast/balanced/deep mode selection and model choice from provider manifests.
 - `v3.connector-registry`: capability-based connector discovery and selection.
+- `v3.dynamic-task-spawning`: dynamic DAG task expansion with max-depth and max-task guardrails.
+- `v3.model-pool-orchestration`: bounded thinker, worker, and verifier provider orchestration.
+- `v3.workbench-artifacts`: static mission/task/gate/artifact workbench snapshots and HTML rendering.
+- `v3.rich-artifact-types`: typed artifact records for plans, reports, workbench HTML, patch plans, and benchmark reports.
 
-Future v3 extensions may still add UI/workbench behavior, richer artifact types, and learned model-pool providers.
+Future v3 extensions may still add learned model-pool routing, external provider marketplaces, richer interactive UI behavior, and persistent evidence graphs.

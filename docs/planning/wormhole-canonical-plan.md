@@ -357,9 +357,9 @@ Required sections:
 
 The artifact should cite evidence records inline using source paths and line ranges where available.
 
-## V1 MCP Tool Surface
+## Current MCP Tool Surface
 
-V1 exposes a small generic tool surface:
+The runnable server exposes a generic tool surface across the v1 kernel plus implemented v2/v3 foundations:
 
 - `mission_start`
 - `round_start`
@@ -382,6 +382,8 @@ V1 exposes a small generic tool surface:
 - `route_mission`
 - `codex_adapter_config`
 - `select_connector`
+- `create_artifact`
+- `render_workbench`
 
 DS9-inspired names stay out of tool contracts.
 
@@ -534,9 +536,9 @@ These are not v1:
 - External RTK/Headroom/Caveman/Ponytail adapters
 - Learned/model-pool orchestration beyond deterministic routing/model selection
 
-## V2 Direction
+## V2 Implemented Direction
 
-V2 can add:
+V2 implemented:
 
 - Static DAG parallelism
 - Domain Runabouts
@@ -564,44 +566,50 @@ Implemented v2 control-plane tools:
 
 The repo-level v2 contract is documented in `docs/architecture/v2-v3-orchestration.md` and `docs/contracts/capability-manifest.md`.
 
-## V3 Direction
+## V3 Implemented Direction
 
-V3 can add:
+V3 implemented:
 
 - Dynamic sub-orchestrators
 - Deeper layered execution up to hard max depth 4
-- Full evidence graph
-- MVCC snapshots
-- Lease expiry
-- UI/workbench
+- Static UI/workbench rendering
 - Connector ecosystem
 - Provider registry
 - More artifact types
-- Greenfield product discovery
-- Controlled execution after approval
 - Model/provider capability manifests
 - Balanced vs deep mission modes
+- Bounded model-pool orchestration providers with thinker, worker, and verifier roles
+
+Future V3+ work can still add:
+
+- Full evidence graph
+- MVCC snapshots
+- Lease expiry
+- Rich interactive UI/workbench behavior
+- Greenfield product discovery templates
+- Controlled execution after approval
 - Adaptive routing scores from benchmark results
-- Optional model-pool orchestration providers
+- Learned model-pool orchestration
+- External provider marketplaces
 
 The repo-level v3 contract is documented in `docs/architecture/v2-v3-orchestration.md`.
 
-## Future Model-Pool Orchestration
+## Model-Pool Orchestration
 
-Sakana Fugu validates the long-term direction for Wormhole, but it should not expand v1 scope.
+Sakana Fugu validates the long-term direction for Wormhole, but it should not expand the v1 evidence kernel.
 
 Fugu presents a multi-agent system as one model/API, dynamically coordinating a pool of models for complex coding, reasoning, research, and review tasks. Its public materials describe learned orchestration rather than hand-authored workflows, model/provider opt-outs for compliance, and two operating modes: a balanced default and an ultra/deeper mode for harder tasks.
 
-Wormhole should treat this as a future roadmap signal:
+Wormhole treats this as both an implemented deterministic foundation and a future roadmap signal:
 
 - Keep v1 focused on evidence-aware existing-repo planning.
 - Preserve the longer-term goal of adaptive orchestration.
 - Use benchmark results to decide when deeper orchestration is justified.
-- Add model/provider capability manifests before using model pools.
+- Use model/provider capability manifests before using model pools.
 - Support allowlists and denylists for provider, model, privacy, and compliance constraints.
 - Treat model-pool orchestration as an optional provider, not as the Wormhole kernel.
 
-The first future role taxonomy should stay small:
+The first implemented role taxonomy stays small:
 
 - Thinker: reason, decompose, critique plans, and identify gaps.
 - Worker: gather evidence, execute scoped steps, or produce concrete artifacts.
@@ -613,13 +621,13 @@ These roles map to Wormhole's existing operation model:
 - Worker maps to `gather` and future `act`.
 - Verifier maps to `review` and gate checks.
 
-Future routing should remain bounded:
+Routing remains bounded:
 
 - Every model-pool run has a turn budget.
 - Verification can terminate the run early.
 - Budget exhaustion produces a partial result with explicit uncertainty.
 - Provider/model choices are logged as events.
-- Learned routing can suggest actions, but Wormhole's evidence, gate, approval, and policy state remain authoritative.
+- Learned routing can be added later, but Wormhole's evidence, gate, approval, and policy state remain authoritative.
 
 Relevant external references:
 
@@ -628,11 +636,11 @@ Relevant external references:
 - TRINITY: `https://ar5iv.labs.arxiv.org/html/2512.04695`
 - Conductor: `https://arxiv.org/abs/2512.04388`
 
-## Future Layering Model
+## Layering Model
 
-Future layered orchestration should be capability-based, not mandatory.
+Layered orchestration is capability-based, not mandatory.
 
-The target model:
+The implemented model:
 
 - L0 Master: thin payload, strong control state
 - L1 Domain Runabouts: codebase, architecture, UX, security, testing, planning, naming
@@ -641,7 +649,7 @@ The target model:
 
 Parallelism must be DAG-based with dependencies, read/write sets, budgets, and admission control.
 
-This is deferred until the v1 loop proves useful.
+The repo now includes static DAG scheduling, dynamic child-task expansion guardrails, task status/mailbox control, and reconciliation foundations. Autonomous side-effect execution and richer admission control remain future work.
 
 ## Known Failure Modes
 
@@ -690,7 +698,7 @@ Future guardrails:
 
 ## Final Architecture Statement
 
-Wormhole v1 is a local Claude Code MCP server that provides durable evidence-aware planning state for existing repositories.
+Wormhole v1 is a local Claude Code MCP server that provides durable evidence-aware planning state for existing repositories. The current repo also includes implemented v2/v3 orchestration foundations for parallel task planning, live control, dynamic spawning guardrails, deterministic routing, bounded model-pool roles, typed artifacts, and static workbench rendering.
 
 It does not try to beat general agents by using more agents. It tests whether a small amount of structure, evidence recording, open-question tracking, and gate enforcement can produce better repo-aware plans.
 

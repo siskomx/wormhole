@@ -32,6 +32,14 @@ export type DagRunResult = {
   results: TaskRunResult[];
 };
 
+export type DynamicTaskRunResult = TaskRunResult & {
+  spawnedTasks?: ScheduledTask[];
+};
+
+export type DynamicDagRunResult = DagRunResult & {
+  spawnedTaskCount: number;
+};
+
 function intersects(left: string[], right: string[]): string | undefined {
   return left.find((value) => right.includes(value));
 }
@@ -126,4 +134,72 @@ export async function runDagSchedule(
   }
 
   return { status: "completed", schedule, results };
+}
+
+export async function runDynamicDagSchedule(
+  tasks: ScheduledTask[],
+  worker: (task: ScheduledTask) => Promise<DynamicTaskRunResult>,
+  options: { maxDepth: 1 | 2 | 3 | 4; maxTasks: number },
+): Promise<DynamicDagRunResult> {
+  const remaining = new Map(tasks.map((task) => [task.taskId, task]));
+  const completed = new Set<string>();
+  const results: TaskRunResult[] = [];
+  const schedule: DagSchedule = { waves: [], lockDeferrals: [] };
+  let spawnedTaskCount = 0;
+
+  while (remaining.size > 0) {
+    const wave: ScheduledTask[] = [];
+    for (const task of remaining.values()) {
+      if (!task.dependencies.every((dependency) => completed.has(dependency))) {
+        continue;
+      }
+      const conflict = conflictWithWave(task, wave);
+      if (conflict) {
+        schedule.lockDeferrals.push(conflict);
+        continue;
+      }
+      wave.push(task);
+    }
+
+    if (wave.length === 0) {
+      throw new Error("Dynamic DAG has a cycle or unresolved dependency");
+    }
+
+    schedule.waves.push(wave);
+    const waveResults = await Promise.all(wave.map((task) => worker(task)));
+    for (const result of waveResults) {
+      results.push({
+        taskId: result.taskId,
+        status: result.status,
+        output: result.output,
+        error: result.error,
+      });
+      if (result.status === "failed") {
+        return { status: "failed", schedule, results, spawnedTaskCount };
+      }
+      const parent = remaining.get(result.taskId);
+      for (const spawned of result.spawnedTasks ?? []) {
+        if (spawned.layer > options.maxDepth) {
+          throw new Error(`Spawned task exceeds max depth: ${spawned.taskId}`);
+        }
+        if (parent && spawned.layer <= parent.layer) {
+          throw new Error(`Spawned task must be deeper than parent: ${spawned.taskId}`);
+        }
+        if (remaining.has(spawned.taskId) || completed.has(spawned.taskId)) {
+          throw new Error(`Duplicate task id: ${spawned.taskId}`);
+        }
+        spawnedTaskCount += 1;
+        remaining.set(spawned.taskId, spawned);
+        if (remaining.size + completed.size > options.maxTasks) {
+          throw new Error("Dynamic DAG exceeded max task budget");
+        }
+      }
+    }
+    for (const task of wave) {
+      remaining.delete(task.taskId);
+      completed.add(task.taskId);
+    }
+  }
+
+  return { status: "completed", schedule, results, spawnedTaskCount };
 }

@@ -1,6 +1,6 @@
 # Wormhole V2/V3 Orchestration
 
-This document defines the final target shape beyond the runnable v1 MCP kernel.
+This document defines the implemented v2/v3 orchestration foundations beyond the runnable v1 MCP kernel, plus the remaining future extension points.
 
 V1 proves the evidence loop. V2 introduces bounded parallel orchestration. V3 introduces adaptive routing and provider ecosystems. All tracks keep the same rule: evidence, questions, gates, and artifacts remain authoritative state.
 
@@ -10,7 +10,7 @@ V1 proves the evidence loop. V2 introduces bounded parallel orchestration. V3 in
 | --- | --- | --- |
 | V1 | Implemented foundation | Local MCP planning kernel, JSONL state, evidence records, question ledger, gate, Markdown plan artifact, benchmark fixtures. |
 | V2 | Implemented foundation | First-party optimization primitives, live sub-orchestrator control, four-layer task records, static DAG scheduling, content-addressed evidence cache, reconciliation, Codex adapter config, and benchmark comparison runner. |
-| V3 | Implemented foundation | Adaptive model/provider routing and connector registry. UI/workbench, richer artifact types, and learned model-pool providers remain future extensions. |
+| V3 | Implemented foundation | Adaptive model/provider routing, connector registry, dynamic DAG spawning guardrails, bounded model-pool roles, typed artifacts, and static workbench rendering. Learned provider orchestration remains a future extension. |
 
 ## Four-Layer Ceiling
 
@@ -77,16 +77,16 @@ All task registrations, status reports, control messages, and acknowledgements a
 
 ## Parallelism Model
 
-V2 parallelism is static DAG parallelism first and is implemented through `createDagSchedule` and `runDagSchedule`.
+V2 parallelism is static DAG parallelism first and is implemented through `createDagSchedule` and `runDagSchedule`. V3 adds bounded dynamic expansion through `runDynamicDagSchedule`.
 
 - Tasks declare dependencies.
 - Tasks declare read and write sets.
 - Conflicting write sets are separated into later waves.
 - Write tasks can be routed through Airlock approval before side effects.
 - Merge points reconcile artifacts and questions before the next gate.
+- Dynamic spawning is allowed only when a worker returns declared child tasks.
+- Spawned children must be deeper than the parent, cannot exceed depth 4, cannot duplicate task ids, and are capped by the caller's max-task budget.
 - Fan-out is capped per layer and per mission by the scheduler caller.
-
-Dynamic spawning beyond declared DAG inputs remains a future extension.
 
 ## Reconciliation And Cache
 
@@ -121,7 +121,7 @@ External RTK, Headroom, Caveman, or Ponytail adapters can be added later. The Wo
 
 ## V3 Adaptive Routing
 
-V3 includes deterministic Fugu-inspired routing through `selectRoutingPlan`.
+V3 includes deterministic Fugu-inspired routing through `selectRoutingPlan` and bounded model-pool orchestration through `runModelPool`.
 
 Routing inputs:
 
@@ -145,9 +145,31 @@ Routing outputs:
 
 Every routing decision returns selected and rejected model data so callers can event-log the decision.
 
+`runModelPool` provides the first implemented role taxonomy:
+
+- Thinker: decomposes, critiques, and identifies gaps.
+- Worker: drafts scoped work from the thinker output.
+- Verifier: checks the worker output and returns a verified or partial result.
+
+Each model-pool run has an explicit turn budget. Budget exhaustion returns a partial result with trace data instead of silently continuing. Learned model-pool routing, external provider marketplaces, and benchmark-trained selection remain future extensions.
+
 ## Connector Registry
 
 The connector registry lets Wormhole select a compatible target by declared capabilities rather than assuming every host supports the same tools. `createConnectorRegistry` supports Codex, Claude Code, and future connectors with installation and authentication policy metadata.
+
+## Workbench And Artifacts
+
+V3 includes typed artifact records through `createArtifactRecord` and the `create_artifact` MCP tool.
+
+Supported artifact types:
+
+- `plan`
+- `json_report`
+- `html_workbench`
+- `patch_plan`
+- `benchmark_report`
+
+V3 also includes a static Promenade-style workbench view through `createWorkbenchSnapshot`, `renderWorkbenchHtml`, and the `render_workbench` MCP tool. The workbench renders mission, task, gate, and artifact state without becoming the source of truth. The JSONL event log and typed state records remain authoritative.
 
 ## Non-Negotiable Guardrails
 

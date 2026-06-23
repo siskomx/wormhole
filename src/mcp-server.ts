@@ -19,6 +19,23 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
     version: "0.1.0",
   });
   const tools = createToolHandlers(kernel);
+  const taskStatusSchema = z.enum([
+    "registered",
+    "running",
+    "blocked",
+    "needs_input",
+    "paused",
+    "interrupted",
+    "completed",
+    "failed",
+  ]);
+  const artifactTypeSchema = z.enum([
+    "plan",
+    "json_report",
+    "html_workbench",
+    "patch_plan",
+    "benchmark_report",
+  ]);
 
   server.registerTool(
     "mission_start",
@@ -115,16 +132,7 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
       inputSchema: {
         missionId: z.string(),
         taskId: z.string(),
-        status: z.enum([
-          "registered",
-          "running",
-          "blocked",
-          "needs_input",
-          "paused",
-          "interrupted",
-          "completed",
-          "failed",
-        ]),
+        status: taskStatusSchema,
         currentFlow: z.string().optional(),
         summary: z.string(),
         touchedPaths: z.array(z.string()).optional(),
@@ -354,6 +362,58 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
       },
     },
     async (input) => jsonResult(tools.selectConnector(input)),
+  );
+
+  server.registerTool(
+    "create_artifact",
+    {
+      description: "Create a typed Wormhole artifact record with evidence and task provenance.",
+      inputSchema: {
+        missionId: z.string(),
+        type: artifactTypeSchema,
+        title: z.string(),
+        content: z.string(),
+        evidenceIds: z.array(z.string()),
+        taskIds: z.array(z.string()),
+      },
+    },
+    async (input) => jsonResult(tools.createArtifact(input)),
+  );
+
+  server.registerTool(
+    "render_workbench",
+    {
+      description: "Render a static HTML workbench from mission, task, gate, and artifact state.",
+      inputSchema: {
+        mission: z.object({
+          missionId: z.string(),
+          objective: z.string(),
+          repoRoot: z.string(),
+        }),
+        tasks: z.array(
+          z.object({
+            taskId: z.string(),
+            name: z.string(),
+            status: taskStatusSchema,
+            currentFlow: z.string().optional(),
+          }),
+        ),
+        gate: z
+          .object({
+            open: z.boolean(),
+            reasons: z.array(z.string()),
+          })
+          .optional(),
+        artifacts: z.array(
+          z.object({
+            artifactId: z.string(),
+            type: artifactTypeSchema,
+            title: z.string(),
+          }),
+        ),
+      },
+    },
+    async (input) => jsonResult(tools.renderWorkbench(input)),
   );
 
   return server;

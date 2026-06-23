@@ -41,6 +41,18 @@ describe("capability manifest", () => {
     );
   });
 
+  it("declares the repo-local Codex connector as implemented", () => {
+    const manifest = createDefaultCapabilityManifest();
+
+    expect(manifest.connectors).toContainEqual(
+      expect.objectContaining({
+        target: "codex",
+        status: "implemented",
+        transport: "plugin-manifest",
+      }),
+    );
+  });
+
   it("declares the remaining v2 and v3 foundations as implemented", () => {
     const manifest = createDefaultCapabilityManifest();
     const implementedIds = manifest.capabilities
@@ -56,6 +68,10 @@ describe("capability manifest", () => {
         "v2.codex-runtime-adapter",
         "v3.adaptive-routing-model-selection",
         "v3.connector-registry",
+        "v3.dynamic-task-spawning",
+        "v3.model-pool-orchestration",
+        "v3.workbench-artifacts",
+        "v3.rich-artifact-types",
       ]),
     );
   });

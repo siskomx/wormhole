@@ -80,7 +80,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
       },
       {
         target: "codex",
-        status: "planned",
+        status: "implemented",
         transport: "plugin-manifest",
         description: "Codex can consume the repo-local plugin metadata and MCP server configuration.",
       },
@@ -161,14 +161,38 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
       {
         id: "v3.adaptive-model-pool",
         track: "v3",
-        status: "planned",
-        description: "Fugu-inspired routing that chooses model/provider depth from benchmark feedback, policy constraints, and task risk.",
+        status: "implemented",
+        description: "Bounded model-pool orchestration with thinker, worker, and verifier roles plus deterministic routing/model selection.",
       },
       {
         id: "v3.connector-marketplace",
         track: "v3",
-        status: "planned",
-        description: "Provider and connector registry with explicit opt-outs, audit trails, and benchmark-scored routing profiles.",
+        status: "implemented",
+        description: "Provider and connector registry with capability-based selection and explicit policy metadata.",
+      },
+      {
+        id: "v3.dynamic-task-spawning",
+        track: "v3",
+        status: "implemented",
+        description: "Dynamic DAG task expansion with max-depth and max-task guardrails.",
+      },
+      {
+        id: "v3.model-pool-orchestration",
+        track: "v3",
+        status: "implemented",
+        description: "Bounded thinker, worker, and verifier provider orchestration.",
+      },
+      {
+        id: "v3.workbench-artifacts",
+        track: "v3",
+        status: "implemented",
+        description: "Static workbench snapshot and HTML rendering for mission, task, gate, and artifact state.",
+      },
+      {
+        id: "v3.rich-artifact-types",
+        track: "v3",
+        status: "implemented",
+        description: "Typed artifact records for plans, reports, workbench HTML, patch plans, and benchmark reports.",
       },
     ],
   };

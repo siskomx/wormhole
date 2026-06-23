@@ -126,6 +126,31 @@ describe("Wormhole MCP tool handlers", () => {
       target: "codex",
       requiredCapabilities: ["mcp"],
     });
+    const artifact = tools.createArtifact({
+      missionId: "M1",
+      type: "html_workbench",
+      title: "Workbench",
+      content: "<html></html>",
+      evidenceIds: ["E1"],
+      taskIds: ["T1"],
+    });
+    const workbench = tools.renderWorkbench({
+      mission: {
+        missionId: "M1",
+        objective: "Plan with workbench",
+        repoRoot: process.cwd(),
+      },
+      tasks: [
+        {
+          taskId: "T1",
+          name: "Dax",
+          status: "running",
+          currentFlow: "Inspecting",
+        },
+      ],
+      gate: { open: true, reasons: [] },
+      artifacts: [{ artifactId: artifact.artifactId, type: artifact.type, title: artifact.title }],
+    });
 
     expect(schedule.waves).toHaveLength(2);
     expect(reconciliation.status).toBe("merged");
@@ -133,5 +158,7 @@ describe("Wormhole MCP tool handlers", () => {
     expect(cache.cacheKey).toMatch(/^sha256:/);
     expect(codex.pluginName).toBe("wormhole");
     expect(connector.connectorId).toBe("codex");
+    expect(artifact.type).toBe("html_workbench");
+    expect(workbench.html).toContain("Plan with workbench");
   });
 });

@@ -13,3 +13,6 @@ export * from "./adaptive-routing.js";
 export * from "./codex-adapter.js";
 export * from "./benchmark-runner.js";
 export * from "./connector-registry.js";
+export * from "./model-pool.js";
+export * from "./workbench.js";
+export * from "./artifacts.js";

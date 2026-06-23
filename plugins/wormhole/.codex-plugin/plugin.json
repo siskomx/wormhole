@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Wormhole",
     "shortDescription": "Evidence-gated planning for coding agents.",
-    "longDescription": "Wormhole provides a local MCP planning kernel with JSONL state, evidence records, open-question gates, and Markdown plan artifacts. V2 and V3 define four-layer orchestration, plugin portability, and adaptive routing contracts.",
+    "longDescription": "Wormhole provides a local MCP planning kernel with JSONL state, evidence records, open-question gates, Markdown plan artifacts, live sub-orchestrator control, deterministic orchestration helpers, typed artifacts, and static workbench rendering.",
     "developerName": "Wormhole Maintainers",
     "category": "Productivity",
     "capabilities": ["Interactive", "Write", "MCP"],
