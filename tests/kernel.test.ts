@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -159,8 +159,38 @@ describe("Wormhole v1 kernel", () => {
     expect(kernel.missionStatus(mission.missionId).artifactCount).toBe(1);
   });
 
-  it("marks deleted file evidence as stale when emitting a plan", () => {
+  it("closes the gate when all file evidence has gone stale", () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "wormhole-stale-evidence-"));
+    const evidencePath = path.join(tempDir, "evidence.md");
+    writeFileSync(evidencePath, "initial evidence", "utf8");
+
+    try {
+      const kernel = createInMemoryKernel();
+      const mission = kernel.startMission({
+        objective: "Plan how to add audit logging",
+        repoRoot: tempDir,
+      });
+
+      kernel.startRound(mission.missionId);
+      kernel.recordEvidence(mission.missionId, {
+        sourceType: "file",
+        sourcePath: "evidence.md",
+        retrievalMethod: "read_file",
+        summary: "Temporary evidence exists before artifact emission.",
+      });
+      rmSync(evidencePath);
+
+      const gate = kernel.requestGate(mission.missionId);
+
+      expect(gate.open).toBe(false);
+      expect(gate.reasons).toContain("At least one fresh evidence record is required");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects plan emission when supporting file evidence goes stale after the gate opens", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "wormhole-stale-plan-"));
     const evidencePath = path.join(tempDir, "evidence.md");
     writeFileSync(evidencePath, "initial evidence", "utf8");
 
@@ -181,6 +211,87 @@ describe("Wormhole v1 kernel", () => {
       kernel.requestGate(mission.missionId);
       rmSync(evidencePath);
 
+      expect(() =>
+        kernel.emitPlan(mission.missionId, {
+          recommendedApproach: "Recheck citations before relying on them.",
+          implementationSteps: ["Check file paths during artifact emission."],
+          risks: ["Evidence can become stale between gathering and planning."],
+          verificationPlan: ["Delete a cited file before emitting the plan."],
+        }),
+      ).toThrow("At least one fresh evidence record is required before emitting a plan");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects file evidence paths outside the mission repo root", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "wormhole-evidence-path-"));
+    const repoRoot = path.join(tempDir, "repo");
+    const outsidePath = path.join(tempDir, "outside.md");
+    mkdirSync(repoRoot);
+    writeFileSync(outsidePath, "outside evidence", "utf8");
+
+    try {
+      const kernel = createInMemoryKernel();
+      const mission = kernel.startMission({
+        objective: "Plan how to add audit logging",
+        repoRoot,
+      });
+
+      kernel.startRound(mission.missionId);
+
+      expect(() =>
+        kernel.recordEvidence(mission.missionId, {
+          sourceType: "file",
+          sourcePath: "../outside.md",
+          retrievalMethod: "read_file",
+          summary: "Escaped evidence should not be accepted.",
+        }),
+      ).toThrow("Evidence source path must stay within repoRoot");
+
+      expect(() =>
+        kernel.recordEvidence(mission.missionId, {
+          sourceType: "file",
+          sourcePath: outsidePath,
+          retrievalMethod: "read_file",
+          summary: "Absolute escaped evidence should not be accepted.",
+        }),
+      ).toThrow("Evidence source path must stay within repoRoot");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("still marks mixed stale file evidence without using it as support", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "wormhole-mixed-evidence-"));
+    const stalePath = path.join(tempDir, "stale.md");
+    const freshPath = path.join(tempDir, "fresh.md");
+    writeFileSync(stalePath, "stale evidence", "utf8");
+    writeFileSync(freshPath, "fresh evidence", "utf8");
+
+    try {
+      const kernel = createInMemoryKernel();
+      const mission = kernel.startMission({
+        objective: "Plan how to add audit logging",
+        repoRoot: tempDir,
+      });
+
+      kernel.startRound(mission.missionId);
+      kernel.recordEvidence(mission.missionId, {
+        sourceType: "file",
+        sourcePath: "stale.md",
+        retrievalMethod: "read_file",
+        summary: "Temporary evidence can become stale.",
+      });
+      const freshEvidence = kernel.recordEvidence(mission.missionId, {
+        sourceType: "file",
+        sourcePath: "fresh.md",
+        retrievalMethod: "read_file",
+        summary: "Fresh evidence remains available.",
+      });
+      rmSync(stalePath);
+      kernel.requestGate(mission.missionId);
+
       const artifact = kernel.emitPlan(mission.missionId, {
         recommendedApproach: "Recheck citations before relying on them.",
         implementationSteps: ["Check file paths during artifact emission."],
@@ -188,8 +299,8 @@ describe("Wormhole v1 kernel", () => {
         verificationPlan: ["Delete a cited file before emitting the plan."],
       });
 
-      expect(artifact.evidenceIds).toEqual([]);
-      expect(artifact.content).toContain("[stale] evidence.md");
+      expect(artifact.evidenceIds).toEqual([freshEvidence.evidenceId]);
+      expect(artifact.content).toContain("[stale] stale.md");
       expect(artifact.content).toContain("excluded from supporting citations");
     } finally {
       rmSync(tempDir, { recursive: true, force: true });

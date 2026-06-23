@@ -92,7 +92,7 @@ V2 parallelism is static DAG parallelism first and is implemented through `creat
 
 Child artifacts merge through `reconcileArtifacts`, which preserves evidence provenance and surfaces read/write conflicts for parent review.
 
-Raw source content can be stored through `createEvidenceCache`, which writes content-addressed SHA-256 records and allows compressed views to remain separate from the source of truth.
+Raw source content can be stored through `createEvidenceCache`, which writes content-addressed SHA-256 records and allows compressed views to remain separate from the source of truth. The exposed `cache_evidence` MCP tool confines cache roots under the supplied `repoRoot`, or under the server working directory when no `repoRoot` is supplied.
 
 ## Connector Model
 
@@ -173,7 +173,7 @@ V3 also includes a static Promenade-style workbench view through `createWorkbenc
 
 ## Non-Negotiable Guardrails
 
-- Evidence before gate.
+- Fresh evidence before gate.
 - Gate before final artifact.
 - Human approval before risky side effects.
 - Maximum depth 4.

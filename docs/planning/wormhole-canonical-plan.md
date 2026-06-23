@@ -284,11 +284,13 @@ Supported `sourceType` values:
 - `user_input`
 - `derived_note`
 
-Path existence is checked when evidence is recorded and again when the artifact is emitted.
+File evidence paths must resolve within the mission `repoRoot`.
+
+Path existence is checked when evidence is recorded, when the gate is requested, and again when the artifact is emitted.
 
 If path verification fails at record time, the evidence record is rejected and an `error.recorded` event is appended.
 
-If path verification fails at artifact time, the record is marked stale in the output and excluded from plan-supporting citations.
+If path verification fails at gate or artifact time, the record is stale and excluded from plan-supporting citations. A mission cannot open the gate or emit a plan unless at least one fresh evidence record remains.
 
 V1 verifies that cited files exist. It does not verify that every cited file semantically entails every claim.
 
@@ -327,7 +329,7 @@ V1 uses a batch gate, not interactive mid-run prompting.
 
 The gate opens when:
 
-- At least one evidence record exists.
+- At least one fresh evidence record exists.
 - No open blocking questions remain, or every blocking question has an assumption fallback.
 - The mission has not exceeded 3 gather/reason rounds.
 - The final artifact has not already been emitted.
@@ -336,7 +338,7 @@ If blocking questions remain, the final plan must include them with assumption f
 
 The gate closes when:
 
-- No evidence exists.
+- No fresh evidence exists.
 - Blocking questions exist without assumption fallbacks.
 - The loop exceeded the round limit.
 - Required state is missing or malformed.
@@ -675,9 +677,9 @@ V1 guardrails:
 - Sequential loop only
 - Max 3 gather/reason rounds
 - JSONL as single source of truth
-- Evidence before gate
+- Fresh evidence before gate
 - Gate before artifact
-- Path existence checks
+- Repo-contained path existence checks
 - Blocking questions surfaced with assumption fallbacks
 - Batch review only
 

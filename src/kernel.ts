@@ -165,6 +165,16 @@ type MissionState = {
 
 export type WormholeKernel = ReturnType<typeof createInMemoryKernel>;
 
+function resolvePathWithinRepo(repoRoot: string, sourcePath: string): string {
+  const absoluteRoot = path.resolve(repoRoot);
+  const resolvedPath = path.resolve(absoluteRoot, sourcePath);
+  const relativePath = path.relative(absoluteRoot, resolvedPath);
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    throw new Error("Evidence source path must stay within repoRoot");
+  }
+  return resolvedPath;
+}
+
 export function createInMemoryKernel(
   options: { eventLog?: EventLog; initialEvents?: EventRecord[] } = {},
 ) {
@@ -360,7 +370,15 @@ export function createInMemoryKernel(
     if (record.sourceType !== "file" || !record.sourcePath) {
       return true;
     }
-    return existsSync(path.resolve(state.mission.repoRoot, record.sourcePath));
+    try {
+      return existsSync(resolvePathWithinRepo(state.mission.repoRoot, record.sourcePath));
+    } catch {
+      return false;
+    }
+  }
+
+  function getFreshEvidence(state: MissionState): EvidenceRecord[] {
+    return state.evidence.filter((record) => isEvidenceFresh(state, record));
   }
 
   function renderPlan(
@@ -479,7 +497,7 @@ export function createInMemoryKernel(
         if (!input.sourcePath) {
           throw new Error("File evidence requires sourcePath");
         }
-        const fullPath = path.resolve(state.mission.repoRoot, input.sourcePath);
+        const fullPath = resolvePathWithinRepo(state.mission.repoRoot, input.sourcePath);
         if (!existsSync(fullPath)) {
           appendEvent(state, "error.recorded", {
             message: "Evidence source path does not exist",
@@ -654,6 +672,8 @@ export function createInMemoryKernel(
       const reasons: string[] = [];
       if (state.evidence.length === 0) {
         reasons.push("At least one evidence record is required");
+      } else if (getFreshEvidence(state).length === 0) {
+        reasons.push("At least one fresh evidence record is required");
       }
       const blockingWithoutFallback = state.questions.filter(
         (question) =>
@@ -678,9 +698,10 @@ export function createInMemoryKernel(
       if (state.gate?.open !== true) {
         throw new Error("Gate must be open before emitting a plan");
       }
-      const supportingEvidence = state.evidence.filter((record) =>
-        isEvidenceFresh(state, record),
-      );
+      const supportingEvidence = getFreshEvidence(state);
+      if (supportingEvidence.length === 0) {
+        throw new Error("At least one fresh evidence record is required before emitting a plan");
+      }
       const supportingEvidenceIds = new Set(
         supportingEvidence.map((record) => record.evidenceId),
       );

@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -104,9 +104,11 @@ describe("Wormhole MCP tool handlers", () => {
         },
       ],
     });
-    const cacheRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-cache-"));
+    const cacheRepoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-cache-repo-"));
+    const cacheRoot = path.join(cacheRepoRoot, ".wormhole", "evidence-cache");
     const cache = tools.cacheEvidence({
       cacheRoot,
+      repoRoot: cacheRepoRoot,
       content: "tool evidence",
       mediaType: "text/plain",
       source: "unit-test",
@@ -160,5 +162,24 @@ describe("Wormhole MCP tool handlers", () => {
     expect(connector.connectorId).toBe("codex");
     expect(artifact.type).toBe("html_workbench");
     expect(workbench.html).toContain("Plan with workbench");
+    rmSync(cacheRepoRoot, { recursive: true, force: true });
+  });
+
+  it("rejects cache roots outside the current repository", () => {
+    const tools = createToolHandlers(createInMemoryKernel());
+    const cacheRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-outside-cache-"));
+
+    try {
+      expect(() =>
+        tools.cacheEvidence({
+          cacheRoot,
+          content: "tool evidence",
+          mediaType: "text/plain",
+          source: "unit-test",
+        }),
+      ).toThrow("Cache root must stay within repoRoot");
+    } finally {
+      rmSync(cacheRoot, { recursive: true, force: true });
+    }
   });
 });

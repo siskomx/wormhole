@@ -64,6 +64,10 @@ function listFiles(root: string): string[] {
   return files;
 }
 
+function readCanonicalTextFixture(filePath: string): string {
+  return readFileSync(filePath, "utf8").replaceAll("\r\n", "\n");
+}
+
 export function hashFixtureDirectory(repoPath: string): string {
   const absoluteRepoPath = path.resolve(repoPath);
   const hash = createHash("sha256");
@@ -72,7 +76,7 @@ export function hashFixtureDirectory(repoPath: string): string {
     const relativePath = path.relative(absoluteRepoPath, filePath).replaceAll("\\", "/");
     hash.update(relativePath);
     hash.update("\0");
-    hash.update(readFileSync(filePath));
+    hash.update(readCanonicalTextFixture(filePath), "utf8");
     hash.update("\0");
   }
 

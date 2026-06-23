@@ -266,6 +266,7 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
       description: "Store raw evidence content in the content-addressed evidence cache.",
       inputSchema: {
         cacheRoot: z.string(),
+        repoRoot: z.string().optional(),
         content: z.string(),
         mediaType: z.string(),
         source: z.string(),

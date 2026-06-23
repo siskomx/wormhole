@@ -1,3 +1,4 @@
+import path from "node:path";
 import type {
   EvidenceInput,
   PlanInput,
@@ -31,6 +32,16 @@ import {
   renderWorkbenchHtml,
   type WorkbenchSnapshotInput,
 } from "./workbench.js";
+
+function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): string {
+  const absoluteRoot = path.resolve(repoRoot);
+  const absoluteCacheRoot = path.resolve(absoluteRoot, cacheRoot);
+  const relativePath = path.relative(absoluteRoot, absoluteCacheRoot);
+  if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    throw new Error("Cache root must stay within repoRoot");
+  }
+  return absoluteCacheRoot;
+}
 
 export function createToolHandlers(kernel: WormholeKernel) {
   return {
@@ -103,14 +114,18 @@ export function createToolHandlers(kernel: WormholeKernel) {
 
     cacheEvidence(input: {
       cacheRoot: string;
+      repoRoot?: string;
       content: string;
       mediaType: string;
       source: string;
     }) {
-      return createEvidenceCache(input.cacheRoot).put(input.content, {
-        mediaType: input.mediaType,
-        source: input.source,
-      });
+      return createEvidenceCache(resolveCacheRoot(input.cacheRoot, input.repoRoot)).put(
+        input.content,
+        {
+          mediaType: input.mediaType,
+          source: input.source,
+        },
+      );
     },
 
     scheduleTasks(input: { tasks: ScheduledTask[] }) {

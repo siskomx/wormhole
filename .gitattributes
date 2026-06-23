@@ -1,0 +1,3 @@
+benchmarks/fixtures/*.json text eol=lf
+benchmarks/repos/** text eol=lf
+benchmarks/rubric.json text eol=lf
