@@ -101,8 +101,20 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
       {
         id: "v2.context-compression",
         track: "v2",
+        status: "implemented",
+        description: "Wormhole-native command compaction, context compression, dense summaries, and minimality review primitives.",
+      },
+      {
+        id: "v2.first-party-optimization-primitives",
+        track: "v2",
+        status: "implemented",
+        description: "Deterministic local versions of RTK-style command compaction, Headroom-style context compression, Caveman-style dense summaries, and Ponytail-style minimality review.",
+      },
+      {
+        id: "v2.external-optimization-adapters",
+        track: "v2",
         status: "planned",
-        description: "RTK-like command compaction, Headroom-like context budgeting, and Caveman-style dense summaries as swappable providers.",
+        description: "Optional adapters for external optimization systems while keeping Wormhole-native primitives as the baseline.",
       },
       {
         id: "v3.adaptive-model-pool",

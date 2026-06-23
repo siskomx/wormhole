@@ -9,7 +9,7 @@ V1 proves the evidence loop. V2 introduces bounded parallel orchestration. V3 in
 | Track | Status | Purpose |
 | --- | --- | --- |
 | V1 | Implemented foundation | Local MCP planning kernel, JSONL state, evidence records, question ledger, gate, Markdown plan artifact, benchmark fixtures. |
-| V2 | Planned contract | Four-layer sub-orchestration, Codex plugin support, context compression providers, task DAGs, mergeable artifacts. |
+| V2 | Partly implemented | First-party optimization primitives plus planned four-layer sub-orchestration, Codex plugin support, task DAGs, and mergeable artifacts. |
 | V3 | Planned contract | Adaptive model/provider routing, connector marketplace, UI/workbench, richer artifact types, model-pool providers. |
 
 ## Four-Layer Ceiling
@@ -79,14 +79,16 @@ The repo-local Codex plugin points to `../../dist/src/cli.js` from `plugins/worm
 
 ## Optimization Providers
 
-V2 can add provider slots without making them mandatory:
+V2 now includes deterministic first-party optimization primitives:
 
-- RTK-like command-output compaction
-- Headroom-like context compression
-- Caveman-style dense response profiles
-- Ponytail-style minimality rubrics
+- RTK-like command-output compaction through `compactCommandOutput`
+- Headroom-like context compression through `compressContext`
+- Caveman-style dense response profiles through `createDenseSummary`
+- Ponytail-style minimality rubrics through `reviewMinimality`
 
 Provider output must retain provenance. Compressed text can help the model, but the JSONL event log and source handles remain the source of truth.
+
+External RTK, Headroom, Caveman, or Ponytail adapters can be added later. The Wormhole-native primitives remain the baseline behavior.
 
 ## V3 Adaptive Routing
 

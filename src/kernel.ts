@@ -2,6 +2,11 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { EventLog } from "./event-log.js";
+import {
+  compactCommandOutput,
+  reviewMinimality,
+  type OptimizationResult,
+} from "./optimization.js";
 
 export type SourceType = "file" | "command_output" | "user_input" | "derived_note";
 
@@ -18,12 +23,15 @@ export type EvidenceInput = {
   lineEnd?: number;
   retrievalMethod: string;
   summary: string;
+  rawContent?: string;
 };
 
 export type EvidenceRecord = EvidenceInput & {
   evidenceId: string;
   missionId: string;
   recordedAt: string;
+  optimizedView?: string;
+  optimizations?: OptimizationResult[];
 };
 
 export type QuestionInput = {
@@ -62,6 +70,7 @@ export type PlanArtifact = {
   format: "markdown";
   content: string;
   evidenceIds: string[];
+  optimizations?: OptimizationResult[];
 };
 
 export type EventRecord = {
@@ -200,6 +209,7 @@ export function createInMemoryKernel(
     state: MissionState,
     input: PlanInput,
     supportingEvidenceIds: Set<string>,
+    minimalityReview: OptimizationResult,
   ): string {
     let supportingIndex = 0;
     const evidenceSummary =
@@ -256,6 +266,9 @@ export function createInMemoryKernel(
       "",
       "## Risks",
       formatBullets(input.risks),
+      "",
+      "## Minimality review",
+      minimalityReview.content,
       "",
       "## Verification plan",
       formatBullets(input.verificationPlan),
@@ -315,14 +328,30 @@ export function createInMemoryKernel(
           throw new Error(`Evidence source path does not exist: ${input.sourcePath}`);
         }
       }
+      const optimizations: OptimizationResult[] = [];
+      let optimizedView: string | undefined;
+      if (input.sourceType === "command_output" && input.rawContent) {
+        const optimization = compactCommandOutput({ content: input.rawContent });
+        optimizations.push(optimization);
+        optimizedView = optimization.content;
+      }
       const record: EvidenceRecord = {
         evidenceId: randomUUID(),
         missionId,
         recordedAt: new Date().toISOString(),
         ...input,
+        ...(optimizedView ? { optimizedView } : {}),
+        ...(optimizations.length > 0 ? { optimizations } : {}),
       };
       state.evidence.push(record);
       appendEvent(state, "evidence.recorded", record);
+      for (const optimization of optimizations) {
+        appendEvent(state, "optimization.recorded", {
+          ownerType: "evidence",
+          ownerId: record.evidenceId,
+          optimization,
+        });
+      }
       return record;
     },
 
@@ -389,15 +418,25 @@ export function createInMemoryKernel(
       const supportingEvidenceIds = new Set(
         supportingEvidence.map((record) => record.evidenceId),
       );
+      const minimalityReview = reviewMinimality({
+        objective: state.mission.objective,
+        planSteps: [input.recommendedApproach, ...input.implementationSteps],
+      });
       const artifact: PlanArtifact = {
         artifactId: randomUUID(),
         missionId,
         emittedAt: new Date().toISOString(),
         format: "markdown",
-        content: renderPlan(state, input, supportingEvidenceIds),
+        content: renderPlan(state, input, supportingEvidenceIds, minimalityReview),
         evidenceIds: supportingEvidence.map((record) => record.evidenceId),
+        optimizations: [minimalityReview],
       };
       state.artifacts.push(artifact);
+      appendEvent(state, "optimization.recorded", {
+        ownerType: "artifact",
+        ownerId: artifact.artifactId,
+        optimization: minimalityReview,
+      });
       appendEvent(state, "artifact.emitted", artifact);
       return artifact;
     },

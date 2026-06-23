@@ -55,6 +55,7 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
         lineEnd: z.number().optional(),
         retrievalMethod: z.string(),
         summary: z.string(),
+        rawContent: z.string().optional(),
       },
     },
     async (input) => jsonResult(tools.recordEvidence(input)),
@@ -126,6 +127,23 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
       },
     },
     async (input) => jsonResult(tools.missionStatus(input)),
+  );
+
+  server.registerTool(
+    "optimize_text",
+    {
+      description: "Run a Wormhole-native deterministic optimization primitive directly.",
+      inputSchema: {
+        kind: z.enum([
+          "command_output_compaction",
+          "context_compression",
+          "dense_summary",
+          "minimality_review",
+        ]),
+        content: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.optimizeText(input)),
   );
 
   return server;

@@ -5,6 +5,7 @@ import type {
   QuestionUpdate,
   WormholeKernel,
 } from "./kernel.js";
+import { optimizeText, type OptimizationKind } from "./optimization.js";
 
 export function createToolHandlers(kernel: WormholeKernel) {
   return {
@@ -38,6 +39,10 @@ export function createToolHandlers(kernel: WormholeKernel) {
     emitPlan(input: { missionId: string } & PlanInput) {
       const { missionId, ...plan } = input;
       return kernel.emitPlan(missionId, plan);
+    },
+
+    optimizeText(input: { kind: OptimizationKind; content: string }) {
+      return optimizeText(input);
     },
 
     missionStatus(input: { missionId: string }) {

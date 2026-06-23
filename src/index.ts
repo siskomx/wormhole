@@ -5,3 +5,4 @@ export * from "./mcp-server.js";
 export * from "./runtime.js";
 export * from "./benchmarks.js";
 export * from "./capabilities.js";
+export * from "./optimization.js";

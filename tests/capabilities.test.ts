@@ -18,4 +18,15 @@ describe("capability manifest", () => {
       true,
     );
   });
+
+  it("declares first-party optimization primitives as implemented", () => {
+    const manifest = createDefaultCapabilityManifest();
+
+    expect(manifest.capabilities).toContainEqual(
+      expect.objectContaining({
+        id: "v2.first-party-optimization-primitives",
+        status: "implemented",
+      }),
+    );
+  });
 });

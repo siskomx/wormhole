@@ -369,6 +369,7 @@ V1 exposes a small generic tool surface:
 - `gate_request`
 - `emit_plan`
 - `mission_status`
+- `optimize_text`
 
 DS9-inspired names stay out of tool contracts.
 
@@ -461,9 +462,16 @@ Rules:
 - Compressed views are aids for the model, not the source of truth.
 - Minimality policy can influence planning and review, but must not bypass safety, correctness, or user requirements.
 
-V1 should only define extension points and may include a simple built-in minimality rubric.
+Wormhole includes deterministic first-party versions of these primitives so it is useful without third-party dependencies.
 
-V2 can add RTK-like command-output compaction and Headroom-like context compression providers.
+Implemented native primitives:
+
+- `compactCommandOutput`: RTK-like command output compaction.
+- `compressContext`: Headroom-like context compression.
+- `createDenseSummary`: Caveman-like dense summary generation.
+- `reviewMinimality`: Ponytail-like minimality review.
+
+V2 can still add external RTK-like command-output compaction and Headroom-like context compression adapters.
 
 V3 can support a provider registry or marketplace.
 
@@ -512,7 +520,7 @@ These are not v1:
 - UI/workbench
 - Policy marketplace
 - External connector marketplace packaging
-- Built-in RTK/Headroom/Caveman/Ponytail integrations
+- External RTK/Headroom/Caveman/Ponytail adapters
 - Learned/model-pool orchestration
 
 ## V2 Direction
@@ -528,6 +536,7 @@ V2 can add:
 - Richer policy modules
 - Tool-output compaction provider
 - Context compression provider
+- Native optimization primitives integrated into evidence recording and plan emission
 
 The repo-level v2 contract is documented in `docs/architecture/v2-v3-orchestration.md` and `docs/contracts/capability-manifest.md`.
 

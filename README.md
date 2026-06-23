@@ -4,13 +4,14 @@ Wormhole is an evidence-aware planning state server for AI coding agents.
 
 V1 is intentionally small: a local Claude Code MCP server for existing-repo planning with a JSONL event log, evidence records, an open-question ledger, a batch gate, and one evidence-cited Markdown plan artifact.
 
-The repository also includes the v2/v3 contract: four-layer orchestration, Codex plugin metadata, connector boundaries, optimization-provider slots, and adaptive routing direction.
+The repository also includes the v2/v3 contract: four-layer orchestration, Codex plugin metadata, connector boundaries, first-party optimization primitives, optional provider slots, and adaptive routing direction.
 
 ## Current Surface
 
 - V1 runnable MCP kernel: `src/cli.ts`
-- V1 tool surface: `mission_start`, `round_start`, `record_evidence`, `record_question`, `update_question`, `gate_request`, `emit_plan`, `mission_status`
+- V1 tool surface: `mission_start`, `round_start`, `record_evidence`, `record_question`, `update_question`, `gate_request`, `emit_plan`, `mission_status`, `optimize_text`
 - JSONL state: `.wormhole/events.jsonl` in the working directory
+- First-party optimization primitives: command-output compaction, context compression, dense summaries, and minimality review
 - Benchmark fixtures: `benchmarks/fixtures` and `benchmarks/repos`
 - Codex plugin scaffold: `plugins/wormhole`
 - Capability manifest: `src/capabilities.ts`
