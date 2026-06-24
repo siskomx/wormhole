@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   compactCommandOutput,
   compressContext,
+  createOptimizationStore,
   createDenseSummary,
   reviewMinimality,
 } from "../src/optimization.js";
@@ -83,5 +84,41 @@ describe("first-party optimization primitives", () => {
       }),
     );
     expect(result.content).toContain("Prefer the smallest change");
+  });
+
+  it("stores reversible optimized views with retrieval handles and budget stats", () => {
+    const store = createOptimizationStore();
+    const result = store.apply({
+      kind: "command_output_compaction",
+      content: [
+        "start",
+        ...Array.from({ length: 90 }, (_, index) => `debug ${index}`),
+        "ERROR failed in src/app.ts",
+        "done",
+      ].join("\n"),
+      sourceId: "run-1",
+    });
+    const retrieved = store.retrieve({ retrievalId: result.retrievalId });
+
+    expect(result.retrievalId).toMatch(/^opt:sha256:/);
+    expect(result.transformTrace).toContain("command_output_compaction");
+    expect(result.estimatedTokensSaved).toBeGreaterThan(0);
+    expect(retrieved.originalContent).toContain("ERROR failed in src/app.ts");
+    expect(retrieved.sourceId).toBe("run-1");
+  });
+
+  it("routes JSON optimization without breaking valid JSON", () => {
+    const store = createOptimizationStore();
+    const result = store.apply({
+      kind: "auto",
+      content: JSON.stringify([
+        { level: "info", message: "ok" },
+        { level: "error", message: "boom" },
+      ]),
+    });
+
+    expect(result.kind).toBe("json_compaction");
+    expect(() => JSON.parse(result.content)).not.toThrow();
+    expect(result.content).toContain("boom");
   });
 });

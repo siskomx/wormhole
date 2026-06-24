@@ -54,10 +54,15 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_dispatch");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_plan_local");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_run_local");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("ctx_pack_create");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("optimization_apply");
     expect(manifest.tools.map((tool) => tool.name)).toContain("repo_index_query");
     expect(manifest.tools.map((tool) => tool.name)).toContain("repo_index_explain");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("repo_index_report");
     expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_register");
     expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_register_agent");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_run");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("model_profile_select");
     expect(manifest.prompts.map((prompt) => prompt.name)).toContain("wormhole_orchestrate");
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "repo_index_query",

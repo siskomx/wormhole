@@ -379,6 +379,12 @@ The runnable server exposes a generic tool surface across the core kernel plus i
 - `emit_plan`
 - `mission_status`
 - `optimize_text`
+- `optimization_apply`
+- `optimization_retrieve`
+- `ctx_record`
+- `ctx_pack_query`
+- `ctx_pack_create`
+- `ctx_pack_render`
 - `cache_evidence`
 - `schedule_tasks`
 - `orchestration_plan_local`
@@ -393,6 +399,7 @@ The runnable server exposes a generic tool surface across the core kernel plus i
 - `repo_index_query`
 - `repo_index_explain`
 - `repo_index_path`
+- `repo_index_report`
 - `agent_register`
 - `agent_list`
 - `agent_dispatch`
@@ -403,6 +410,12 @@ The runnable server exposes a generic tool surface across the core kernel plus i
 - `printing_press_list`
 - `printing_press_select`
 - `printing_press_register_agent`
+- `printing_press_verify`
+- `printing_press_run`
+- `model_profile_register`
+- `model_profile_select`
+- `model_profile_record_outcome`
+- `model_profile_export_traces`
 
 DS9-inspired names stay out of tool contracts.
 
@@ -503,6 +516,8 @@ Implemented native primitives:
 - `compressContext`: Headroom-like context compression.
 - `createDenseSummary`: Caveman-like dense summary generation.
 - `reviewMinimality`: Ponytail-like minimality review.
+- `optimization_apply` / `optimization_retrieve`: reversible optimized views with retrieval handles.
+- `ctx_record` / `ctx_pack_create`: native context records and budgeted context packs.
 
 The orchestration area can still add external RTK-like command-output compaction and Headroom-like context compression adapters.
 
@@ -571,13 +586,14 @@ The orchestration area implemented:
 - Tool-output compaction provider
 - Context compression provider
 - Native optimization primitives integrated into evidence recording and plan emission
+- Native context records, ranked context queries, budgeted context packs, reversible optimization records, and retrieval handles
 - Live sub-orchestrator control with task heartbeat, mailbox, direction-change pause/ack, and immediate interrupts
 - Benchmark comparison runner with anonymized review pairs
 - Deterministic adaptive routing and model selection
 - Connector registry and capability-based connector selection
 - External agent registration, dispatch, status, interrupt, and completion records
-- Printing Press generated CLI registration, capability selection, and agent conversion
-- Graph-first repo indexing with query, explain, and dependency-path tools
+- Printing Press generated CLI registration, capability selection, structural verification, native execution, evidence capture, and agent conversion
+- Graph-first repo indexing with provenance, confidence, query, explain, report, and dependency-path tools
 - Adapter-free local orchestration planning and deterministic execution
 - Claude Desktop MCPB-compatible extension metadata
 
@@ -601,10 +617,13 @@ Implemented orchestration control-plane tools:
 - `printing_press_list`: lists registered generated CLIs.
 - `printing_press_select`: selects a generated CLI by required capabilities.
 - `printing_press_register_agent`: converts a generated CLI into a dispatchable Wormhole worker.
-- `repo_index_build`: builds a local file, symbol, import, and link graph for a repo.
+- `printing_press_verify`: verifies a registered printed CLI structurally.
+- `printing_press_run`: runs a registered printed CLI with stdout, stderr, exit-code, timeout, and evidence-hash capture.
+- `repo_index_build`: builds a local file, symbol, import, link, and reference graph for a repo.
 - `repo_index_query`: searches indexed files and symbols before broad grep or raw file reads.
 - `repo_index_explain`: explains a file or symbol using graph neighbors.
 - `repo_index_path`: finds dependency paths between files or symbols.
+- `repo_index_report`: renders a deterministic native graph report.
 
 Repo-index MCP calls are confined to allowed workspace roots, use option-scoped cache entries, and refresh cached graphs from content fingerprints before query/explain/path operations.
 
@@ -624,6 +643,7 @@ The adaptive area implemented:
 - Model/provider and external agent capability manifests
 - Balanced vs deep mission modes
 - Bounded model-pool orchestration providers with thinker, worker, and verifier roles
+- Native model-profile registration, deterministic selection, outcome recording, and replayable route trace export
 
 Future adaptive work can still add:
 

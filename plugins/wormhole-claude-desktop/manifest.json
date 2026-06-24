@@ -4,7 +4,7 @@
   "display_name": "Wormhole",
   "version": "0.1.0",
   "description": "Evidence-gated planning and orchestration state for AI coding agents.",
-  "long_description": "Wormhole exposes a local MCP server for evidence records, open-question gates, local orchestration runs, orchestration task state, graph-first repo indexing, external agent dispatch, typed artifacts, and workbench rendering.",
+  "long_description": "Wormhole exposes a local MCP server for evidence records, open-question gates, native context packs, reversible optimization, local orchestration runs, orchestration task state, graph-first repo indexing, printed-tool execution, external agent dispatch, model-profile traces, typed artifacts, and workbench rendering.",
   "author": {
     "name": "Wormhole Maintainers",
     "url": "https://github.com/siskomx/wormhole"
@@ -30,6 +30,12 @@
     { "name": "record_question", "description": "Record an open question or assumption gap." },
     { "name": "gate_request", "description": "Evaluate whether the mission can emit its final plan." },
     { "name": "emit_plan", "description": "Emit the evidence-cited Markdown plan." },
+    { "name": "ctx_record", "description": "Record native source-backed context." },
+    { "name": "ctx_pack_query", "description": "Query native context records." },
+    { "name": "ctx_pack_create", "description": "Create a budgeted context pack." },
+    { "name": "ctx_pack_render", "description": "Render a context pack." },
+    { "name": "optimization_apply", "description": "Apply reversible native optimization." },
+    { "name": "optimization_retrieve", "description": "Retrieve original optimized content." },
     { "name": "task_register", "description": "Register a tracked orchestration task." },
     { "name": "orchestration_plan_local", "description": "Plan a local adapter-free orchestration run." },
     { "name": "orchestration_run_local", "description": "Execute a local deterministic orchestration run from supplied outcomes." },
@@ -42,10 +48,17 @@
     { "name": "printing_press_list", "description": "List registered Printing Press CLIs." },
     { "name": "printing_press_select", "description": "Select a Printing Press CLI by capability." },
     { "name": "printing_press_register_agent", "description": "Convert a Printing Press CLI into a Wormhole external agent." },
+    { "name": "printing_press_verify", "description": "Verify a registered printed CLI." },
+    { "name": "printing_press_run", "description": "Run a registered printed CLI with evidence capture." },
     { "name": "repo_index_build", "description": "Build a deterministic local repo graph index." },
     { "name": "repo_index_query", "description": "Query the repo graph before broad grep or file reads." },
     { "name": "repo_index_explain", "description": "Explain a file or symbol from indexed graph context." },
-    { "name": "repo_index_path", "description": "Find a graph path between files or symbols." }
+    { "name": "repo_index_path", "description": "Find a graph path between files or symbols." },
+    { "name": "repo_index_report", "description": "Render a native repo graph report." },
+    { "name": "model_profile_register", "description": "Register a native model profile." },
+    { "name": "model_profile_select", "description": "Select a model profile and emit a trace." },
+    { "name": "model_profile_record_outcome", "description": "Record a model-profile route outcome." },
+    { "name": "model_profile_export_traces", "description": "Export model-profile route traces." }
   ],
   "tools_generated": true,
   "prompts": [
@@ -53,7 +66,7 @@
       "name": "wormhole_orchestrate",
       "description": "Run a structured Wormhole planning or orchestration mission.",
       "arguments": ["objective"],
-      "text": "Use Wormhole for this mission: ${arguments.objective}\n\nFollow the Wormhole loop strictly: mission_start, round_start, gather evidence, record_evidence, record_question for gaps, register tasks when parallel work is useful, use orchestration_plan_local for local task waves and orchestration_run_local for deterministic local outcomes, gate_request, then emit_plan only after the gate opens. Use repo_index_build and repo_index_query before broad grep or file reads for codebase questions; use repo_index_explain and repo_index_path when relationships matter. Use printing_press_register and printing_press_register_agent for generated CLIs, then agent_dispatch only when their capabilities match the task."
+      "text": "Use Wormhole for this mission: ${arguments.objective}\n\nFollow the Wormhole loop strictly: mission_start, round_start, gather evidence, record_evidence, record_question for gaps, register tasks when parallel work is useful, use ctx_record and ctx_pack_create for native context packs, use optimization_apply when large outputs need reversible compaction, use orchestration_plan_local for local task waves and orchestration_run_local for deterministic local outcomes, gate_request, then emit_plan only after the gate opens. Use repo_index_build and repo_index_query before broad grep or file reads for codebase questions; use repo_index_explain, repo_index_path, and repo_index_report when relationships matter. Use printing_press_register, printing_press_verify, printing_press_run, and printing_press_register_agent for generated CLIs when their capabilities match the task. Use model_profile_select and model_profile_record_outcome when comparing local model profiles."
     }
   ],
   "compatibility": {

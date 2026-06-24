@@ -110,12 +110,13 @@ Wormhole includes a native Graphify-style repo index for codebase discovery. It 
 
 The tools are:
 
-- `repo_index_build`: build or rebuild an in-memory file, symbol, import, and link graph for a repo root.
+- `repo_index_build`: build or rebuild an in-memory file, symbol, import, link, and reference graph for a repo root.
 - `repo_index_query`: search the graph and indexed snippets before broad grep or raw file reads.
 - `repo_index_explain`: explain a file or symbol using indexed symbols plus inbound and outbound edges.
 - `repo_index_path`: find a graph path between two files or symbols.
+- `repo_index_report`: render a deterministic native graph report with edge provenance counts and top connected files.
 
-This is not a replacement for source evidence. Query results are discovery hints; important claims still need `record_evidence` entries with source paths and line ranges before the gate opens. The capability model also declares a `graphify` connector target so a full external Graphify graph or MCP server can be registered later without changing the Wormhole mission loop.
+Edges carry explicit provenance and confidence: source-backed definitions/imports/links are `extracted` with confidence `1`, while text references are `inferred` with lower confidence. This is not a replacement for source evidence. Query results are discovery hints; important claims still need `record_evidence` entries with source paths and line ranges before the gate opens. The capability model also declares a `graphify` connector target so a full external Graphify graph or MCP server can be registered later without changing the Wormhole mission loop.
 
 The MCP-exposed repo index tools are confined to allowed workspace roots. By default, the only allowed root is the server working directory. Hosts can set `WORMHOLE_ALLOWED_REPO_ROOTS` to a comma- or semicolon-separated allowlist when they need multiple repo roots. Index caches are keyed by repo root plus build options and refreshed from a content fingerprint before query, explain, or path operations. `include` and `exclude` are path patterns: plain names match path segments, slash-containing values match exact paths or descendants, and `*`/`**`/`?` provide glob-style matching.
 
@@ -146,7 +147,9 @@ The Printing Press contract tracks:
 - Whether the printed tool also provides an MCP server.
 - Concurrency and interrupt support.
 
-Wormhole can select a printed CLI with `printing_press_select` and convert it into a dispatchable external worker with `printing_press_register_agent`. After that, regular `agent_dispatch`, `agent_status`, `agent_complete`, and `agent_interrupt` rules apply. Printing Press tools therefore remain subordinate to Wormhole's task graph and evidence gate instead of becoming separate orchestrators.
+Wormhole can select a printed CLI with `printing_press_select`, verify it with `printing_press_verify`, run it with `printing_press_run`, and convert it into a dispatchable external worker with `printing_press_register_agent`. Native runs capture stdout, stderr, exit code, timeout status, and immutable evidence hashes. Printing Press tools therefore remain subordinate to Wormhole's task graph and evidence gate instead of becoming separate orchestrators.
+
+Printing Press factory parity is not claimed in this runtime layer. Generating a new CLI/MCP server from an API, website, OpenAPI spec, HAR capture, or managed research pipeline remains future work or delegated to Printing Press itself.
 
 ## Connector Model
 
@@ -157,7 +160,7 @@ Client-specific compatibility is expressed as adapters:
 - Claude Code: attach to the MCP stdio server.
 - Claude Desktop: install the MCPB-compatible scaffold in `plugins/wormhole-claude-desktop`.
 - Codex: consume `plugins/wormhole/.codex-plugin/plugin.json` and `plugins/wormhole/.mcp.json`.
-- Printing Press: register generated CLIs and MCP servers through `printing_press_register`, then convert them into Wormhole workers when useful.
+- Printing Press: register generated CLIs and MCP servers through `printing_press_register`, verify and run them through the native printed-tool runtime, then convert them into Wormhole workers when useful.
 - Graphify: use the native `repo_index_*` graph tools by default, or represent an external Graphify graph through the `graphify` connector target when one is available.
 - Hermes Agent, Inflection Pi, and other agents: register through the external agent adapter contract when they expose a controllable MCP, HTTP, CLI, SDK, or provider API boundary.
 - Other clients: implement the connector manifest and call the generic MCP tools.
@@ -174,8 +177,10 @@ Orchestration includes deterministic first-party optimization primitives:
 - Headroom-like context compression through `compressContext`
 - Caveman-style dense response profiles through `createDenseSummary`
 - Ponytail-style minimality rubrics through `reviewMinimality`
+- Reversible optimization records through `optimization_apply` and `optimization_retrieve`
+- Source-backed context packs through `ctx_record`, `ctx_pack_query`, `ctx_pack_create`, and `ctx_pack_render`
 
-Provider output must retain provenance. Compressed text can help the model, but the JSONL event log and source handles remain the source of truth.
+Provider output must retain provenance. Compressed text can help the model, but the JSONL event log, context record handles, retrieval IDs, and source handles remain the source of truth.
 
 External RTK, Headroom, Caveman, or Ponytail adapters can be added later. The Wormhole-native primitives remain the baseline behavior.
 
@@ -204,6 +209,8 @@ Routing outputs:
 - Refusal or approval requirement
 
 Every routing decision returns selected and rejected model data so callers can event-log the decision.
+
+The native model-profile layer adds deterministic small-model profile learning through `model_profile_register`, `model_profile_select`, `model_profile_record_outcome`, and `model_profile_export_traces`. This records routing traces and outcomes for later replay without claiming learned Fugu-style orchestration.
 
 `runModelPool` provides the first implemented role taxonomy:
 

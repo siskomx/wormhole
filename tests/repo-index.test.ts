@@ -6,6 +6,7 @@ import {
   buildRepoIndex,
   explainRepoIndex,
   findRepoIndexPath,
+  getRepoGraphReport,
   queryRepoIndex,
   summarizeRepoIndex,
 } from "../src/repo-index.js";
@@ -59,6 +60,8 @@ describe("repo index", () => {
           from: "src/server.ts",
           to: "src/db.ts",
           kind: "imports",
+          provenance: "extracted",
+          confidence: 1,
         }),
       );
     } finally {
@@ -194,6 +197,7 @@ describe("repo index", () => {
           from: "README.md",
           to: "src/db.ts",
           kind: "links",
+          provenance: "extracted",
         }),
       );
       expect(index.edges).toContainEqual(
@@ -201,6 +205,29 @@ describe("repo index", () => {
           from: "src/server.ts",
           to: expect.stringContaining("src/db.ts#connectDatabase"),
           kind: "references",
+          provenance: "inferred",
+          confidence: 0.7,
+        }),
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("generates a graph report from the native index", () => {
+    const repoRoot = createFixtureRepo();
+
+    try {
+      const index = buildRepoIndex({ repoRoot });
+      const report = getRepoGraphReport(index);
+
+      expect(report.summary).toContain("3 files");
+      expect(report.edgeCountsByProvenance.extracted).toBeGreaterThan(0);
+      expect(report.markdown).toContain("## Native Repo Graph Report");
+      expect(report.topFiles[0]).toEqual(
+        expect.objectContaining({
+          path: expect.any(String),
+          edgeCount: expect.any(Number),
         }),
       );
     } finally {

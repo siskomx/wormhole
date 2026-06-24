@@ -110,7 +110,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         target: "printing-press",
         status: "implemented",
         transport: "printing-press-cli",
-        description: "Printing Press generated CLIs and MCP servers can be registered as Wormhole capabilities and converted into external agent workers.",
+        description: "Printing Press generated CLIs and MCP servers can be registered, verified, executed, captured, and converted into external agent workers.",
       },
       {
         target: "graphify",
@@ -154,13 +154,25 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "orchestration.context-compression",
         area: "orchestration",
         status: "implemented",
-        description: "Wormhole-native command compaction, context compression, dense summaries, and minimality review primitives.",
+        description: "Wormhole-native context records, budgeted context packs, command compaction, context compression, dense summaries, and minimality review primitives.",
       },
       {
         id: "orchestration.first-party-optimization-primitives",
         area: "orchestration",
         status: "implemented",
         description: "Deterministic local versions of RTK-style command compaction, Headroom-style context compression, Caveman-style dense summaries, and Ponytail-style minimality review.",
+      },
+      {
+        id: "orchestration.native-context-packs",
+        area: "orchestration",
+        status: "implemented",
+        description: "Native source-backed context records, ranked context queries, and budgeted context pack rendering with provenance.",
+      },
+      {
+        id: "orchestration.reversible-optimization-pipeline",
+        area: "orchestration",
+        status: "implemented",
+        description: "Reversible optimization records with retrieval handles, transform traces, JSON/log routing, and token-budget stats.",
       },
       {
         id: "orchestration.external-optimization-adapters",
@@ -202,13 +214,19 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "orchestration.printing-press-cli-adapters",
         area: "orchestration",
         status: "implemented",
-        description: "Printing Press generated CLI registry, capability selection, and conversion into Wormhole external agent workers.",
+        description: "Printing Press generated CLI registry, capability selection, structural verification, native execution, evidence capture, and conversion into Wormhole external agent workers.",
+      },
+      {
+        id: "orchestration.printed-tool-runtime",
+        area: "orchestration",
+        status: "implemented",
+        description: "Native printed-tool run records with stdout, stderr, exit code, timeout handling, and immutable evidence hashes.",
       },
       {
         id: "orchestration.repo-index-graph",
         area: "orchestration",
         status: "implemented",
-        description: "Deterministic repo-local index with file, symbol, import, link, query, explain, and dependency-path tools.",
+        description: "Deterministic repo-local index with file, symbol, import, link, reference, provenance, confidence, query, explain, report, and dependency-path tools.",
       },
       {
         id: "orchestration.local-runner",
@@ -239,6 +257,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         area: "adaptive",
         status: "implemented",
         description: "Bounded model-pool orchestration with thinker, worker, and verifier roles plus deterministic routing/model selection.",
+      },
+      {
+        id: "adaptive.model-profile-learning",
+        area: "adaptive",
+        status: "implemented",
+        description: "Native model-profile registration, deterministic selection, outcome recording, and replayable route trace export.",
       },
       {
         id: "adaptive.connector-marketplace",

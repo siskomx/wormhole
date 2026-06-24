@@ -62,6 +62,17 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
     skillName: z.string().optional(),
     category: z.string().optional(),
   };
+  const modelProfileSchema = {
+    profileId: z.string(),
+    providerId: z.string(),
+    modelId: z.string(),
+    strengths: z.array(z.string()),
+    modes: z.array(z.enum(["fast", "balanced", "deep", "ultra"])),
+    costTier: z.enum(["low", "medium", "high"]),
+    latencyTier: z.enum(["low", "medium", "high"]),
+    privacy: z.enum(["local", "external"]),
+    contextWindow: z.number(),
+  };
 
   server.registerTool(
     "mission_start",
@@ -275,6 +286,88 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
       },
     },
     async (input) => jsonResult(tools.optimizeText(input)),
+  );
+
+  server.registerTool(
+    "optimization_apply",
+    {
+      description: "Apply a reversible Wormhole-native optimization and store the original behind a retrieval handle.",
+      inputSchema: {
+        kind: z.enum([
+          "auto",
+          "command_output_compaction",
+          "context_compression",
+          "dense_summary",
+          "minimality_review",
+          "json_compaction",
+        ]),
+        content: z.string(),
+        sourceId: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.optimizationApply(input)),
+  );
+
+  server.registerTool(
+    "optimization_retrieve",
+    {
+      description: "Retrieve the original content for a reversible optimization handle.",
+      inputSchema: {
+        retrievalId: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.optimizationRetrieve(input)),
+  );
+
+  server.registerTool(
+    "ctx_record",
+    {
+      description: "Record source-backed context in the native Wormhole context store.",
+      inputSchema: {
+        source: z.string(),
+        sourceType: z.enum(["file", "doc", "command", "user", "derived"]),
+        text: z.string(),
+        tags: z.array(z.string()).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.ctxRecord(input)),
+  );
+
+  server.registerTool(
+    "ctx_pack_query",
+    {
+      description: "Query native Wormhole context records before building an agent context pack.",
+      inputSchema: {
+        query: z.string(),
+        limit: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.ctxPackQuery(input)),
+  );
+
+  server.registerTool(
+    "ctx_pack_create",
+    {
+      description: "Create a budgeted native context pack with source provenance.",
+      inputSchema: {
+        objective: z.string(),
+        query: z.string(),
+        maxChars: z.number(),
+        recordIds: z.array(z.string()).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.ctxPackCreate(input)),
+  );
+
+  server.registerTool(
+    "ctx_pack_render",
+    {
+      description: "Render a previously created native context pack.",
+      inputSchema: {
+        packId: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.ctxPackRender(input)),
   );
 
   const scheduledTaskSchema = z.object({
@@ -550,6 +643,17 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
   );
 
   server.registerTool(
+    "repo_index_report",
+    {
+      description: "Render a deterministic native repo graph report from indexed files, symbols, and edges.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.repoIndexReport(input)),
+  );
+
+  server.registerTool(
     "agent_register",
     {
       description: "Register an external AI agent or model provider as a Wormhole worker.",
@@ -661,6 +765,79 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
       },
     },
     async (input) => jsonResult(tools.printingPressRegisterAgent(input)),
+  );
+
+  server.registerTool(
+    "printing_press_verify",
+    {
+      description: "Verify a registered printed CLI structurally before execution.",
+      inputSchema: {
+        cliId: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.printingPressVerify(input)),
+  );
+
+  server.registerTool(
+    "printing_press_run",
+    {
+      description: "Run a registered printed CLI and capture stdout, stderr, exit code, timeout, and evidence hash.",
+      inputSchema: {
+        cliId: z.string(),
+        args: z.array(z.string()).optional(),
+        stdin: z.string().optional(),
+        timeoutMs: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(await tools.printingPressRun(input)),
+  );
+
+  server.registerTool(
+    "model_profile_register",
+    {
+      description: "Register a native small-model profile for deterministic routing and learning traces.",
+      inputSchema: modelProfileSchema,
+    },
+    async (input) => jsonResult(tools.modelProfileRegister(input)),
+  );
+
+  server.registerTool(
+    "model_profile_select",
+    {
+      description: "Select a native model profile deterministically and emit a replayable route trace.",
+      inputSchema: {
+        taskType: z.string(),
+        mode: z.enum(["fast", "balanced", "deep", "ultra"]),
+        requiredStrengths: z.array(z.string()),
+        requiresPrivacy: z.boolean().optional(),
+        deniedProviders: z.array(z.string()).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.modelProfileSelect(input)),
+  );
+
+  server.registerTool(
+    "model_profile_record_outcome",
+    {
+      description: "Record an outcome for a native model-profile route trace.",
+      inputSchema: {
+        traceId: z.string(),
+        status: z.enum(["succeeded", "failed", "partial"]),
+        latencyMs: z.number(),
+        outputQuality: z.number(),
+        notes: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.modelProfileRecordOutcome(input)),
+  );
+
+  server.registerTool(
+    "model_profile_export_traces",
+    {
+      description: "Export replayable native model-profile route traces.",
+      inputSchema: {},
+    },
+    async () => jsonResult(tools.modelProfileExportTraces()),
   );
 
   return server;

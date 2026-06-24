@@ -36,6 +36,8 @@ The manifest is intentionally client-neutral. Codex, Claude Code, and future con
 Implemented `orchestration` capabilities include:
 
 - `orchestration.first-party-optimization-primitives`: deterministic local command-output compaction, context compression, dense summaries, and minimality review.
+- `orchestration.native-context-packs`: native source-backed context records, ranked context queries, and budgeted context pack rendering with provenance.
+- `orchestration.reversible-optimization-pipeline`: reversible optimization records with retrieval handles, transform traces, JSON/log routing, and token-budget stats.
 - `orchestration.live-sub-orchestrator-control`: task registration, heartbeat/status reporting, mailbox messages, direction-change pause/ack, and immediate interrupts.
 - `orchestration.parallel-sub-orchestrators`: four-layer task records plus static DAG scheduling with read/write lock separation.
 - `orchestration.content-addressed-evidence-cache`: SHA-256 addressed raw evidence storage.
@@ -43,8 +45,9 @@ Implemented `orchestration` capabilities include:
 - `orchestration.benchmark-runner`: unaided versus Wormhole run capture and anonymized review-pair generation.
 - `orchestration.codex-runtime-adapter`: Codex plugin/runtime adapter config generation and validation.
 - `orchestration.external-agent-adapters`: generic external agent registration, dispatch, status, interrupt, and completion records for systems such as Hermes Agent and Inflection Pi.
-- `orchestration.printing-press-cli-adapters`: Printing Press generated CLI registration, capability selection, and conversion into Wormhole external agent workers.
-- `orchestration.repo-index-graph`: deterministic repo-local file, symbol, import, link, query, explain, and dependency-path index.
+- `orchestration.printing-press-cli-adapters`: Printing Press generated CLI registration, capability selection, structural verification, native execution, evidence capture, and conversion into Wormhole external agent workers.
+- `orchestration.printed-tool-runtime`: native printed-tool run records with stdout, stderr, exit code, timeout handling, and immutable evidence hashes.
+- `orchestration.repo-index-graph`: deterministic repo-local file, symbol, import, link, reference, provenance, confidence, query, explain, report, and dependency-path index.
 - `orchestration.local-runner`: adapter-free local orchestration planning and deterministic execution over DAG waves, depth limits, task budgets, and spawned local tasks.
 
 The repo-index MCP tools are workspace-confined by the runtime. The default allowed root is the server working directory; hosts can configure additional allowed roots with `WORMHOLE_ALLOWED_REPO_ROOTS`.
@@ -54,6 +57,7 @@ Implemented `adaptive` capabilities include:
 - `adaptive.routing-model-selection`: fast/balanced/deep mode selection and model choice from provider manifests.
 - `adaptive.connector-registry`: capability-based connector discovery and selection.
 - `adaptive.graph-first-codebase-query`: query-first codebase discovery workflow that asks the repo graph before broad grep or raw file-reading passes.
+- `adaptive.model-profile-learning`: native model-profile registration, deterministic selection, outcome recording, and replayable route trace export.
 - `adaptive.dynamic-task-spawning`: dynamic DAG task expansion with max-depth and max-task guardrails.
 - `adaptive.model-pool-orchestration`: bounded thinker, worker, and verifier provider orchestration.
 - `adaptive.workbench-artifacts`: static mission/task/gate/artifact workbench snapshots and HTML rendering.

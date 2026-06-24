@@ -265,6 +265,90 @@ describe("Wormhole MCP tool handlers", () => {
     ]);
   });
 
+  it("runs native context, optimization, printed-tool, graph report, and model-profile handlers", async () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-native-runtime-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(
+      path.join(repoRoot, "src", "db.ts"),
+      "export function connectDatabase() { return 'database pool'; }\n",
+    );
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+      });
+      const context = tools.ctxRecord({
+        source: "src/db.ts",
+        sourceType: "file",
+        text: "connectDatabase returns the database pool.",
+        tags: ["database"],
+      });
+      const pack = tools.ctxPackCreate({
+        objective: "Plan database work",
+        query: "database pool",
+        maxChars: 200,
+      });
+      const optimized = tools.optimizationApply({
+        kind: "auto",
+        content: JSON.stringify([{ level: "error", message: "database failed" }]),
+      });
+      const retrieved = tools.optimizationRetrieve({
+        retrievalId: optimized.retrievalId,
+      });
+      tools.repoIndexBuild({ repoRoot });
+      const report = tools.repoIndexReport({ repoRoot });
+      tools.printingPressRegister({
+        cliId: "pp-node",
+        displayName: "Node Printed Tool",
+        command: process.execPath,
+        args: ["-e", "console.log('native printed tool')"],
+        capabilities: ["evidence"],
+        installation: "installed",
+        authentication: "none",
+        evidenceMode: "compact",
+        providesMcpServer: false,
+        supportsInterrupt: false,
+        maxConcurrentTasks: 1,
+      });
+      const verification = tools.printingPressVerify({ cliId: "pp-node" });
+      const run = await tools.printingPressRun({ cliId: "pp-node", timeoutMs: 2_000 });
+      tools.modelProfileRegister({
+        profileId: "small-local",
+        providerId: "local",
+        modelId: "mini-coder",
+        strengths: ["coding"],
+        modes: ["fast"],
+        costTier: "low",
+        latencyTier: "low",
+        privacy: "local",
+        contextWindow: 16_000,
+      });
+      const route = tools.modelProfileSelect({
+        taskType: "coding",
+        mode: "fast",
+        requiredStrengths: ["coding"],
+      });
+      const outcome = tools.modelProfileRecordOutcome({
+        traceId: route.traceId,
+        status: "succeeded",
+        latencyMs: 50,
+        outputQuality: 5,
+      });
+
+      expect(context.contextId).toMatch(/^ctx:sha256:/);
+      expect(pack.rendered).toContain("connectDatabase");
+      expect(retrieved.originalContent).toContain("database failed");
+      expect(report.markdown).toContain("Native Repo Graph Report");
+      expect(verification.status).toBe("passed");
+      expect(run.stdout).toContain("native printed tool");
+      expect(route.profile.profileId).toBe("small-local");
+      expect(outcome.profileStats.successCount).toBe(1);
+      expect(tools.modelProfileExportTraces()).toContain(route.traceId);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("builds and queries the repo index through generic tool handlers", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-index-"));
     mkdirSync(path.join(repoRoot, "src"), { recursive: true });

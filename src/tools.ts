@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createContextStore, type ContextRecordInput, type ContextPackInput, type ContextQueryInput } from "./context-store.js";
 import type {
   EvidenceInput,
   PlanInput,
@@ -10,7 +11,12 @@ import type {
   TaskStatusInput,
   WormholeKernel,
 } from "./kernel.js";
-import { optimizeText, type OptimizationKind } from "./optimization.js";
+import {
+  createOptimizationStore,
+  optimizeText,
+  type OptimizationKind,
+  type OptimizationRequestKind,
+} from "./optimization.js";
 import { createEvidenceCache } from "./evidence-cache.js";
 import { reconcileArtifacts, type ArtifactProposal } from "./reconciliation.js";
 import { createDagSchedule, type ScheduledTask } from "./scheduler.js";
@@ -41,6 +47,7 @@ import {
 import {
   createPrintingPressRegistry,
   type PrintingPressCliDescriptor,
+  type PrintingPressRunInput,
   type PrintingPressSelection,
 } from "./printing-press.js";
 import {
@@ -48,6 +55,7 @@ import {
   createRepoIndexCacheKey,
   explainRepoIndex,
   findRepoIndexPath,
+  getRepoGraphReport,
   isRepoIndexFresh,
   queryRepoIndex,
   summarizeRepoIndex,
@@ -57,6 +65,12 @@ import {
   type RepoIndexPathInput,
   type RepoIndexQueryInput,
 } from "./repo-index.js";
+import {
+  createModelProfileRegistry,
+  type ModelProfile,
+  type ModelProfileOutcomeInput,
+  type ModelProfileSelectInput,
+} from "./model-profile.js";
 import {
   executeLocalOrchestrationWithOutcomes,
   planLocalOrchestration,
@@ -116,6 +130,9 @@ export function createToolHandlers(
 ) {
   const agentRegistry = createAgentRegistry();
   const printingPressRegistry = createPrintingPressRegistry();
+  const contextStore = createContextStore();
+  const optimizationStore = createOptimizationStore();
+  const modelProfileRegistry = createModelProfileRegistry();
   const repoIndexes = new Map<string, RepoIndex>();
   const allowedRepoRoots = parseAllowedRepoRoots(options);
   const maxCachedRepoIndexes = options.maxCachedRepoIndexes ?? 8;
@@ -199,6 +216,30 @@ export function createToolHandlers(
 
     optimizeText(input: { kind: OptimizationKind; content: string }) {
       return optimizeText(input);
+    },
+
+    optimizationApply(input: { kind: OptimizationRequestKind; content: string; sourceId?: string }) {
+      return optimizationStore.apply(input);
+    },
+
+    optimizationRetrieve(input: { retrievalId: string }) {
+      return optimizationStore.retrieve(input);
+    },
+
+    ctxRecord(input: ContextRecordInput) {
+      return contextStore.record(input);
+    },
+
+    ctxPackQuery(input: ContextQueryInput) {
+      return contextStore.query(input);
+    },
+
+    ctxPackCreate(input: ContextPackInput) {
+      return contextStore.createPack(input);
+    },
+
+    ctxPackRender(input: { packId: string }) {
+      return contextStore.renderPack(input);
     },
 
     cacheEvidence(input: {
@@ -322,6 +363,14 @@ export function createToolHandlers(
       return agentRegistry.register(agent);
     },
 
+    printingPressVerify(input: { cliId: string }) {
+      return printingPressRegistry.verify(input);
+    },
+
+    printingPressRun(input: PrintingPressRunInput) {
+      return printingPressRegistry.run(input);
+    },
+
     repoIndexBuild(input: RepoIndexBuildOptions) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       const index = buildRepoIndex({ ...input, repoRoot });
@@ -343,6 +392,26 @@ export function createToolHandlers(
     repoIndexPath(input: { repoRoot: string } & RepoIndexPathInput) {
       const { repoRoot, ...pathInput } = input;
       return findRepoIndexPath(getRepoIndex(repoRoot), pathInput);
+    },
+
+    repoIndexReport(input: { repoRoot: string }) {
+      return getRepoGraphReport(getRepoIndex(input.repoRoot));
+    },
+
+    modelProfileRegister(input: ModelProfile) {
+      return modelProfileRegistry.register(input);
+    },
+
+    modelProfileSelect(input: ModelProfileSelectInput) {
+      return modelProfileRegistry.select(input);
+    },
+
+    modelProfileRecordOutcome(input: ModelProfileOutcomeInput) {
+      return modelProfileRegistry.recordOutcome(input);
+    },
+
+    modelProfileExportTraces() {
+      return modelProfileRegistry.exportTraces();
     },
 
     missionStatus(input: { missionId: string }) {

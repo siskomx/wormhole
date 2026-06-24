@@ -11,6 +11,7 @@ export type RepoIndexSymbolKind =
   | "section";
 
 export type RepoIndexEdgeKind = "defines" | "imports" | "links" | "references";
+export type RepoIndexEdgeProvenance = "extracted" | "inferred" | "ambiguous";
 
 export type RepoIndexSymbol = {
   id: string;
@@ -24,6 +25,8 @@ export type RepoIndexEdge = {
   from: string;
   to: string;
   kind: RepoIndexEdgeKind;
+  provenance: RepoIndexEdgeProvenance;
+  confidence: number;
   line?: number;
   label?: string;
 };
@@ -77,6 +80,13 @@ export type RepoIndexSummary = {
   languages: Record<string, number>;
   truncated: boolean;
   skippedFiles: string[];
+};
+
+export type RepoGraphReport = {
+  summary: string;
+  edgeCountsByProvenance: Record<RepoIndexEdgeProvenance, number>;
+  topFiles: Array<{ path: string; edgeCount: number }>;
+  markdown: string;
 };
 
 export type RepoIndexQueryInput = {
@@ -221,6 +231,8 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
         from: relativePath,
         to: symbol.id,
         kind: "defines" as const,
+        provenance: "extracted" as const,
+        confidence: 1,
         line: symbol.line,
         label: symbol.name,
       })),
@@ -238,6 +250,8 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
       from: draft.from,
       to: target,
       kind: draft.kind,
+      provenance: "extracted",
+      confidence: 1,
       line: draft.line,
       label: draft.specifier,
     });
@@ -299,6 +313,50 @@ export function summarizeRepoIndex(index: RepoIndex): RepoIndexSummary {
     languages,
     truncated: index.truncated,
     skippedFiles: [...index.skippedFiles],
+  };
+}
+
+export function getRepoGraphReport(index: RepoIndex): RepoGraphReport {
+  const edgeCountsByProvenance: Record<RepoIndexEdgeProvenance, number> = {
+    extracted: 0,
+    inferred: 0,
+    ambiguous: 0,
+  };
+  const edgeCountsByFile = new Map<string, number>();
+  for (const edge of index.edges) {
+    edgeCountsByProvenance[edge.provenance] += 1;
+    edgeCountsByFile.set(edge.from, (edgeCountsByFile.get(edge.from) ?? 0) + 1);
+  }
+  const topFiles = [...edgeCountsByFile.entries()]
+    .map(([path, edgeCount]) => ({ path, edgeCount }))
+    .sort((left, right) => {
+      if (right.edgeCount !== left.edgeCount) {
+        return right.edgeCount - left.edgeCount;
+      }
+      return left.path.localeCompare(right.path);
+    })
+    .slice(0, 10);
+  const summary = `${index.files.length} files, ${index.symbols.length} symbols, ${index.edges.length} edges`;
+  const markdown = [
+    "## Native Repo Graph Report",
+    "",
+    summary,
+    "",
+    "### Edge Provenance",
+    "",
+    `- extracted: ${edgeCountsByProvenance.extracted}`,
+    `- inferred: ${edgeCountsByProvenance.inferred}`,
+    `- ambiguous: ${edgeCountsByProvenance.ambiguous}`,
+    "",
+    "### Top Files",
+    "",
+    ...topFiles.map((file) => `- ${file.path}: ${file.edgeCount} edges`),
+  ].join("\n");
+  return {
+    summary,
+    edgeCountsByProvenance,
+    topFiles,
+    markdown,
   };
 }
 
@@ -642,6 +700,8 @@ function extractReferenceEdges(
         from: file.path,
         to: symbol.id,
         kind: "references",
+        provenance: "inferred",
+        confidence: 0.7,
         label: symbol.name,
       });
     }

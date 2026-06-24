@@ -1,8 +1,13 @@
+import { createHash } from "node:crypto";
+
 export type OptimizationKind =
   | "command_output_compaction"
   | "context_compression"
   | "dense_summary"
-  | "minimality_review";
+  | "minimality_review"
+  | "json_compaction";
+
+export type OptimizationRequestKind = OptimizationKind | "auto";
 
 export type OptimizationFinding = {
   severity: "low" | "medium" | "high";
@@ -16,9 +21,32 @@ export type OptimizationResult = {
   originalCharCount: number;
   optimizedCharCount: number;
   notes: string[];
+  contentHash?: string;
+  retrievalId?: string;
+  transformTrace?: string[];
+  estimatedTokensBefore?: number;
+  estimatedTokensAfter?: number;
+  estimatedTokensSaved?: number;
   droppedLineCount?: number;
   bullets?: string[];
   findings?: OptimizationFinding[];
+};
+
+export type OptimizationStoredRecord = {
+  retrievalId: string;
+  sourceId?: string;
+  originalContent: string;
+  optimizedContent: string;
+  result: OptimizationResult;
+};
+
+export type OptimizationStore = {
+  apply(input: {
+    kind: OptimizationRequestKind;
+    content: string;
+    sourceId?: string;
+  }): OptimizationResult & { retrievalId: string };
+  retrieve(input: { retrievalId: string }): OptimizationStoredRecord;
 };
 
 export type ContextItem = {
@@ -46,14 +74,29 @@ function result(
   notes: string[],
   extra: Partial<OptimizationResult> = {},
 ): OptimizationResult {
+  const estimatedTokensBefore = estimateTokens(original);
+  const estimatedTokensAfter = estimateTokens(content);
   return {
     kind,
     content,
     originalCharCount: original.length,
     optimizedCharCount: content.length,
+    contentHash: sha256(content),
+    transformTrace: [kind],
+    estimatedTokensBefore,
+    estimatedTokensAfter,
+    estimatedTokensSaved: Math.max(0, estimatedTokensBefore - estimatedTokensAfter),
     notes,
     ...extra,
   };
+}
+
+function sha256(value: string): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function estimateTokens(value: string): number {
+  return Math.ceil(value.length / 4);
 }
 
 export function compactCommandOutput(input: {
@@ -159,6 +202,34 @@ export function createDenseSummary(input: {
   });
 }
 
+export function compactJson(input: { content: string; maxItems?: number }): OptimizationResult {
+  const maxItems = input.maxItems ?? 20;
+  const parsed = JSON.parse(input.content) as unknown;
+  if (!Array.isArray(parsed)) {
+    return result("json_compaction", input.content, JSON.stringify(parsed), [
+      "JSON object normalized without array compaction.",
+    ]);
+  }
+  const important = parsed.filter((item) => {
+    const text = JSON.stringify(item).toLowerCase();
+    return /error|fail|failed|exception|warn|fatal/.test(text);
+  });
+  const selected = [
+    ...parsed.slice(0, Math.min(2, parsed.length)),
+    ...important,
+    ...parsed.slice(Math.max(0, parsed.length - 2)),
+  ];
+  const deduped = [...new Map(selected.map((item) => [JSON.stringify(item), item])).values()].slice(
+    0,
+    maxItems,
+  );
+  return result("json_compaction", input.content, JSON.stringify(deduped), [
+    "Preserved JSON validity while keeping head, tail, and diagnostic items.",
+  ], {
+    droppedLineCount: Math.max(0, parsed.length - deduped.length),
+  });
+}
+
 export function reviewMinimality(input: {
   objective: string;
   planSteps: string[];
@@ -203,10 +274,16 @@ export function reviewMinimality(input: {
 }
 
 export function optimizeText(input: {
-  kind: OptimizationKind;
+  kind: OptimizationRequestKind;
   content: string;
 }): OptimizationResult {
   switch (input.kind) {
+    case "auto":
+      try {
+        return compactJson({ content: input.content });
+      } catch {
+        return compactCommandOutput({ content: input.content });
+      }
     case "command_output_compaction":
       return compactCommandOutput({ content: input.content });
     case "context_compression":
@@ -220,5 +297,45 @@ export function optimizeText(input: {
         objective: "Review direct input for minimality.",
         planSteps: [input.content],
       });
+    case "json_compaction":
+      return compactJson({ content: input.content });
   }
+}
+
+export function createOptimizationStore(): OptimizationStore {
+  const records = new Map<string, OptimizationStoredRecord>();
+
+  return {
+    apply(input: {
+      kind: OptimizationRequestKind;
+      content: string;
+      sourceId?: string;
+    }): OptimizationResult & { retrievalId: string } {
+      const optimized = optimizeText(input);
+      const retrievalId = `opt:${sha256(input.content)}`;
+      const resultWithHandle: OptimizationResult & { retrievalId: string } = {
+        ...optimized,
+        retrievalId,
+      };
+      records.set(retrievalId, {
+        retrievalId,
+        sourceId: input.sourceId,
+        originalContent: input.content,
+        optimizedContent: optimized.content,
+        result: resultWithHandle,
+      });
+      return resultWithHandle;
+    },
+
+    retrieve(input: { retrievalId: string }): OptimizationStoredRecord {
+      const record = records.get(input.retrievalId);
+      if (!record) {
+        throw new Error(`Optimization record not found: ${input.retrievalId}`);
+      }
+      return {
+        ...record,
+        result: { ...record.result },
+      };
+    },
+  };
 }
