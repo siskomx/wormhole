@@ -45,6 +45,7 @@ V2 capabilities can be implemented incrementally. Implemented v2 capabilities in
 - `v2.external-agent-adapters`: generic external agent registration, dispatch, status, interrupt, and completion records for systems such as Hermes Agent and Inflection Pi.
 - `v2.printing-press-cli-adapters`: Printing Press generated CLI registration, capability selection, and conversion into Wormhole external agent workers.
 - `v2.repo-index-graph`: deterministic repo-local file, symbol, import, link, query, explain, and dependency-path index.
+- `v2.local-orchestration-runner`: adapter-free local orchestration planning and deterministic execution over DAG waves, depth limits, task budgets, and spawned local tasks.
 
 The repo-index MCP tools are workspace-confined by the runtime. The default allowed root is the server working directory; hosts can configure additional allowed roots with `WORMHOLE_ALLOWED_REPO_ROOTS`.
 

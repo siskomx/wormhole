@@ -396,4 +396,58 @@ describe("Wormhole MCP tool handlers", () => {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
+
+  it("plans and runs local orchestration without external adapters", async () => {
+    const tools = createToolHandlers(createInMemoryKernel());
+    const tasks = [
+      {
+        taskId: "inspect",
+        objective: "Inspect repo",
+        layer: 2 as const,
+        dependencies: [],
+        readSet: ["src/server.ts"],
+        writeSet: [],
+      },
+      {
+        taskId: "edit",
+        objective: "Edit repo",
+        layer: 3 as const,
+        dependencies: ["inspect"],
+        readSet: ["src/server.ts"],
+        writeSet: ["src/server.ts"],
+      },
+    ];
+    const plan = tools.orchestrationPlanLocal({
+      missionId: "M1",
+      tasks,
+      maxDepth: 3,
+      maxTasks: 4,
+    });
+    const run = await tools.orchestrationRunLocal({
+      missionId: "M1",
+      tasks,
+      maxDepth: 3,
+      maxTasks: 4,
+      outcomes: [
+        {
+          taskId: "inspect",
+          status: "completed",
+          output: "inspected",
+        },
+        {
+          taskId: "edit",
+          status: "completed",
+          output: "edited",
+        },
+      ],
+    });
+
+    expect(plan.status).toBe("planned");
+    expect(plan.schedule.waves.map((wave) => wave.map((task) => task.taskId))).toEqual([
+      ["inspect"],
+      ["edit"],
+    ]);
+    expect(run.status).toBe("completed");
+    expect(run.results.map((result) => result.output)).toEqual(["inspected", "edited"]);
+  });
 });

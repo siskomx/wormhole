@@ -312,6 +312,43 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
     async (input) => jsonResult(tools.scheduleTasks(input)),
   );
 
+  const localTaskOutcomeSchema = z.object({
+    taskId: z.string(),
+    status: z.enum(["completed", "failed"]),
+    output: z.unknown().optional(),
+    error: z.string().optional(),
+    spawnedTasks: z.array(scheduledTaskSchema).optional(),
+  });
+
+  server.registerTool(
+    "orchestration_plan_local",
+    {
+      description: "Plan a local adapter-free orchestration run with depth and task-budget guardrails.",
+      inputSchema: {
+        missionId: z.string(),
+        tasks: z.array(scheduledTaskSchema),
+        maxDepth: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+        maxTasks: z.number(),
+      },
+    },
+    async (input) => jsonResult(tools.orchestrationPlanLocal(input)),
+  );
+
+  server.registerTool(
+    "orchestration_run_local",
+    {
+      description: "Execute a local adapter-free orchestration run from deterministic caller-supplied task outcomes.",
+      inputSchema: {
+        missionId: z.string(),
+        tasks: z.array(scheduledTaskSchema),
+        maxDepth: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+        maxTasks: z.number(),
+        outcomes: z.array(localTaskOutcomeSchema),
+      },
+    },
+    async (input) => jsonResult(await tools.orchestrationRunLocal(input)),
+  );
+
   server.registerTool(
     "reconcile_artifacts",
     {

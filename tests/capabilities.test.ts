@@ -108,6 +108,7 @@ describe("capability manifest", () => {
         "v2.external-agent-adapters",
         "v2.printing-press-cli-adapters",
         "v2.repo-index-graph",
+        "v2.local-orchestration-runner",
         "v3.adaptive-routing-model-selection",
         "v3.connector-registry",
         "v3.graph-first-codebase-query",

@@ -381,6 +381,8 @@ The runnable server exposes a generic tool surface across the v1 kernel plus imp
 - `optimize_text`
 - `cache_evidence`
 - `schedule_tasks`
+- `orchestration_plan_local`
+- `orchestration_run_local`
 - `reconcile_artifacts`
 - `route_mission`
 - `codex_adapter_config`
@@ -576,6 +578,7 @@ V2 implemented:
 - External agent registration, dispatch, status, interrupt, and completion records
 - Printing Press generated CLI registration, capability selection, and agent conversion
 - Graph-first repo indexing with query, explain, and dependency-path tools
+- Adapter-free local orchestration planning and deterministic execution
 - Claude Desktop MCPB-compatible extension metadata
 
 Implemented v2 control-plane tools:
@@ -586,6 +589,8 @@ Implemented v2 control-plane tools:
 - `control_ack`: acknowledges a control message and records response.
 - `task_inbox`: lists pending or acknowledged task messages.
 - `task_status`: returns task state and mailbox counts.
+- `orchestration_plan_local`: validates and plans local DAG waves without executing tasks.
+- `orchestration_run_local`: executes local DAG semantics from deterministic caller-supplied task outcomes.
 - `agent_register`: registers an external AI agent or model provider worker.
 - `agent_list`: lists registered external workers.
 - `agent_dispatch`: assigns a Wormhole task to a worker by required capability.

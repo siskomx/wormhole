@@ -4,7 +4,7 @@
   "display_name": "Wormhole",
   "version": "0.1.0",
   "description": "Evidence-gated planning and orchestration state for AI coding agents.",
-  "long_description": "Wormhole exposes a local MCP server for evidence records, open-question gates, orchestration task state, graph-first repo indexing, external agent dispatch, typed artifacts, and workbench rendering.",
+  "long_description": "Wormhole exposes a local MCP server for evidence records, open-question gates, local orchestration runs, orchestration task state, graph-first repo indexing, external agent dispatch, typed artifacts, and workbench rendering.",
   "author": {
     "name": "Wormhole Maintainers",
     "url": "https://github.com/siskomx/wormhole"
@@ -31,6 +31,8 @@
     { "name": "gate_request", "description": "Evaluate whether the mission can emit its final plan." },
     { "name": "emit_plan", "description": "Emit the evidence-cited Markdown plan." },
     { "name": "task_register", "description": "Register a tracked orchestration task." },
+    { "name": "orchestration_plan_local", "description": "Plan a local adapter-free orchestration run." },
+    { "name": "orchestration_run_local", "description": "Execute a local deterministic orchestration run from supplied outcomes." },
     { "name": "agent_register", "description": "Register an external AI agent or provider worker." },
     { "name": "agent_dispatch", "description": "Dispatch a task to a registered external agent." },
     { "name": "agent_status", "description": "Read external agent run status." },
@@ -51,7 +53,7 @@
       "name": "wormhole_orchestrate",
       "description": "Run a structured Wormhole planning or orchestration mission.",
       "arguments": ["objective"],
-      "text": "Use Wormhole for this mission: ${arguments.objective}\n\nFollow the Wormhole loop strictly: mission_start, round_start, gather evidence, record_evidence, record_question for gaps, register tasks or external agents when parallel work is useful, gate_request, then emit_plan only after the gate opens. Use repo_index_build and repo_index_query before broad grep or file reads for codebase questions; use repo_index_explain and repo_index_path when relationships matter. Use printing_press_register and printing_press_register_agent for generated CLIs, then agent_dispatch only when their capabilities match the task."
+      "text": "Use Wormhole for this mission: ${arguments.objective}\n\nFollow the Wormhole loop strictly: mission_start, round_start, gather evidence, record_evidence, record_question for gaps, register tasks when parallel work is useful, use orchestration_plan_local for local task waves and orchestration_run_local for deterministic local outcomes, gate_request, then emit_plan only after the gate opens. Use repo_index_build and repo_index_query before broad grep or file reads for codebase questions; use repo_index_explain and repo_index_path when relationships matter. Use printing_press_register and printing_press_register_agent for generated CLIs, then agent_dispatch only when their capabilities match the task."
     }
   ],
   "compatibility": {

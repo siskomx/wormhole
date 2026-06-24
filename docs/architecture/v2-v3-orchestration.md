@@ -9,7 +9,7 @@ V1 proves the evidence loop. V2 introduces bounded parallel orchestration. V3 in
 | Track | Status | Purpose |
 | --- | --- | --- |
 | V1 | Implemented foundation | Local MCP planning kernel, JSONL state, evidence records, question ledger, gate, Markdown plan artifact, benchmark fixtures. |
-| V2 | Implemented foundation | First-party optimization primitives, live sub-orchestrator control, four-layer task records, static DAG scheduling, content-addressed evidence cache, reconciliation, repo graph indexing, Codex adapter config, Claude Desktop extension metadata, external agent adapters, Printing Press CLI adapters, and benchmark comparison runner. |
+| V2 | Implemented foundation | First-party optimization primitives, live sub-orchestrator control, four-layer task records, static DAG scheduling, adapter-free local orchestration runs, content-addressed evidence cache, reconciliation, repo graph indexing, Codex adapter config, Claude Desktop extension metadata, external agent adapters, Printing Press CLI adapters, and benchmark comparison runner. |
 | V3 | Implemented foundation | Adaptive model/provider routing, graph-first codebase query workflow, connector registry, dynamic DAG spawning guardrails, bounded model-pool roles, typed artifacts, and static workbench rendering. Learned provider orchestration remains a future extension. |
 
 ## Four-Layer Ceiling
@@ -87,6 +87,16 @@ V2 parallelism is static DAG parallelism first and is implemented through `creat
 - Dynamic spawning is allowed only when a worker returns declared child tasks.
 - Spawned children must be deeper than the parent, cannot exceed depth 4, cannot duplicate task ids, and are capped by the caller's max-task budget.
 - Fan-out is capped per layer and per mission by the scheduler caller.
+
+## Local Orchestration Runner
+
+Wormhole includes an adapter-free local orchestration runner for hosts that want first-party planning and deterministic execution without invoking external agents.
+
+- `orchestration_plan_local` validates task ids, dependencies, max depth, max task budget, and read/write lock waves without executing work.
+- `orchestration_run_local` executes the same local DAG semantics from caller-supplied deterministic task outcomes. It tracks completed, failed, blocked, and dynamically spawned local tasks.
+- Spawned local tasks must be deeper than their parent layer, within `maxDepth`, and inside the `maxTasks` budget.
+
+This runner is not a process supervisor and does not spawn Claude, Codex, Hermes, Pi, Printing Press, or provider APIs. It turns the existing scheduler and dynamic-spawn guardrails into a first-party run record that can be used by a host or test harness.
 
 ## Reconciliation And Cache
 

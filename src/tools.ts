@@ -57,6 +57,12 @@ import {
   type RepoIndexPathInput,
   type RepoIndexQueryInput,
 } from "./repo-index.js";
+import {
+  executeLocalOrchestrationWithOutcomes,
+  planLocalOrchestration,
+  type LocalOrchestrationInput,
+  type LocalOrchestrationOutcomeInput,
+} from "./orchestration-runner.js";
 
 export type ToolHandlerOptions = {
   allowedRepoRoots?: string[];
@@ -213,6 +219,14 @@ export function createToolHandlers(
 
     scheduleTasks(input: { tasks: ScheduledTask[] }) {
       return createDagSchedule(input.tasks);
+    },
+
+    orchestrationPlanLocal(input: LocalOrchestrationInput) {
+      return planLocalOrchestration(input);
+    },
+
+    orchestrationRunLocal(input: LocalOrchestrationOutcomeInput) {
+      return executeLocalOrchestrationWithOutcomes(input);
     },
 
     reconcileArtifacts(input: { proposals: ArtifactProposal[] }) {

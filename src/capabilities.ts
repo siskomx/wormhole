@@ -211,6 +211,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Deterministic repo-local index with file, symbol, import, link, query, explain, and dependency-path tools.",
       },
       {
+        id: "v2.local-orchestration-runner",
+        track: "v2",
+        status: "implemented",
+        description: "Adapter-free local orchestration planning and deterministic execution over DAG waves, depth limits, task budgets, and spawned local tasks.",
+      },
+      {
         id: "v3.adaptive-routing-model-selection",
         track: "v3",
         status: "implemented",
