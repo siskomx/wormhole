@@ -19,6 +19,18 @@ The repository also includes implemented orchestration and adaptive foundations:
 - Codex plugin scaffold: `plugins/wormhole`
 - Capability manifest: `src/capabilities.ts`
 
+## Acknowledgements
+
+Several open-source projects and research systems influenced Wormhole's native orchestration work:
+
+- [Graphify](https://github.com/safishamsi/graphify) informed the graph-first repo index direction, especially provenance-aware relationships and graph reports.
+- [Headroom](https://github.com/headroomlabs-ai/headroom) and [RTK](https://github.com/rtk-ai/rtk) informed reversible context optimization, retrieval handles, and deterministic output compaction.
+- [Printing Press](https://printingpress.dev/) informed the printed-tool registry, verification, execution, and evidence-capture model.
+- [Sakana Fugu](https://sakana.ai/fugu/) informed the model-profile routing and trace-first learning direction.
+- [Caveman](https://github.com/JuliusBrussee/caveman) and [Ponytail](https://github.com/DietrichGebert/ponytail) informed the dense-output and minimality-review primitives.
+
+These are acknowledgements of design influence; Wormhole implements its current runtime capabilities natively.
+
 ## Local Commands
 
 ```bash
