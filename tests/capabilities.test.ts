@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createDefaultCapabilityManifest } from "../src/capabilities.js";
 
 describe("capability manifest", () => {
-  it("declares v1 implemented capability plus v2 and v3 planned tracks", () => {
+  it("declares implemented capabilities by area instead of version track", () => {
     const manifest = createDefaultCapabilityManifest();
 
     expect(manifest.maxOrchestrationDepth).toBe(4);
@@ -16,8 +16,13 @@ describe("capability manifest", () => {
       "hermes-agent",
       "inflection-pi",
     ]);
-    expect(new Set(manifest.capabilities.map((capability) => capability.track))).toEqual(
-      new Set(["v1", "v2", "v3"]),
+    expect(new Set(manifest.capabilities.map((capability) => capability.area))).toEqual(
+      new Set(["core", "orchestration", "adaptive"]),
+    );
+    expect(manifest.capabilities.map((capability) => capability.id)).not.toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^v\d\./),
+      ]),
     );
     expect(manifest.capabilities.some((capability) => capability.status === "implemented")).toBe(
       true,
@@ -29,7 +34,7 @@ describe("capability manifest", () => {
 
     expect(manifest.capabilities).toContainEqual(
       expect.objectContaining({
-        id: "v2.first-party-optimization-primitives",
+        id: "orchestration.first-party-optimization-primitives",
         status: "implemented",
       }),
     );
@@ -40,7 +45,7 @@ describe("capability manifest", () => {
 
     expect(manifest.capabilities).toContainEqual(
       expect.objectContaining({
-        id: "v2.live-sub-orchestrator-control",
+        id: "orchestration.live-sub-orchestrator-control",
         status: "implemented",
       }),
     );
@@ -92,7 +97,7 @@ describe("capability manifest", () => {
     );
   });
 
-  it("declares the remaining v2 and v3 foundations as implemented", () => {
+  it("declares orchestration and adaptive foundations as implemented", () => {
     const manifest = createDefaultCapabilityManifest();
     const implementedIds = manifest.capabilities
       .filter((capability) => capability.status === "implemented")
@@ -100,22 +105,22 @@ describe("capability manifest", () => {
 
     expect(implementedIds).toEqual(
       expect.arrayContaining([
-        "v2.parallel-sub-orchestrators",
-        "v2.content-addressed-evidence-cache",
-        "v2.reconciliation-engine",
-        "v2.benchmark-runner",
-        "v2.codex-runtime-adapter",
-        "v2.external-agent-adapters",
-        "v2.printing-press-cli-adapters",
-        "v2.repo-index-graph",
-        "v2.local-orchestration-runner",
-        "v3.adaptive-routing-model-selection",
-        "v3.connector-registry",
-        "v3.graph-first-codebase-query",
-        "v3.dynamic-task-spawning",
-        "v3.model-pool-orchestration",
-        "v3.workbench-artifacts",
-        "v3.rich-artifact-types",
+        "orchestration.parallel-sub-orchestrators",
+        "orchestration.content-addressed-evidence-cache",
+        "orchestration.reconciliation-engine",
+        "orchestration.benchmark-runner",
+        "orchestration.codex-runtime-adapter",
+        "orchestration.external-agent-adapters",
+        "orchestration.printing-press-cli-adapters",
+        "orchestration.repo-index-graph",
+        "orchestration.local-runner",
+        "adaptive.routing-model-selection",
+        "adaptive.connector-registry",
+        "adaptive.graph-first-codebase-query",
+        "adaptive.dynamic-task-spawning",
+        "adaptive.model-pool-orchestration",
+        "adaptive.workbench-artifacts",
+        "adaptive.rich-artifact-types",
       ]),
     );
   });

@@ -7,7 +7,7 @@ Date: 2026-06-23
 This is the canonical merged plan for Wormhole. It supersedes:
 
 - `outputs/wormhole-plan-log.md`
-- `outputs/wormhole-final-v1-plan.md`
+- `outputs/wormhole-final-core-plan.md`
 
 Those files remain useful as discussion history. This document is the implementation baseline.
 
@@ -17,11 +17,11 @@ Wormhole is an evidence-first orchestration system for AI coding agents.
 
 The long-term goal is to support new projects, existing repositories, feature expansion, product planning, UI/UX planning, system design, implementation planning, review, and eventually bounded execution through sub-orchestrators.
 
-The v1 goal is narrower and falsifiable:
+The core goal is narrower and falsifiable:
 
 > Prove whether an evidence-aware loop with an open-question ledger and batch gate produces better existing-repo design and implementation plans than unaided Claude Code.
 
-V1 is a local Claude Code MCP server. In v1, that MCP server is also the kernel. It owns mission state, event logging, evidence records, open questions, and gate enforcement. Claude Code still drives reasoning and tool use; Wormhole enforces workflow order through MCP tool responses.
+The core runtime is a local Claude Code MCP server. In the core runtime, that MCP server is also the kernel. It owns mission state, event logging, evidence records, open questions, and gate enforcement. Claude Code still drives reasoning and tool use; Wormhole enforces workflow order through MCP tool responses.
 
 ## Core Thesis
 
@@ -120,7 +120,7 @@ Routing and policy decisions should be inspectable, testable, and event-logged.
 
 Long term, MCP is an interface to Wormhole, not the whole kernel.
 
-For v1 only, the MCP server is the kernel to avoid premature process boundaries.
+For the core runtime, the MCP server is the kernel to avoid premature process boundaries.
 
 ### One Parameterized Workflow
 
@@ -138,13 +138,13 @@ They must hold mission objective, constraints, budgets, task state, gate state, 
 
 Summaries are for human display. Gate logic must use structured state.
 
-## Canonical V1 Scope
+## Canonical Core Scope
 
-V1 includes:
+Core includes:
 
 - Claude Code first
 - One local MCP server
-- MCP server is the v1 kernel
+- MCP server is the core kernel
 - Repo-local Codex plugin metadata for local MCP attachment
 - Repo-local Claude Desktop MCPB metadata for local MCP attachment
 - Existing-repo planning missions only
@@ -157,7 +157,7 @@ V1 includes:
 - One evidence-cited Markdown plan artifact
 - Evaluation against unaided Claude Code
 
-V1 excludes:
+Core excludes:
 
 - Parallel execution
 - Dynamic sub-orchestrators
@@ -173,11 +173,11 @@ V1 excludes:
 - External connector marketplace packaging
 - Built-in third-party compression/provider integrations
 
-## V1 Runtime Model
+## Core Runtime Model
 
 ### Kernel Boundary
 
-In v1, the local MCP server is the kernel.
+In the core runtime, the local MCP server is the kernel.
 
 There is no separate kernel process, no IPC layer, and no daemon beyond the MCP server process.
 
@@ -200,7 +200,7 @@ Claude Code owns:
 - Supplying evidence observations to Wormhole
 - Drafting the final plan through the Wormhole workflow
 
-Wormhole v1 does not invoke the model directly.
+The core runtime does not invoke the model directly.
 
 ### Loop Ownership
 
@@ -229,7 +229,7 @@ The MCP server enforces:
 
 If Claude Code calls tools out of order, the MCP server returns a structured refusal with the required next state transition.
 
-## V1 State Model
+## Core State Model
 
 State is stored as a single append-only JSONL event log.
 
@@ -239,7 +239,7 @@ There is one source of truth: the JSONL log.
 
 ### Required Event Types
 
-V1 event types:
+Core event types:
 
 - `mission.started`
 - `mission.updated`
@@ -262,7 +262,7 @@ Every event includes:
 - `createdAt`
 - `payload`
 
-## V1 Evidence Records
+## Core Evidence Records
 
 Evidence records are intentionally simple.
 
@@ -293,7 +293,7 @@ If path verification fails at record time, the evidence record is rejected and a
 
 If path verification fails at gate or artifact time, the record is stale and excluded from plan-supporting citations. A mission cannot open the gate or emit a plan unless at least one fresh evidence record remains.
 
-V1 verifies that cited files exist. It does not verify that every cited file semantically entails every claim.
+The core runtime verifies that cited files exist. It does not verify that every cited file semantically entails every claim.
 
 ## Open-Question Ledger
 
@@ -322,11 +322,11 @@ A question is blocking when its answer could change:
 - The risk level
 - The verification strategy
 
-Questions that only refine wording, naming, or low-impact preferences are non-blocking in v1.
+Questions that only refine wording, naming, or low-impact preferences are non-blocking in the core runtime.
 
 ## Batch Gate
 
-V1 uses a batch gate, not interactive mid-run prompting.
+The core runtime uses a batch gate, not interactive mid-run prompting.
 
 The gate opens when:
 
@@ -344,9 +344,9 @@ The gate closes when:
 - The loop exceeded the round limit.
 - Required state is missing or malformed.
 
-## V1 Final Artifact
+## Core Final Artifact
 
-V1 emits one Markdown artifact: an evidence-cited existing-repo plan.
+The core runtime emits one Markdown artifact: an evidence-cited existing-repo plan.
 
 Required sections:
 
@@ -362,7 +362,7 @@ The artifact should cite evidence records inline using source paths and line ran
 
 ## Current MCP Tool Surface
 
-The runnable server exposes a generic tool surface across the v1 kernel plus implemented v2/v3 foundations:
+The runnable server exposes a generic tool surface across the core kernel plus implemented orchestration and adaptive foundations:
 
 - `mission_start`
 - `round_start`
@@ -406,13 +406,13 @@ The runnable server exposes a generic tool surface across the v1 kernel plus imp
 
 DS9-inspired names stay out of tool contracts.
 
-## V1 Evaluation Plan
+## Core Evaluation Plan
 
 The evaluation answers whether Wormhole is better than unaided Claude Code for existing-repo planning.
 
 ### Benchmark Suite
 
-The v1 repo must include a frozen benchmark suite before claiming success.
+The core repo must include a frozen benchmark suite before claiming success.
 
 The repository stores those fixtures under `benchmarks/fixtures`, with checked-in sample repositories under `benchmarks/repos` and the reviewer rubric at `benchmarks/rubric.json`.
 
@@ -461,7 +461,7 @@ Each dimension is scored from 1 to 5.
 
 ### Success Criterion
 
-Wormhole v1 is successful if:
+The Wormhole core loop is successful if:
 
 - Wormhole wins or ties unaided Claude Code on at least 4 of 5 dimensions in at least 3 of 5 benchmark tasks.
 - Wormhole has no severe correctness regression.
@@ -504,9 +504,9 @@ Implemented native primitives:
 - `createDenseSummary`: Caveman-like dense summary generation.
 - `reviewMinimality`: Ponytail-like minimality review.
 
-V2 can still add external RTK-like command-output compaction and Headroom-like context compression adapters.
+The orchestration area can still add external RTK-like command-output compaction and Headroom-like context compression adapters.
 
-V3 can support a provider registry or marketplace.
+The adaptive area can support a provider registry or marketplace.
 
 Reference projects:
 
@@ -536,9 +536,9 @@ External AI agents are treated as registered workers, not as alternate sources o
 
 Gathering depth should scale with ambiguity and stakes. Simple requests should use a fast path; high-impact or ambiguous missions should trigger broader evidence gathering, stronger gates, and more review.
 
-## Explicit V1 Deferrals
+## Explicit Core Deferrals
 
-These are not v1:
+These are outside the core scope:
 
 - Dynamic DAG mutation beyond declared task inputs
 - Autonomous L1/L2/L3 Runabout process spawning without a declared scheduler plan
@@ -557,9 +557,9 @@ These are not v1:
 - External RTK/Headroom/Caveman/Ponytail adapters
 - Learned/model-pool orchestration beyond deterministic routing/model selection
 
-## V2 Implemented Direction
+## Orchestration Implemented Direction
 
-V2 implemented:
+The orchestration area implemented:
 
 - Static DAG parallelism
 - Domain Runabouts
@@ -581,7 +581,7 @@ V2 implemented:
 - Adapter-free local orchestration planning and deterministic execution
 - Claude Desktop MCPB-compatible extension metadata
 
-Implemented v2 control-plane tools:
+Implemented orchestration control-plane tools:
 
 - `task_register`: creates a tracked active task.
 - `task_status_report`: records heartbeat, current flow, summary, and touched paths.
@@ -608,11 +608,11 @@ Implemented v2 control-plane tools:
 
 Repo-index MCP calls are confined to allowed workspace roots, use option-scoped cache entries, and refresh cached graphs from content fingerprints before query/explain/path operations.
 
-The repo-level v2 contract is documented in `docs/architecture/v2-v3-orchestration.md` and `docs/contracts/capability-manifest.md`.
+The repo-level orchestration contract is documented in `docs/architecture/orchestration-adaptive-capabilities.md` and `docs/contracts/capability-manifest.md`.
 
-## V3 Implemented Direction
+## Adaptive Implemented Direction
 
-V3 implemented:
+The adaptive area implemented:
 
 - Dynamic sub-orchestrators
 - Deeper layered execution up to hard max depth 4
@@ -625,7 +625,7 @@ V3 implemented:
 - Balanced vs deep mission modes
 - Bounded model-pool orchestration providers with thinker, worker, and verifier roles
 
-Future V3+ work can still add:
+Future adaptive work can still add:
 
 - Full evidence graph
 - MVCC snapshots
@@ -637,17 +637,17 @@ Future V3+ work can still add:
 - Learned model-pool orchestration
 - External provider marketplaces
 
-The repo-level v3 contract is documented in `docs/architecture/v2-v3-orchestration.md`.
+The repo-level adaptive contract is documented in `docs/architecture/orchestration-adaptive-capabilities.md`.
 
 ## Model-Pool Orchestration
 
-Sakana Fugu validates the long-term direction for Wormhole, but it should not expand the v1 evidence kernel.
+Sakana Fugu validates the long-term direction for Wormhole, but it should not expand the core evidence kernel.
 
 Fugu presents a multi-agent system as one model/API, dynamically coordinating a pool of models for complex coding, reasoning, research, and review tasks. Its public materials describe learned orchestration rather than hand-authored workflows, model/provider opt-outs for compliance, and two operating modes: a balanced default and an ultra/deeper mode for harder tasks.
 
 Wormhole treats this as both an implemented deterministic foundation and a future roadmap signal:
 
-- Keep v1 focused on evidence-aware existing-repo planning.
+- Keep the core loop focused on evidence-aware existing-repo planning.
 - Preserve the longer-term goal of adaptive orchestration.
 - Use benchmark results to decide when deeper orchestration is justified.
 - Use model/provider capability manifests before using model pools.
@@ -715,7 +715,7 @@ Highest-risk issues:
 
 ## Guardrails
 
-V1 guardrails:
+Core guardrails:
 
 - Sequential loop only
 - Max 3 gather/reason rounds
@@ -743,8 +743,8 @@ Future guardrails:
 
 ## Final Architecture Statement
 
-Wormhole v1 is a local Claude Code MCP server that provides durable evidence-aware planning state for existing repositories. The current repo also includes implemented v2/v3 orchestration foundations for parallel task planning, live control, dynamic spawning guardrails, deterministic routing, bounded model-pool roles, typed artifacts, and static workbench rendering.
+Wormhole core is a local Claude Code MCP server that provides durable evidence-aware planning state for existing repositories. The current repo also includes implemented orchestration and adaptive foundations for parallel task planning, live control, dynamic spawning guardrails, deterministic routing, bounded model-pool roles, typed artifacts, and static workbench rendering.
 
 It does not try to beat general agents by using more agents. It tests whether a small amount of structure, evidence recording, open-question tracking, and gate enforcement can produce better repo-aware plans.
 
-If v1 wins the benchmark, the larger Wormhole orchestration system is justified. If it does not, parallel sub-orchestration would only make a weak loop more expensive.
+If the core loop wins the benchmark, the larger Wormhole orchestration system is justified. If it does not, parallel sub-orchestration would only make a weak loop more expensive.

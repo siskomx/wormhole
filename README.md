@@ -2,14 +2,14 @@
 
 Wormhole is an evidence-aware planning and orchestration state server for AI coding agents.
 
-V1 is intentionally small: a local Claude Code MCP server for existing-repo planning with a JSONL event log, evidence records, an open-question ledger, a batch gate, and one evidence-cited Markdown plan artifact.
+The core kernel is intentionally small: a local MCP server for existing-repo planning with a JSONL event log, evidence records, an open-question ledger, a batch gate, and one evidence-cited Markdown plan artifact.
 
-The repository also includes implemented v2/v3 foundations: four-layer orchestration, live sub-orchestrator control, adapter-free local orchestration runs, Codex plugin metadata, Claude Desktop extension metadata, graph-first repo indexing, external agent adapters, Printing Press CLI adapters, connector boundaries, first-party optimization primitives, evidence cache, reconciliation, benchmark comparison, deterministic adaptive routing, bounded model-pool roles, dynamic task spawning guardrails, typed artifacts, and a static workbench renderer.
+The repository also includes implemented orchestration and adaptive foundations: four-layer orchestration, live sub-orchestrator control, adapter-free local orchestration runs, Codex plugin metadata, Claude Desktop extension metadata, graph-first repo indexing, external agent adapters, Printing Press CLI adapters, connector boundaries, first-party optimization primitives, evidence cache, reconciliation, benchmark comparison, deterministic adaptive routing, bounded model-pool roles, dynamic task spawning guardrails, typed artifacts, and a static workbench renderer.
 
 ## Current Surface
 
-- V1 runnable MCP kernel: `src/cli.ts`
-- V1/V2/V3 tool surface: `mission_start`, `round_start`, `record_evidence`, `record_question`, `update_question`, `task_register`, `task_status_report`, `control_message`, `control_ack`, `task_inbox`, `task_status`, `gate_request`, `emit_plan`, `mission_status`, `optimize_text`, `cache_evidence`, `schedule_tasks`, `orchestration_plan_local`, `orchestration_run_local`, `reconcile_artifacts`, `route_mission`, `codex_adapter_config`, `select_connector`, `create_artifact`, `render_workbench`, `repo_index_build`, `repo_index_query`, `repo_index_explain`, `repo_index_path`, `agent_register`, `agent_list`, `agent_dispatch`, `agent_status`, `agent_complete`, `agent_interrupt`, `printing_press_register`, `printing_press_list`, `printing_press_select`, `printing_press_register_agent`
+- Core runnable MCP kernel: `src/cli.ts`
+- Core, orchestration, and adaptive tool surface: `mission_start`, `round_start`, `record_evidence`, `record_question`, `update_question`, `task_register`, `task_status_report`, `control_message`, `control_ack`, `task_inbox`, `task_status`, `gate_request`, `emit_plan`, `mission_status`, `optimize_text`, `cache_evidence`, `schedule_tasks`, `orchestration_plan_local`, `orchestration_run_local`, `reconcile_artifacts`, `route_mission`, `codex_adapter_config`, `select_connector`, `create_artifact`, `render_workbench`, `repo_index_build`, `repo_index_query`, `repo_index_explain`, `repo_index_path`, `agent_register`, `agent_list`, `agent_dispatch`, `agent_status`, `agent_complete`, `agent_interrupt`, `printing_press_register`, `printing_press_list`, `printing_press_select`, `printing_press_register_agent`
 - JSONL state: `.wormhole/events.jsonl` in the working directory
 - First-party optimization primitives: command-output compaction, context compression, dense summaries, and minimality review
 - Live control plane: heartbeat/status, mailbox queries, advisory messages, direction-change pause/ack, and immediate interrupts
@@ -57,5 +57,5 @@ The plugin MCP config points to `../../dist/src/cli.js` from `plugins/wormhole`,
 ## Planning Docs
 
 - Canonical plan: [docs/planning/wormhole-canonical-plan.md](docs/planning/wormhole-canonical-plan.md)
-- V2/V3 architecture: [docs/architecture/v2-v3-orchestration.md](docs/architecture/v2-v3-orchestration.md)
+- Orchestration and adaptive architecture: [docs/architecture/orchestration-adaptive-capabilities.md](docs/architecture/orchestration-adaptive-capabilities.md)
 - Capability contract: [docs/contracts/capability-manifest.md](docs/contracts/capability-manifest.md)

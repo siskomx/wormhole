@@ -1,4 +1,4 @@
-export type WormholeTrack = "v1" | "v2" | "v3";
+export type WormholeCapabilityArea = "core" | "orchestration" | "adaptive";
 
 export type CapabilityStatus = "implemented" | "planned";
 
@@ -14,7 +14,7 @@ export type ConnectorTarget =
 
 export type WormholeCapability = {
   id: string;
-  track: WormholeTrack;
+  area: WormholeCapabilityArea;
   status: CapabilityStatus;
   description: string;
 };
@@ -86,13 +86,13 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         target: "generic-mcp",
         status: "implemented",
         transport: "mcp-stdio",
-        description: "Local MCP server exposing the v1 evidence, question, gate, status, and plan tools.",
+        description: "Local MCP server exposing the core evidence, question, gate, status, and plan tools.",
       },
       {
         target: "claude-code",
         status: "implemented",
         transport: "mcp-stdio",
-        description: "Claude Code can attach to the Wormhole MCP server and drive the v1 workflow.",
+        description: "Claude Code can attach to the Wormhole MCP server and drive the core workflow.",
       },
       {
         target: "claude-desktop",
@@ -133,140 +133,140 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
     ],
     capabilities: [
       {
-        id: "v1.evidence-gated-planning",
-        track: "v1",
+        id: "core.evidence-gated-planning",
+        area: "core",
         status: "implemented",
         description: "Append-only JSONL planning state, evidence records, question ledger, batch gate, and Markdown plan artifact.",
       },
       {
-        id: "v2.parallel-sub-orchestrators",
-        track: "v2",
+        id: "orchestration.parallel-sub-orchestrators",
+        area: "orchestration",
         status: "implemented",
         description: "Four-layer task records plus deterministic DAG scheduling with dependency waves and read/write lock separation.",
       },
       {
-        id: "v2.live-sub-orchestrator-control",
-        track: "v2",
+        id: "orchestration.live-sub-orchestrator-control",
+        area: "orchestration",
         status: "implemented",
         description: "Task registration, heartbeat/status reporting, mailbox messages, direction-change pause/ack, and immediate interrupts for active sub-orchestrators.",
       },
       {
-        id: "v2.context-compression",
-        track: "v2",
+        id: "orchestration.context-compression",
+        area: "orchestration",
         status: "implemented",
         description: "Wormhole-native command compaction, context compression, dense summaries, and minimality review primitives.",
       },
       {
-        id: "v2.first-party-optimization-primitives",
-        track: "v2",
+        id: "orchestration.first-party-optimization-primitives",
+        area: "orchestration",
         status: "implemented",
         description: "Deterministic local versions of RTK-style command compaction, Headroom-style context compression, Caveman-style dense summaries, and Ponytail-style minimality review.",
       },
       {
-        id: "v2.external-optimization-adapters",
-        track: "v2",
+        id: "orchestration.external-optimization-adapters",
+        area: "orchestration",
         status: "planned",
         description: "Optional adapters for external optimization systems while keeping Wormhole-native primitives as the baseline.",
       },
       {
-        id: "v2.content-addressed-evidence-cache",
-        track: "v2",
+        id: "orchestration.content-addressed-evidence-cache",
+        area: "orchestration",
         status: "implemented",
         description: "SHA-256 addressed evidence cache for raw source content and replayable provenance handles.",
       },
       {
-        id: "v2.reconciliation-engine",
-        track: "v2",
+        id: "orchestration.reconciliation-engine",
+        area: "orchestration",
         status: "implemented",
         description: "Artifact reconciliation with provenance merge and read/write conflict detection.",
       },
       {
-        id: "v2.benchmark-runner",
-        track: "v2",
+        id: "orchestration.benchmark-runner",
+        area: "orchestration",
         status: "implemented",
         description: "Benchmark comparison runner that captures unaided and Wormhole plans and emits anonymized review pairs.",
       },
       {
-        id: "v2.codex-runtime-adapter",
-        track: "v2",
+        id: "orchestration.codex-runtime-adapter",
+        area: "orchestration",
         status: "implemented",
         description: "Codex adapter config generation and validation for local plugin/runtime attachment.",
       },
       {
-        id: "v2.external-agent-adapters",
-        track: "v2",
+        id: "orchestration.external-agent-adapters",
+        area: "orchestration",
         status: "implemented",
         description: "Generic external agent registration, dispatch, status, interrupt, and completion contracts for Hermes, Pi, and other workers.",
       },
       {
-        id: "v2.printing-press-cli-adapters",
-        track: "v2",
+        id: "orchestration.printing-press-cli-adapters",
+        area: "orchestration",
         status: "implemented",
         description: "Printing Press generated CLI registry, capability selection, and conversion into Wormhole external agent workers.",
       },
       {
-        id: "v2.repo-index-graph",
-        track: "v2",
+        id: "orchestration.repo-index-graph",
+        area: "orchestration",
         status: "implemented",
         description: "Deterministic repo-local index with file, symbol, import, link, query, explain, and dependency-path tools.",
       },
       {
-        id: "v2.local-orchestration-runner",
-        track: "v2",
+        id: "orchestration.local-runner",
+        area: "orchestration",
         status: "implemented",
         description: "Adapter-free local orchestration planning and deterministic execution over DAG waves, depth limits, task budgets, and spawned local tasks.",
       },
       {
-        id: "v3.adaptive-routing-model-selection",
-        track: "v3",
+        id: "adaptive.routing-model-selection",
+        area: "adaptive",
         status: "implemented",
         description: "Deterministic fast/balanced/deep routing and model selection from provider capability manifests.",
       },
       {
-        id: "v3.connector-registry",
-        track: "v3",
+        id: "adaptive.connector-registry",
+        area: "adaptive",
         status: "implemented",
         description: "Connector registry and capability-based connector selection.",
       },
       {
-        id: "v3.graph-first-codebase-query",
-        track: "v3",
+        id: "adaptive.graph-first-codebase-query",
+        area: "adaptive",
         status: "implemented",
         description: "Graph-first codebase query workflow that lets agents ask the repo index before broad grep or file-reading passes.",
       },
       {
-        id: "v3.adaptive-model-pool",
-        track: "v3",
+        id: "adaptive.model-pool",
+        area: "adaptive",
         status: "implemented",
         description: "Bounded model-pool orchestration with thinker, worker, and verifier roles plus deterministic routing/model selection.",
       },
       {
-        id: "v3.connector-marketplace",
-        track: "v3",
+        id: "adaptive.connector-marketplace",
+        area: "adaptive",
         status: "implemented",
         description: "Provider and connector registry with capability-based selection and explicit policy metadata.",
       },
       {
-        id: "v3.dynamic-task-spawning",
-        track: "v3",
+        id: "adaptive.dynamic-task-spawning",
+        area: "adaptive",
         status: "implemented",
         description: "Dynamic DAG task expansion with max-depth and max-task guardrails.",
       },
       {
-        id: "v3.model-pool-orchestration",
-        track: "v3",
+        id: "adaptive.model-pool-orchestration",
+        area: "adaptive",
         status: "implemented",
         description: "Bounded thinker, worker, and verifier provider orchestration.",
       },
       {
-        id: "v3.workbench-artifacts",
-        track: "v3",
+        id: "adaptive.workbench-artifacts",
+        area: "adaptive",
         status: "implemented",
         description: "Static workbench snapshot and HTML rendering for mission, task, gate, and artifact state.",
       },
       {
-        id: "v3.rich-artifact-types",
-        track: "v3",
+        id: "adaptive.rich-artifact-types",
+        area: "adaptive",
         status: "implemented",
         description: "Typed artifact records for plans, reports, workbench HTML, patch plans, and benchmark reports.",
       },

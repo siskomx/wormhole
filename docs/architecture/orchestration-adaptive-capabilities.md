@@ -1,16 +1,16 @@
-# Wormhole V2/V3 Orchestration
+# Wormhole Orchestration And Adaptive Capabilities
 
-This document defines the implemented v2/v3 orchestration foundations beyond the runnable v1 MCP kernel, plus the remaining future extension points.
+This document defines the implemented orchestration and adaptive foundations beyond the runnable core MCP kernel, plus the remaining future extension points.
 
-V1 proves the evidence loop. V2 introduces bounded parallel orchestration. V3 introduces adaptive routing and provider ecosystems. All tracks keep the same rule: evidence, questions, gates, and artifacts remain authoritative state.
+The core area proves the evidence loop. The orchestration area adds bounded parallel work, local runs, live control, caches, reconciliation, adapters, and repo graph indexing. The adaptive area adds routing, connector selection, model-pool roles, dynamic spawning, typed artifacts, and workbench surfaces. All areas keep the same rule: evidence, questions, gates, and artifacts remain authoritative state.
 
-## Version Tracks
+## Capability Areas
 
-| Track | Status | Purpose |
+| Area | Status | Purpose |
 | --- | --- | --- |
-| V1 | Implemented foundation | Local MCP planning kernel, JSONL state, evidence records, question ledger, gate, Markdown plan artifact, benchmark fixtures. |
-| V2 | Implemented foundation | First-party optimization primitives, live sub-orchestrator control, four-layer task records, static DAG scheduling, adapter-free local orchestration runs, content-addressed evidence cache, reconciliation, repo graph indexing, Codex adapter config, Claude Desktop extension metadata, external agent adapters, Printing Press CLI adapters, and benchmark comparison runner. |
-| V3 | Implemented foundation | Adaptive model/provider routing, graph-first codebase query workflow, connector registry, dynamic DAG spawning guardrails, bounded model-pool roles, typed artifacts, and static workbench rendering. Learned provider orchestration remains a future extension. |
+| Core | Implemented foundation | Local MCP planning kernel, JSONL state, evidence records, question ledger, gate, Markdown plan artifact, benchmark fixtures. |
+| Orchestration | Implemented foundation | First-party optimization primitives, live sub-orchestrator control, four-layer task records, static DAG scheduling, adapter-free local orchestration runs, content-addressed evidence cache, reconciliation, repo graph indexing, Codex adapter config, Claude Desktop extension metadata, external agent adapters, Printing Press CLI adapters, and benchmark comparison runner. |
+| Adaptive | Implemented foundation | Adaptive model/provider routing, graph-first codebase query workflow, connector registry, dynamic DAG spawning guardrails, bounded model-pool roles, typed artifacts, and static workbench rendering. Learned provider orchestration remains a future extension. |
 
 ## Four-Layer Ceiling
 
@@ -77,7 +77,7 @@ All task registrations, status reports, control messages, and acknowledgements a
 
 ## Parallelism Model
 
-V2 parallelism is static DAG parallelism first and is implemented through `createDagSchedule` and `runDagSchedule`. V3 adds bounded dynamic expansion through `runDynamicDagSchedule`.
+Orchestration parallelism is static DAG parallelism first and is implemented through `createDagSchedule` and `runDagSchedule`. Adaptive scheduling adds bounded dynamic expansion through `runDynamicDagSchedule`.
 
 - Tasks declare dependencies.
 - Tasks declare read and write sets.
@@ -168,7 +168,7 @@ The repo-local Claude Desktop extension manifest points to `server/index.js` fro
 
 ## Optimization Providers
 
-V2 now includes deterministic first-party optimization primitives:
+Orchestration includes deterministic first-party optimization primitives:
 
 - RTK-like command-output compaction through `compactCommandOutput`
 - Headroom-like context compression through `compressContext`
@@ -179,9 +179,9 @@ Provider output must retain provenance. Compressed text can help the model, but 
 
 External RTK, Headroom, Caveman, or Ponytail adapters can be added later. The Wormhole-native primitives remain the baseline behavior.
 
-## V3 Adaptive Routing
+## Adaptive Routing
 
-V3 includes deterministic Fugu-inspired routing through `selectRoutingPlan` and bounded model-pool orchestration through `runModelPool`.
+Adaptive routing includes deterministic Fugu-inspired routing through `selectRoutingPlan` and bounded model-pool orchestration through `runModelPool`.
 
 Routing inputs:
 
@@ -219,7 +219,7 @@ The connector registry lets Wormhole select a compatible target by declared capa
 
 ## Workbench And Artifacts
 
-V3 includes typed artifact records through `createArtifactRecord` and the `create_artifact` MCP tool.
+Adaptive artifacts include typed artifact records through `createArtifactRecord` and the `create_artifact` MCP tool.
 
 Supported artifact types:
 
@@ -229,7 +229,7 @@ Supported artifact types:
 - `patch_plan`
 - `benchmark_report`
 
-V3 also includes a static Promenade-style workbench view through `createWorkbenchSnapshot`, `renderWorkbenchHtml`, and the `render_workbench` MCP tool. The workbench renders mission, task, gate, and artifact state without becoming the source of truth. The JSONL event log and typed state records remain authoritative.
+Adaptive workbench support also includes a static Promenade-style view through `createWorkbenchSnapshot`, `renderWorkbenchHtml`, and the `render_workbench` MCP tool. The workbench renders mission, task, gate, and artifact state without becoming the source of truth. The JSONL event log and typed state records remain authoritative.
 
 ## Non-Negotiable Guardrails
 
