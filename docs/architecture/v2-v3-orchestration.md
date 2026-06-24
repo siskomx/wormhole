@@ -107,6 +107,8 @@ The tools are:
 
 This is not a replacement for source evidence. Query results are discovery hints; important claims still need `record_evidence` entries with source paths and line ranges before the gate opens. The capability model also declares a `graphify` connector target so a full external Graphify graph or MCP server can be registered later without changing the Wormhole mission loop.
 
+The MCP-exposed repo index tools are confined to allowed workspace roots. By default, the only allowed root is the server working directory. Hosts can set `WORMHOLE_ALLOWED_REPO_ROOTS` to a comma- or semicolon-separated allowlist when they need multiple repo roots. Index caches are keyed by repo root plus build options and refreshed from a content fingerprint before query, explain, or path operations. `include` and `exclude` are path patterns: plain names match path segments, slash-containing values match exact paths or descendants, and `*`/`**`/`?` provide glob-style matching.
+
 ## External Agent Adapters
 
 External AI agents and model providers are registered as bounded Wormhole workers through `agent_register`.

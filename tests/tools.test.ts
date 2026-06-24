@@ -288,7 +288,9 @@ describe("Wormhole MCP tool handlers", () => {
     );
 
     try {
-      const tools = createToolHandlers(createInMemoryKernel());
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+      });
       const summary = tools.repoIndexBuild({ repoRoot });
       const query = tools.repoIndexQuery({
         repoRoot,
@@ -310,6 +312,86 @@ describe("Wormhole MCP tool handlers", () => {
       expect(query.results[0].excerpt).toContain("database pool");
       expect(explanation.resolved?.name).toBe("connectDatabase");
       expect(dependencyPath.path).toEqual(["src/server.ts", "src/db.ts"]);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects repo index roots outside allowed workspace roots", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-index-outside-"));
+    writeFileSync(path.join(repoRoot, "secret.txt"), "do not index outside workspace\n");
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel());
+
+      expect(() => tools.repoIndexBuild({ repoRoot })).toThrow(
+        "Repo root must stay within an allowed workspace root",
+      );
+      expect(() =>
+        tools.repoIndexQuery({
+          repoRoot,
+          query: "secret",
+        }),
+      ).toThrow("Repo root must stay within an allowed workspace root");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("refreshes cached repo indexes when files change", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-index-refresh-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    const filePath = path.join(repoRoot, "src", "state.ts");
+    writeFileSync(filePath, "export const state = 'old-value';\n");
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+      });
+
+      expect(
+        tools.repoIndexQuery({
+          repoRoot,
+          query: "old-value",
+        }).results[0].excerpt,
+      ).toContain("old-value");
+
+      writeFileSync(filePath, "export const state = 'new-value';\n");
+
+      expect(
+        tools.repoIndexQuery({
+          repoRoot,
+          query: "new-value",
+        }).results[0].excerpt,
+      ).toContain("new-value");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("does not let filtered index builds poison default repo index queries", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-index-filtered-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    mkdirSync(path.join(repoRoot, "docs"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "src", "app.ts"), "export const app = true;\n");
+    writeFileSync(path.join(repoRoot, "docs", "notes.md"), "default graph should find docs\n");
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+      });
+
+      const filtered = tools.repoIndexBuild({
+        repoRoot,
+        include: ["src"],
+      });
+      const query = tools.repoIndexQuery({
+        repoRoot,
+        query: "find docs",
+      });
+
+      expect(filtered.fileCount).toBe(1);
+      expect(query.results[0].path).toBe("docs/notes.md");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

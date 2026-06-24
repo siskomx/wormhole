@@ -14,6 +14,7 @@ The repository also includes implemented v2/v3 foundations: four-layer orchestra
 - First-party optimization primitives: command-output compaction, context compression, dense summaries, and minimality review
 - Live control plane: heartbeat/status, mailbox queries, advisory messages, direction-change pause/ack, and immediate interrupts
 - Orchestration foundations: static and dynamic DAG scheduling with read/write locks, content-addressed evidence cache, reconciliation, benchmark comparison runner, repo graph indexing and query/explain/path tools, Codex adapter config, Claude Desktop MCPB metadata, external agent dispatch, Printing Press CLI registration, adaptive model routing, bounded model-pool roles, connector registry, typed artifact records, and static workbench HTML rendering
+- Repo index safety: MCP-exposed repo index roots must stay under an allowed workspace root. The default allowed root is the server working directory; set `WORMHOLE_ALLOWED_REPO_ROOTS` to a comma- or semicolon-separated list when a host needs additional repo roots.
 - Benchmark fixtures: `benchmarks/fixtures` and `benchmarks/repos`
 - Codex plugin scaffold: `plugins/wormhole`
 - Capability manifest: `src/capabilities.ts`

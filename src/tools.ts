@@ -45,8 +45,10 @@ import {
 } from "./printing-press.js";
 import {
   buildRepoIndex,
+  createRepoIndexCacheKey,
   explainRepoIndex,
   findRepoIndexPath,
+  isRepoIndexFresh,
   queryRepoIndex,
   summarizeRepoIndex,
   type RepoIndex,
@@ -55,6 +57,11 @@ import {
   type RepoIndexPathInput,
   type RepoIndexQueryInput,
 } from "./repo-index.js";
+
+export type ToolHandlerOptions = {
+  allowedRepoRoots?: string[];
+  maxCachedRepoIndexes?: number;
+};
 
 function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): string {
   const absoluteRoot = path.resolve(repoRoot);
@@ -66,19 +73,57 @@ function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): 
   return absoluteCacheRoot;
 }
 
-export function createToolHandlers(kernel: WormholeKernel) {
+function parseAllowedRepoRoots(options: ToolHandlerOptions): string[] {
+  const configuredRoots =
+    options.allowedRepoRoots ??
+    process.env.WORMHOLE_ALLOWED_REPO_ROOTS?.split(/[;,]/).filter(Boolean);
+  return (configuredRoots && configuredRoots.length > 0 ? configuredRoots : [process.cwd()]).map(
+    (repoRoot) => path.resolve(repoRoot),
+  );
+}
+
+function resolveAllowedRepoRoot(repoRoot: string, allowedRepoRoots: string[]): string {
+  const absoluteRoot = path.resolve(repoRoot);
+  const allowed = allowedRepoRoots.some((allowedRoot) => {
+    const relativePath = path.relative(allowedRoot, absoluteRoot);
+    return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
+  });
+  if (!allowed) {
+    throw new Error("Repo root must stay within an allowed workspace root");
+  }
+  return absoluteRoot;
+}
+
+function evictOldestRepoIndex(repoIndexes: Map<string, RepoIndex>, maxCachedRepoIndexes: number) {
+  while (repoIndexes.size > maxCachedRepoIndexes) {
+    const oldestKey = repoIndexes.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    repoIndexes.delete(oldestKey);
+  }
+}
+
+export function createToolHandlers(
+  kernel: WormholeKernel,
+  options: ToolHandlerOptions = {},
+) {
   const agentRegistry = createAgentRegistry();
   const printingPressRegistry = createPrintingPressRegistry();
   const repoIndexes = new Map<string, RepoIndex>();
+  const allowedRepoRoots = parseAllowedRepoRoots(options);
+  const maxCachedRepoIndexes = options.maxCachedRepoIndexes ?? 8;
 
   function getRepoIndex(repoRoot: string): RepoIndex {
-    const absoluteRoot = path.resolve(repoRoot);
-    const existing = repoIndexes.get(absoluteRoot);
-    if (existing) {
+    const absoluteRoot = resolveAllowedRepoRoot(repoRoot, allowedRepoRoots);
+    const cacheKey = createRepoIndexCacheKey({ repoRoot: absoluteRoot });
+    const existing = repoIndexes.get(cacheKey);
+    if (existing && isRepoIndexFresh(existing)) {
       return existing;
     }
     const index = buildRepoIndex({ repoRoot: absoluteRoot });
-    repoIndexes.set(absoluteRoot, index);
+    repoIndexes.set(cacheKey, index);
+    evictOldestRepoIndex(repoIndexes, maxCachedRepoIndexes);
     return index;
   }
 
@@ -264,8 +309,10 @@ export function createToolHandlers(kernel: WormholeKernel) {
     },
 
     repoIndexBuild(input: RepoIndexBuildOptions) {
-      const index = buildRepoIndex(input);
-      repoIndexes.set(index.repoRoot, index);
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const index = buildRepoIndex({ ...input, repoRoot });
+      repoIndexes.set(createRepoIndexCacheKey({ ...input, repoRoot }), index);
+      evictOldestRepoIndex(repoIndexes, maxCachedRepoIndexes);
       return summarizeRepoIndex(index);
     },
 

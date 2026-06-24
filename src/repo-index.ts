@@ -33,14 +33,25 @@ export type RepoIndexFile = {
   language: string;
   lineCount: number;
   byteLength: number;
+  mtimeMs: number;
   hash: string;
   symbols: RepoIndexSymbol[];
   content: string;
 };
 
+export type NormalizedRepoIndexBuildOptions = {
+  include?: string[];
+  exclude?: string[];
+  maxFiles: number;
+  maxFileBytes: number;
+  maxTotalBytes: number;
+};
+
 export type RepoIndex = {
   repoRoot: string;
   builtAt: string;
+  buildOptions: NormalizedRepoIndexBuildOptions;
+  fingerprint: string;
   files: RepoIndexFile[];
   symbols: RepoIndexSymbol[];
   edges: RepoIndexEdge[];
@@ -54,6 +65,7 @@ export type RepoIndexBuildOptions = {
   exclude?: string[];
   maxFiles?: number;
   maxFileBytes?: number;
+  maxTotalBytes?: number;
 };
 
 export type RepoIndexSummary = {
@@ -129,6 +141,7 @@ type EdgeDraft = {
 
 const DEFAULT_MAX_FILES = 1_000;
 const DEFAULT_MAX_FILE_BYTES = 512 * 1024;
+const DEFAULT_MAX_TOTAL_BYTES = 10 * 1024 * 1024;
 const DEFAULT_EXCLUDED_DIRECTORIES = new Set([
   ".git",
   ".next",
@@ -166,23 +179,27 @@ const LOCAL_RESOLUTION_EXTENSIONS = Object.keys(LANGUAGE_BY_EXTENSION);
 
 export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
   const repoRoot = path.resolve(options.repoRoot);
-  const maxFiles = options.maxFiles ?? DEFAULT_MAX_FILES;
-  const maxFileBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
-  const candidateFiles = listCandidateFiles(repoRoot, options);
-  const selectedFiles = candidateFiles.slice(0, maxFiles);
-  const skippedFiles = candidateFiles.slice(maxFiles);
+  const buildOptions = normalizeRepoIndexBuildOptions(options);
+  const candidateFiles = listCandidateFiles(repoRoot, buildOptions);
+  const selectedFiles = candidateFiles.slice(0, buildOptions.maxFiles);
+  const skippedFiles = candidateFiles.slice(buildOptions.maxFiles);
   const files: RepoIndexFile[] = [];
   const symbols: RepoIndexSymbol[] = [];
   const edges: RepoIndexEdge[] = [];
   const edgeDrafts: EdgeDraft[] = [];
+  let totalBytes = 0;
 
   for (const relativePath of selectedFiles) {
     const absolutePath = path.join(repoRoot, relativePath);
     const stat = statSync(absolutePath);
-    if (stat.size > maxFileBytes) {
+    if (
+      stat.size > buildOptions.maxFileBytes ||
+      totalBytes + stat.size > buildOptions.maxTotalBytes
+    ) {
       skippedFiles.push(relativePath);
       continue;
     }
+    totalBytes += stat.size;
 
     const content = normalizeLineEndings(readFileSync(absolutePath, "utf8"));
     const language = languageForPath(relativePath);
@@ -192,6 +209,7 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
       language,
       lineCount: countLines(content),
       byteLength: Buffer.byteLength(content, "utf8"),
+      mtimeMs: stat.mtimeMs,
       hash: createHash("sha256").update(content).digest("hex"),
       symbols: fileSymbols,
       content,
@@ -224,16 +242,46 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
       label: draft.specifier,
     });
   }
+  edges.push(...extractReferenceEdges(files, symbols, edges));
 
   return {
     repoRoot,
     builtAt: new Date().toISOString(),
+    buildOptions,
+    fingerprint: createRepoIndexFingerprint(repoRoot, buildOptions),
     files,
     symbols,
     edges,
-    truncated: candidateFiles.length > selectedFiles.length,
+    truncated: candidateFiles.length > selectedFiles.length || skippedFiles.length > 0,
     skippedFiles,
   };
+}
+
+export function normalizeRepoIndexBuildOptions(
+  options: RepoIndexBuildOptions | NormalizedRepoIndexBuildOptions,
+): NormalizedRepoIndexBuildOptions {
+  return {
+    include: normalizePatternList(options.include),
+    exclude: normalizePatternList(options.exclude),
+    maxFiles: options.maxFiles ?? DEFAULT_MAX_FILES,
+    maxFileBytes: options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
+    maxTotalBytes: options.maxTotalBytes ?? DEFAULT_MAX_TOTAL_BYTES,
+  };
+}
+
+export function createRepoIndexCacheKey(options: RepoIndexBuildOptions): string {
+  return JSON.stringify({
+    repoRoot: path.resolve(options.repoRoot),
+    ...normalizeRepoIndexBuildOptions(options),
+  });
+}
+
+export function isRepoIndexFresh(index: RepoIndex): boolean {
+  try {
+    return index.fingerprint === createRepoIndexFingerprint(index.repoRoot, index.buildOptions);
+  } catch {
+    return false;
+  }
 }
 
 export function summarizeRepoIndex(index: RepoIndex): RepoIndexSummary {
@@ -285,7 +333,10 @@ export function queryRepoIndex(
   for (const file of index.files) {
     const pathScore = scoreText(`${file.path} ${file.language}`, tokens, queryLower) * 2;
     const symbolScore = scoreText(
-      file.symbols.map((symbol) => symbol.name).join(" "),
+      `${file.symbols.map((symbol) => symbol.name).join(" ")} ${graphTextForFile(
+        index,
+        file.path,
+      )}`,
       tokens,
       queryLower,
     );
@@ -415,7 +466,10 @@ export function findRepoIndexPath(
   return { from: input.from, to: input.to, found: false, path: [] };
 }
 
-function listCandidateFiles(repoRoot: string, options: RepoIndexBuildOptions): string[] {
+function listCandidateFiles(
+  repoRoot: string,
+  options: Pick<RepoIndexBuildOptions, "include" | "exclude">,
+): string[] {
   const files: string[] = [];
 
   function visit(directory: string): void {
@@ -460,7 +514,8 @@ function extractSymbols(
   const seen = new Set<string>();
 
   function add(kind: RepoIndexSymbolKind, name: string, offset: number): void {
-    const cleanedName = cleanSymbolName(name);
+    const cleanedName =
+      kind === "section" ? cleanMarkdownSymbolName(name) : cleanCodeSymbolName(name);
     if (!cleanedName) {
       return;
     }
@@ -559,17 +614,51 @@ function extractEdgeDrafts(
   return drafts;
 }
 
+function extractReferenceEdges(
+  files: RepoIndexFile[],
+  symbols: RepoIndexSymbol[],
+  existingEdges: RepoIndexEdge[],
+): RepoIndexEdge[] {
+  const existingKeys = new Set(
+    existingEdges.map((edge) => `${edge.from}\0${edge.to}\0${edge.kind}`),
+  );
+  const edges: RepoIndexEdge[] = [];
+
+  for (const file of files) {
+    for (const symbol of symbols) {
+      if (symbol.path === file.path || symbol.name.length < 3) {
+        continue;
+      }
+      const regex = new RegExp(`\\b${escapeRegex(symbol.name)}\\b`);
+      if (!regex.test(file.content)) {
+        continue;
+      }
+      const key = `${file.path}\0${symbol.id}\0references`;
+      if (existingKeys.has(key)) {
+        continue;
+      }
+      existingKeys.add(key);
+      edges.push({
+        from: file.path,
+        to: symbol.id,
+        kind: "references",
+        label: symbol.name,
+      });
+    }
+  }
+
+  return edges;
+}
+
 function resolveEdgeTarget(draft: EdgeDraft, knownFiles: Set<string>): string | undefined {
   const specifier = stripSpecifierSuffix(draft.specifier.replace(/\\/g, "/"));
   if (isExternalSpecifier(specifier, draft.kind)) {
     return `external:${specifier}`;
   }
 
-  const base = specifier.startsWith(".")
-    ? path.posix.normalize(path.posix.join(path.posix.dirname(draft.from), specifier))
-    : path.posix.normalize(path.posix.join(path.posix.dirname(draft.from), specifier));
+  const base = path.posix.normalize(path.posix.join(path.posix.dirname(draft.from), specifier));
 
-  if (base.startsWith("../")) {
+  if (base === ".." || base.startsWith("../") || path.posix.isAbsolute(base)) {
     return undefined;
   }
 
@@ -671,7 +760,12 @@ function createAdjacency(index: RepoIndex): Map<string, string[]> {
 
   for (const edge of index.edges) {
     add(edge.from, edge.to);
-    if (edge.kind === "defines" || edge.kind === "imports" || edge.kind === "links") {
+    if (
+      edge.kind === "defines" ||
+      edge.kind === "imports" ||
+      edge.kind === "links" ||
+      edge.kind === "references"
+    ) {
       add(edge.to, edge.from);
     }
   }
@@ -685,6 +779,13 @@ function labelNode(index: RepoIndex, nodeId: string): string {
   }
   const symbol = index.symbols.find((candidate) => candidate.id === nodeId);
   return symbol ? `${symbol.path}#${symbol.name}` : nodeId;
+}
+
+function graphTextForFile(index: RepoIndex, filePath: string): string {
+  return index.edges
+    .filter((edge) => edge.from === filePath || edge.to === filePath)
+    .map((edge) => `${edge.kind} ${edge.label ?? ""} ${edge.from} ${edge.to}`)
+    .join(" ");
 }
 
 function tokenize(query: string): string[] {
@@ -730,11 +831,19 @@ function matchesAny(relativePath: string, patterns?: string[]): boolean {
 
 function matchesPattern(relativePath: string, pattern: string): boolean {
   const normalizedPattern = toRepoPath(pattern).replace(/^\.\//, "");
-  return (
-    relativePath === normalizedPattern ||
-    relativePath.startsWith(`${normalizedPattern}/`) ||
-    relativePath.includes(normalizedPattern)
-  );
+  if (containsGlob(normalizedPattern)) {
+    return globToRegex(normalizedPattern).test(relativePath);
+  }
+  if (normalizedPattern.includes("/")) {
+    return relativePath === normalizedPattern || relativePath.startsWith(`${normalizedPattern}/`);
+  }
+  return relativePath
+    .split("/")
+    .some(
+      (segment) =>
+        segment === normalizedPattern ||
+        segment.replace(path.posix.extname(segment), "") === normalizedPattern,
+    );
 }
 
 function isSupportedTextPath(relativePath: string): boolean {
@@ -746,12 +855,80 @@ function languageForPath(relativePath: string): string {
   return LANGUAGE_BY_EXTENSION[extension] ?? "unknown";
 }
 
-function cleanSymbolName(name: string): string {
+function cleanCodeSymbolName(name: string): string {
+  return name.trim();
+}
+
+function cleanMarkdownSymbolName(name: string): string {
   return name.replace(/[`*_]/g, "").trim();
 }
 
 function stripSpecifierSuffix(specifier: string): string {
   return specifier.split(/[?#]/, 1)[0] ?? "";
+}
+
+function createRepoIndexFingerprint(
+  repoRoot: string,
+  options: NormalizedRepoIndexBuildOptions,
+): string {
+  const candidateFiles = listCandidateFiles(repoRoot, options);
+  const selectedFiles = candidateFiles.slice(0, options.maxFiles);
+  const entries = candidateFiles.slice(options.maxFiles).map((relativePath) => {
+    const stat = statSync(path.join(repoRoot, relativePath));
+    return `skipped-by-count:${relativePath}:${stat.size}:${stat.mtimeMs}`;
+  });
+  let totalBytes = 0;
+
+  for (const relativePath of selectedFiles) {
+    const absolutePath = path.join(repoRoot, relativePath);
+    const stat = statSync(absolutePath);
+    if (stat.size > options.maxFileBytes || totalBytes + stat.size > options.maxTotalBytes) {
+      entries.push(`skipped-by-size:${relativePath}:${stat.size}:${stat.mtimeMs}`);
+      continue;
+    }
+    totalBytes += stat.size;
+    const contentHash = createHash("sha256")
+      .update(normalizeLineEndings(readFileSync(absolutePath, "utf8")))
+      .digest("hex");
+    entries.push(`indexed:${relativePath}:${stat.size}:${contentHash}`);
+  }
+
+  return createHash("sha256").update(entries.join("\n")).digest("hex");
+}
+
+function normalizePatternList(patterns?: string[]): string[] | undefined {
+  if (!patterns || patterns.length === 0) {
+    return undefined;
+  }
+  return patterns.map((pattern) => toRepoPath(pattern).replace(/^\.\//, "")).sort();
+}
+
+function containsGlob(pattern: string): boolean {
+  return /[*?[\]]/.test(pattern);
+}
+
+function globToRegex(pattern: string): RegExp {
+  let source = "^";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index] ?? "";
+    const next = pattern[index + 1] ?? "";
+    if (char === "*" && next === "*") {
+      source += ".*";
+      index += 1;
+    } else if (char === "*") {
+      source += "[^/]*";
+    } else if (char === "?") {
+      source += "[^/]";
+    } else {
+      source += escapeRegex(char);
+    }
+  }
+  source += "$";
+  return new RegExp(source);
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function normalizeLineEndings(content: string): string {

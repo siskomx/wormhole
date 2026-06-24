@@ -601,6 +601,8 @@ Implemented v2 control-plane tools:
 - `repo_index_explain`: explains a file or symbol using graph neighbors.
 - `repo_index_path`: finds dependency paths between files or symbols.
 
+Repo-index MCP calls are confined to allowed workspace roots, use option-scoped cache entries, and refresh cached graphs from content fingerprints before query/explain/path operations.
+
 The repo-level v2 contract is documented in `docs/architecture/v2-v3-orchestration.md` and `docs/contracts/capability-manifest.md`.
 
 ## V3 Implemented Direction

@@ -116,4 +116,95 @@ describe("repo index", () => {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
+
+  it("preserves underscores in code symbols", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-index-underscore-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(
+      path.join(repoRoot, "src", "users.ts"),
+      [
+        "export function load_user_profile() {",
+        "  return 'ok';",
+        "}",
+      ].join("\n"),
+    );
+
+    try {
+      const index = buildRepoIndex({ repoRoot });
+      const explanation = explainRepoIndex(index, { target: "load_user_profile" });
+
+      expect(index.symbols.map((symbol) => symbol.name)).toContain("load_user_profile");
+      expect(explanation.resolved?.name).toBe("load_user_profile");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("treats include and exclude filters as path patterns instead of substrings", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-index-filter-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "src", "latest.ts"), "export const latest = true;\n");
+    writeFileSync(path.join(repoRoot, "src", "test.ts"), "export const test = true;\n");
+    writeFileSync(path.join(repoRoot, "notes.txt"), "outside src\n");
+
+    try {
+      const index = buildRepoIndex({
+        repoRoot,
+        include: ["src"],
+        exclude: ["test"],
+      });
+
+      expect(index.files.map((file) => file.path)).toEqual(["src/latest.ts"]);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("marks the index incomplete when files are skipped for size", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-index-skip-"));
+    writeFileSync(path.join(repoRoot, "small.ts"), "export const small = true;\n");
+    writeFileSync(path.join(repoRoot, "large.ts"), "export const large = 'too large';\n");
+
+    try {
+      const index = buildRepoIndex({
+        repoRoot,
+        maxFileBytes: 10,
+      });
+      const summary = summarizeRepoIndex(index);
+
+      expect(summary.truncated).toBe(true);
+      expect(summary.skippedFiles).toContain("large.ts");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("indexes markdown links and code references as graph edges", () => {
+    const repoRoot = createFixtureRepo();
+
+    try {
+      writeFileSync(
+        path.join(repoRoot, "README.md"),
+        ["# Fixture Service", "", "See [database module](src/db.ts)."].join("\n"),
+      );
+      const index = buildRepoIndex({ repoRoot });
+
+      expect(index.edges).toContainEqual(
+        expect.objectContaining({
+          from: "README.md",
+          to: "src/db.ts",
+          kind: "links",
+        }),
+      );
+      expect(index.edges).toContainEqual(
+        expect.objectContaining({
+          from: "src/server.ts",
+          to: expect.stringContaining("src/db.ts#connectDatabase"),
+          kind: "references",
+        }),
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
 });

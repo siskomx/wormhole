@@ -466,6 +466,7 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
         exclude: z.array(z.string()).optional(),
         maxFiles: z.number().optional(),
         maxFileBytes: z.number().optional(),
+        maxTotalBytes: z.number().optional(),
       },
     },
     async (input) => jsonResult(tools.repoIndexBuild(input)),

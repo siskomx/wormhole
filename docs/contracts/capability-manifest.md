@@ -46,6 +46,8 @@ V2 capabilities can be implemented incrementally. Implemented v2 capabilities in
 - `v2.printing-press-cli-adapters`: Printing Press generated CLI registration, capability selection, and conversion into Wormhole external agent workers.
 - `v2.repo-index-graph`: deterministic repo-local file, symbol, import, link, query, explain, and dependency-path index.
 
+The repo-index MCP tools are workspace-confined by the runtime. The default allowed root is the server working directory; hosts can configure additional allowed roots with `WORMHOLE_ALLOWED_REPO_ROOTS`.
+
 Implemented v3 capabilities include:
 
 - `v3.adaptive-routing-model-selection`: fast/balanced/deep mode selection and model choice from provider manifests.
