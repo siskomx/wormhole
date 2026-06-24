@@ -9,6 +9,7 @@ export type ConnectorDescriptor = {
     | "mcp-http"
     | "plugin-manifest"
     | "mcpb"
+    | "printing-press-cli"
     | "http"
     | "cli"
     | "sdk"

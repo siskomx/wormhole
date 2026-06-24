@@ -52,6 +52,8 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.server.mcp_config.command).toBe("node");
     expect(manifest.server.mcp_config.args).toEqual(["${__dirname}/server/index.js"]);
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_dispatch");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_register");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_register_agent");
     expect(manifest.prompts.map((prompt) => prompt.name)).toContain("wormhole_orchestrate");
     expect(serialized).not.toContain("TODO");
   });

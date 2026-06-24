@@ -24,6 +24,7 @@ The manifest is intentionally client-neutral. Codex, Claude Code, and future con
 - `claude-code`: Claude Code using the generic MCP server
 - `claude-desktop`: Claude Desktop using the MCPB-compatible extension scaffold
 - `codex`: Codex plugin manifest and MCP config
+- `printing-press`: Printing Press generated CLIs and MCP servers through the CLI adapter contract
 - `hermes-agent`: Hermes Agent through the external agent adapter contract
 - `inflection-pi`: Inflection Pi through the provider API adapter contract
 
@@ -41,6 +42,7 @@ V2 capabilities can be implemented incrementally. Implemented v2 capabilities in
 - `v2.benchmark-runner`: unaided versus Wormhole run capture and anonymized review-pair generation.
 - `v2.codex-runtime-adapter`: Codex plugin/runtime adapter config generation and validation.
 - `v2.external-agent-adapters`: generic external agent registration, dispatch, status, interrupt, and completion records for systems such as Hermes Agent and Inflection Pi.
+- `v2.printing-press-cli-adapters`: Printing Press generated CLI registration, capability selection, and conversion into Wormhole external agent workers.
 
 Implemented v3 capabilities include:
 

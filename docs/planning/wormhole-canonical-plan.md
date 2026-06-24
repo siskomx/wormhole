@@ -393,6 +393,10 @@ The runnable server exposes a generic tool surface across the v1 kernel plus imp
 - `agent_status`
 - `agent_complete`
 - `agent_interrupt`
+- `printing_press_register`
+- `printing_press_list`
+- `printing_press_select`
+- `printing_press_register_agent`
 
 DS9-inspired names stay out of tool contracts.
 
@@ -522,7 +526,7 @@ Tool and MCP results should be ingested by structure, not fragile text parsing. 
 
 Capability discovery should happen before tool selection. Codex, Claude Code, future UI clients, and third-party connectors should each declare what they can do. Wormhole should negotiate from those manifests instead of assuming every host supports the same behavior.
 
-External AI agents are treated as registered workers, not as alternate sources of truth. Hermes Agent, Inflection Pi, and similar systems can participate when an adapter declares transport, capabilities, authentication policy, concurrency, and interrupt support. Wormhole owns the task graph, evidence references, gate state, and artifact provenance.
+External AI agents are treated as registered workers, not as alternate sources of truth. Hermes Agent, Inflection Pi, and similar systems can participate when an adapter declares transport, capabilities, authentication policy, concurrency, and interrupt support. Printing Press generated CLIs can participate when they declare command, capabilities, evidence mode, installation/authentication policy, and concurrency. Wormhole owns the task graph, evidence references, gate state, and artifact provenance.
 
 Gathering depth should scale with ambiguity and stakes. Simple requests should use a fast path; high-impact or ambiguous missions should trigger broader evidence gathering, stronger gates, and more review.
 
@@ -566,6 +570,7 @@ V2 implemented:
 - Deterministic adaptive routing and model selection
 - Connector registry and capability-based connector selection
 - External agent registration, dispatch, status, interrupt, and completion records
+- Printing Press generated CLI registration, capability selection, and agent conversion
 - Claude Desktop MCPB-compatible extension metadata
 
 Implemented v2 control-plane tools:
@@ -582,6 +587,10 @@ Implemented v2 control-plane tools:
 - `agent_status`: returns worker run state.
 - `agent_complete`: records worker completion or failure with evidence and artifact provenance.
 - `agent_interrupt`: interrupts a worker run when the adapter supports interrupts.
+- `printing_press_register`: registers a generated CLI or MCP server.
+- `printing_press_list`: lists registered generated CLIs.
+- `printing_press_select`: selects a generated CLI by required capabilities.
+- `printing_press_register_agent`: converts a generated CLI into a dispatchable Wormhole worker.
 
 The repo-level v2 contract is documented in `docs/architecture/v2-v3-orchestration.md` and `docs/contracts/capability-manifest.md`.
 

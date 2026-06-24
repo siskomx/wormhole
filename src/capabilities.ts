@@ -7,6 +7,7 @@ export type ConnectorTarget =
   | "claude-code"
   | "claude-desktop"
   | "codex"
+  | "printing-press"
   | "hermes-agent"
   | "inflection-pi";
 
@@ -24,6 +25,7 @@ export type WormholeConnector = {
     | "mcp-stdio"
     | "plugin-manifest"
     | "mcpb"
+    | "printing-press-cli"
     | "agent-adapter"
     | "provider-api"
     | "connector-contract";
@@ -101,6 +103,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         status: "implemented",
         transport: "plugin-manifest",
         description: "Codex can consume the repo-local plugin metadata and MCP server configuration.",
+      },
+      {
+        target: "printing-press",
+        status: "implemented",
+        transport: "printing-press-cli",
+        description: "Printing Press generated CLIs and MCP servers can be registered as Wormhole capabilities and converted into external agent workers.",
       },
       {
         target: "hermes-agent",
@@ -181,6 +189,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         track: "v2",
         status: "implemented",
         description: "Generic external agent registration, dispatch, status, interrupt, and completion contracts for Hermes, Pi, and other workers.",
+      },
+      {
+        id: "v2.printing-press-cli-adapters",
+        track: "v2",
+        status: "implemented",
+        description: "Printing Press generated CLI registry, capability selection, and conversion into Wormhole external agent workers.",
       },
       {
         id: "v3.adaptive-routing-model-selection",

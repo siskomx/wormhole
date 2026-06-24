@@ -47,6 +47,21 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
     maxConcurrentTasks: z.number(),
     supportsInterrupt: z.boolean(),
   };
+  const printingPressCliSchema = {
+    cliId: z.string(),
+    displayName: z.string(),
+    command: z.string(),
+    args: z.array(z.string()).optional(),
+    capabilities: z.array(z.string()),
+    installation: z.enum(["available", "installed", "disabled"]),
+    authentication: z.enum(["on_install", "on_use", "none"]),
+    evidenceMode: z.enum(["compact", "raw", "sqlite"]),
+    providesMcpServer: z.boolean(),
+    supportsInterrupt: z.boolean(),
+    maxConcurrentTasks: z.number(),
+    skillName: z.string().optional(),
+    category: z.string().optional(),
+  };
 
   server.registerTool(
     "mission_start",
@@ -368,6 +383,7 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
               "mcp-http",
               "plugin-manifest",
               "mcpb",
+              "printing-press-cli",
               "http",
               "cli",
               "sdk",
@@ -510,6 +526,47 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
       },
     },
     async (input) => jsonResult(tools.agentInterrupt(input)),
+  );
+
+  server.registerTool(
+    "printing_press_register",
+    {
+      description: "Register a Printing Press generated CLI or MCP server as an available Wormhole capability.",
+      inputSchema: printingPressCliSchema,
+    },
+    async (input) => jsonResult(tools.printingPressRegister(input)),
+  );
+
+  server.registerTool(
+    "printing_press_list",
+    {
+      description: "List Printing Press generated CLIs registered with this Wormhole runtime.",
+      inputSchema: {},
+    },
+    async () => jsonResult(tools.printingPressList()),
+  );
+
+  server.registerTool(
+    "printing_press_select",
+    {
+      description: "Select a Printing Press CLI by required capabilities.",
+      inputSchema: {
+        requiredCapabilities: z.array(z.string()),
+        preferredCliIds: z.array(z.string()).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.printingPressSelect(input)),
+  );
+
+  server.registerTool(
+    "printing_press_register_agent",
+    {
+      description: "Convert a registered Printing Press CLI into a Wormhole external agent worker.",
+      inputSchema: {
+        cliId: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.printingPressRegisterAgent(input)),
   );
 
   return server;

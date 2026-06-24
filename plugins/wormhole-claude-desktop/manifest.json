@@ -35,7 +35,11 @@
     { "name": "agent_dispatch", "description": "Dispatch a task to a registered external agent." },
     { "name": "agent_status", "description": "Read external agent run status." },
     { "name": "agent_interrupt", "description": "Interrupt an external agent run when supported." },
-    { "name": "agent_complete", "description": "Record external agent run completion." }
+    { "name": "agent_complete", "description": "Record external agent run completion." },
+    { "name": "printing_press_register", "description": "Register a Printing Press generated CLI." },
+    { "name": "printing_press_list", "description": "List registered Printing Press CLIs." },
+    { "name": "printing_press_select", "description": "Select a Printing Press CLI by capability." },
+    { "name": "printing_press_register_agent", "description": "Convert a Printing Press CLI into a Wormhole external agent." }
   ],
   "tools_generated": true,
   "prompts": [
@@ -43,7 +47,7 @@
       "name": "wormhole_orchestrate",
       "description": "Run a structured Wormhole planning or orchestration mission.",
       "arguments": ["objective"],
-      "text": "Use Wormhole for this mission: ${arguments.objective}\n\nFollow the Wormhole loop strictly: mission_start, round_start, gather evidence, record_evidence, record_question for gaps, register tasks or external agents when parallel work is useful, gate_request, then emit_plan only after the gate opens. Use agent_register and agent_dispatch for Hermes, Pi, or other external workers only when their capabilities match the task."
+      "text": "Use Wormhole for this mission: ${arguments.objective}\n\nFollow the Wormhole loop strictly: mission_start, round_start, gather evidence, record_evidence, record_question for gaps, register tasks or external agents when parallel work is useful, gate_request, then emit_plan only after the gate opens. Use printing_press_register and printing_press_register_agent for generated CLIs, then agent_dispatch only when their capabilities match the task."
     }
   ],
   "compatibility": {

@@ -38,6 +38,11 @@ import {
   type AgentDispatchInput,
   type AgentRunResult,
 } from "./agent-adapter.js";
+import {
+  createPrintingPressRegistry,
+  type PrintingPressCliDescriptor,
+  type PrintingPressSelection,
+} from "./printing-press.js";
 
 function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): string {
   const absoluteRoot = path.resolve(repoRoot);
@@ -51,6 +56,7 @@ function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): 
 
 export function createToolHandlers(kernel: WormholeKernel) {
   const agentRegistry = createAgentRegistry();
+  const printingPressRegistry = createPrintingPressRegistry();
 
   return {
     missionStart(input: { objective: string; repoRoot: string }) {
@@ -214,6 +220,23 @@ export function createToolHandlers(kernel: WormholeKernel) {
 
     agentInterrupt(input: { runId: string; reason: string }) {
       return agentRegistry.interrupt(input.runId, input.reason);
+    },
+
+    printingPressRegister(input: PrintingPressCliDescriptor) {
+      return printingPressRegistry.register(input);
+    },
+
+    printingPressList() {
+      return printingPressRegistry.list();
+    },
+
+    printingPressSelect(input: PrintingPressSelection) {
+      return printingPressRegistry.select(input);
+    },
+
+    printingPressRegisterAgent(input: { cliId: string }) {
+      const agent = printingPressRegistry.toAgentDescriptor(input.cliId);
+      return agentRegistry.register(agent);
     },
 
     missionStatus(input: { missionId: string }) {

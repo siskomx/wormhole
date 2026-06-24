@@ -9,7 +9,7 @@ V1 proves the evidence loop. V2 introduces bounded parallel orchestration. V3 in
 | Track | Status | Purpose |
 | --- | --- | --- |
 | V1 | Implemented foundation | Local MCP planning kernel, JSONL state, evidence records, question ledger, gate, Markdown plan artifact, benchmark fixtures. |
-| V2 | Implemented foundation | First-party optimization primitives, live sub-orchestrator control, four-layer task records, static DAG scheduling, content-addressed evidence cache, reconciliation, Codex adapter config, Claude Desktop extension metadata, external agent adapters, and benchmark comparison runner. |
+| V2 | Implemented foundation | First-party optimization primitives, live sub-orchestrator control, four-layer task records, static DAG scheduling, content-addressed evidence cache, reconciliation, Codex adapter config, Claude Desktop extension metadata, external agent adapters, Printing Press CLI adapters, and benchmark comparison runner. |
 | V3 | Implemented foundation | Adaptive model/provider routing, connector registry, dynamic DAG spawning guardrails, bounded model-pool roles, typed artifacts, and static workbench rendering. Learned provider orchestration remains a future extension. |
 
 ## Four-Layer Ceiling
@@ -108,6 +108,21 @@ Wormhole remains the source of truth. External agents receive dispatched task ob
 
 The adapter contract tracks declared capabilities, installation/authentication policy, concurrency, interrupt support, evidence IDs, artifact IDs, and task run status. It does not assume every external agent can spawn durable work or obey live interrupts; those behaviors must be declared by the adapter.
 
+## Printing Press CLI Adapters
+
+Printing Press generated CLIs and MCP servers are registered through `printing_press_register`.
+
+The Printing Press contract tracks:
+
+- CLI id, display name, command, and default args.
+- Declared capabilities such as `project-management`, `evidence`, `sqlite-query`, `research`, or `commerce`.
+- Installation and authentication policy.
+- Evidence mode: `compact`, `raw`, or `sqlite`.
+- Whether the printed tool also provides an MCP server.
+- Concurrency and interrupt support.
+
+Wormhole can select a printed CLI with `printing_press_select` and convert it into a dispatchable external worker with `printing_press_register_agent`. After that, regular `agent_dispatch`, `agent_status`, `agent_complete`, and `agent_interrupt` rules apply. Printing Press tools therefore remain subordinate to Wormhole's task graph and evidence gate instead of becoming separate orchestrators.
+
 ## Connector Model
 
 Wormhole should work through a generic MCP server first.
@@ -117,6 +132,7 @@ Client-specific compatibility is expressed as adapters:
 - Claude Code: attach to the MCP stdio server.
 - Claude Desktop: install the MCPB-compatible scaffold in `plugins/wormhole-claude-desktop`.
 - Codex: consume `plugins/wormhole/.codex-plugin/plugin.json` and `plugins/wormhole/.mcp.json`.
+- Printing Press: register generated CLIs and MCP servers through `printing_press_register`, then convert them into Wormhole workers when useful.
 - Hermes Agent, Inflection Pi, and other agents: register through the external agent adapter contract when they expose a controllable MCP, HTTP, CLI, SDK, or provider API boundary.
 - Other clients: implement the connector manifest and call the generic MCP tools.
 

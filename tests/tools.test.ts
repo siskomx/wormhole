@@ -228,4 +228,40 @@ describe("Wormhole MCP tool handlers", () => {
     expect(interrupted.status).toBe("interrupted");
     expect(tools.agentList().map((registered) => registered.agentId)).toEqual(["hermes-local"]);
   });
+
+  it("registers Printing Press CLIs as dispatchable external agents", () => {
+    const tools = createToolHandlers(createInMemoryKernel());
+    const cli = tools.printingPressRegister({
+      cliId: "pp-linear",
+      displayName: "Printing Press Linear",
+      command: "/pp-linear",
+      args: ["sql"],
+      capabilities: ["project-management", "evidence", "sqlite-query"],
+      installation: "installed",
+      authentication: "on_use",
+      evidenceMode: "sqlite",
+      providesMcpServer: true,
+      supportsInterrupt: false,
+      maxConcurrentTasks: 2,
+    });
+    const selected = tools.printingPressSelect({
+      requiredCapabilities: ["project-management", "sqlite-query"],
+    });
+    const agent = tools.printingPressRegisterAgent({ cliId: "pp-linear" });
+    const run = tools.agentDispatch({
+      missionId: "M1",
+      taskId: "T1",
+      objective: "Find blocked project-management issues.",
+      requiredCapabilities: ["project-management"],
+      preferredTargets: ["printing-press"],
+    });
+
+    expect(cli.cliId).toBe("pp-linear");
+    expect(selected.cliId).toBe("pp-linear");
+    expect(agent.agentId).toBe("printing-press:pp-linear");
+    expect(run.assignedAgentId).toBe("printing-press:pp-linear");
+    expect(tools.printingPressList().map((registered) => registered.cliId)).toEqual([
+      "pp-linear",
+    ]);
+  });
 });

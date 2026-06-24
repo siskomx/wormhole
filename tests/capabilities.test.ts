@@ -11,6 +11,7 @@ describe("capability manifest", () => {
       "claude-code",
       "claude-desktop",
       "codex",
+      "printing-press",
       "hermes-agent",
       "inflection-pi",
     ]);
@@ -67,6 +68,11 @@ describe("capability manifest", () => {
           transport: "mcpb",
         }),
         expect.objectContaining({
+          target: "printing-press",
+          status: "implemented",
+          transport: "printing-press-cli",
+        }),
+        expect.objectContaining({
           target: "hermes-agent",
           status: "implemented",
           transport: "agent-adapter",
@@ -94,6 +100,7 @@ describe("capability manifest", () => {
         "v2.benchmark-runner",
         "v2.codex-runtime-adapter",
         "v2.external-agent-adapters",
+        "v2.printing-press-cli-adapters",
         "v3.adaptive-routing-model-selection",
         "v3.connector-registry",
         "v3.dynamic-task-spawning",
