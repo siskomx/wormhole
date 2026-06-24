@@ -8,6 +8,7 @@ export type ConnectorTarget =
   | "claude-desktop"
   | "codex"
   | "printing-press"
+  | "graphify"
   | "hermes-agent"
   | "inflection-pi";
 
@@ -26,6 +27,7 @@ export type WormholeConnector = {
     | "plugin-manifest"
     | "mcpb"
     | "printing-press-cli"
+    | "graph-index"
     | "agent-adapter"
     | "provider-api"
     | "connector-contract";
@@ -109,6 +111,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         status: "implemented",
         transport: "printing-press-cli",
         description: "Printing Press generated CLIs and MCP servers can be registered as Wormhole capabilities and converted into external agent workers.",
+      },
+      {
+        target: "graphify",
+        status: "implemented",
+        transport: "graph-index",
+        description: "Graphify-style repo graph workflows can be represented through Wormhole's native repo index tools or an external graph connector.",
       },
       {
         target: "hermes-agent",
@@ -197,6 +205,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Printing Press generated CLI registry, capability selection, and conversion into Wormhole external agent workers.",
       },
       {
+        id: "v2.repo-index-graph",
+        track: "v2",
+        status: "implemented",
+        description: "Deterministic repo-local index with file, symbol, import, link, query, explain, and dependency-path tools.",
+      },
+      {
         id: "v3.adaptive-routing-model-selection",
         track: "v3",
         status: "implemented",
@@ -207,6 +221,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         track: "v3",
         status: "implemented",
         description: "Connector registry and capability-based connector selection.",
+      },
+      {
+        id: "v3.graph-first-codebase-query",
+        track: "v3",
+        status: "implemented",
+        description: "Graph-first codebase query workflow that lets agents ask the repo index before broad grep or file-reading passes.",
       },
       {
         id: "v3.adaptive-model-pool",

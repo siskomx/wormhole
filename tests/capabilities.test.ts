@@ -12,6 +12,7 @@ describe("capability manifest", () => {
       "claude-desktop",
       "codex",
       "printing-press",
+      "graphify",
       "hermes-agent",
       "inflection-pi",
     ]);
@@ -73,6 +74,11 @@ describe("capability manifest", () => {
           transport: "printing-press-cli",
         }),
         expect.objectContaining({
+          target: "graphify",
+          status: "implemented",
+          transport: "graph-index",
+        }),
+        expect.objectContaining({
           target: "hermes-agent",
           status: "implemented",
           transport: "agent-adapter",
@@ -101,8 +107,10 @@ describe("capability manifest", () => {
         "v2.codex-runtime-adapter",
         "v2.external-agent-adapters",
         "v2.printing-press-cli-adapters",
+        "v2.repo-index-graph",
         "v3.adaptive-routing-model-selection",
         "v3.connector-registry",
+        "v3.graph-first-codebase-query",
         "v3.dynamic-task-spawning",
         "v3.model-pool-orchestration",
         "v3.workbench-artifacts",

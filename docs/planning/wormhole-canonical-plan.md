@@ -387,6 +387,10 @@ The runnable server exposes a generic tool surface across the v1 kernel plus imp
 - `select_connector`
 - `create_artifact`
 - `render_workbench`
+- `repo_index_build`
+- `repo_index_query`
+- `repo_index_explain`
+- `repo_index_path`
 - `agent_register`
 - `agent_list`
 - `agent_dispatch`
@@ -571,6 +575,7 @@ V2 implemented:
 - Connector registry and capability-based connector selection
 - External agent registration, dispatch, status, interrupt, and completion records
 - Printing Press generated CLI registration, capability selection, and agent conversion
+- Graph-first repo indexing with query, explain, and dependency-path tools
 - Claude Desktop MCPB-compatible extension metadata
 
 Implemented v2 control-plane tools:
@@ -591,6 +596,10 @@ Implemented v2 control-plane tools:
 - `printing_press_list`: lists registered generated CLIs.
 - `printing_press_select`: selects a generated CLI by required capabilities.
 - `printing_press_register_agent`: converts a generated CLI into a dispatchable Wormhole worker.
+- `repo_index_build`: builds a local file, symbol, import, and link graph for a repo.
+- `repo_index_query`: searches indexed files and symbols before broad grep or raw file reads.
+- `repo_index_explain`: explains a file or symbol using graph neighbors.
+- `repo_index_path`: finds dependency paths between files or symbols.
 
 The repo-level v2 contract is documented in `docs/architecture/v2-v3-orchestration.md` and `docs/contracts/capability-manifest.md`.
 
@@ -602,6 +611,7 @@ V3 implemented:
 - Deeper layered execution up to hard max depth 4
 - Static UI/workbench rendering
 - Connector ecosystem
+- Graph-first codebase query workflow
 - Provider registry
 - More artifact types
 - Model/provider and external agent capability manifests

@@ -52,9 +52,14 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.server.mcp_config.command).toBe("node");
     expect(manifest.server.mcp_config.args).toEqual(["${__dirname}/server/index.js"]);
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_dispatch");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("repo_index_query");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("repo_index_explain");
     expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_register");
     expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_register_agent");
     expect(manifest.prompts.map((prompt) => prompt.name)).toContain("wormhole_orchestrate");
+    expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
+      "repo_index_query",
+    );
     expect(serialized).not.toContain("TODO");
   });
 });

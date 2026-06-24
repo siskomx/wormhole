@@ -18,3 +18,4 @@ export * from "./workbench.js";
 export * from "./artifacts.js";
 export * from "./agent-adapter.js";
 export * from "./printing-press.js";
+export * from "./repo-index.js";

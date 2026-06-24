@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -263,5 +263,55 @@ describe("Wormhole MCP tool handlers", () => {
     expect(tools.printingPressList().map((registered) => registered.cliId)).toEqual([
       "pp-linear",
     ]);
+  });
+
+  it("builds and queries the repo index through generic tool handlers", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-index-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(
+      path.join(repoRoot, "src", "server.ts"),
+      [
+        'import { connectDatabase } from "./db";',
+        "",
+        "export function startServer() {",
+        "  return connectDatabase('primary');",
+        "}",
+      ].join("\n"),
+    );
+    writeFileSync(
+      path.join(repoRoot, "src", "db.ts"),
+      [
+        "export function connectDatabase(name: string) {",
+        "  return `database pool ${name}`;",
+        "}",
+      ].join("\n"),
+    );
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel());
+      const summary = tools.repoIndexBuild({ repoRoot });
+      const query = tools.repoIndexQuery({
+        repoRoot,
+        query: "database pool",
+        limit: 3,
+      });
+      const explanation = tools.repoIndexExplain({
+        repoRoot,
+        target: "connectDatabase",
+      });
+      const dependencyPath = tools.repoIndexPath({
+        repoRoot,
+        from: "src/server.ts",
+        to: "src/db.ts",
+      });
+
+      expect(summary.fileCount).toBe(2);
+      expect(summary.symbolCount).toBeGreaterThanOrEqual(2);
+      expect(query.results[0].excerpt).toContain("database pool");
+      expect(explanation.resolved?.name).toBe("connectDatabase");
+      expect(dependencyPath.path).toEqual(["src/server.ts", "src/db.ts"]);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
   });
 });

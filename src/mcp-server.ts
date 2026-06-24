@@ -384,6 +384,7 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
               "plugin-manifest",
               "mcpb",
               "printing-press-cli",
+              "graph-index",
               "http",
               "cli",
               "sdk",
@@ -453,6 +454,61 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
       },
     },
     async (input) => jsonResult(tools.renderWorkbench(input)),
+  );
+
+  server.registerTool(
+    "repo_index_build",
+    {
+      description: "Build a deterministic local repo graph for graph-first codebase search.",
+      inputSchema: {
+        repoRoot: z.string(),
+        include: z.array(z.string()).optional(),
+        exclude: z.array(z.string()).optional(),
+        maxFiles: z.number().optional(),
+        maxFileBytes: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.repoIndexBuild(input)),
+  );
+
+  server.registerTool(
+    "repo_index_query",
+    {
+      description: "Query the local repo graph before falling back to raw grep or broad file reads.",
+      inputSchema: {
+        repoRoot: z.string(),
+        query: z.string(),
+        limit: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.repoIndexQuery(input)),
+  );
+
+  server.registerTool(
+    "repo_index_explain",
+    {
+      description: "Explain a file or symbol using indexed symbols plus inbound and outbound graph edges.",
+      inputSchema: {
+        repoRoot: z.string(),
+        target: z.string(),
+        limit: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.repoIndexExplain(input)),
+  );
+
+  server.registerTool(
+    "repo_index_path",
+    {
+      description: "Find a dependency path between two files or symbols in the local repo graph.",
+      inputSchema: {
+        repoRoot: z.string(),
+        from: z.string(),
+        to: z.string(),
+        maxDepth: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.repoIndexPath(input)),
   );
 
   server.registerTool(

@@ -9,8 +9,8 @@ V1 proves the evidence loop. V2 introduces bounded parallel orchestration. V3 in
 | Track | Status | Purpose |
 | --- | --- | --- |
 | V1 | Implemented foundation | Local MCP planning kernel, JSONL state, evidence records, question ledger, gate, Markdown plan artifact, benchmark fixtures. |
-| V2 | Implemented foundation | First-party optimization primitives, live sub-orchestrator control, four-layer task records, static DAG scheduling, content-addressed evidence cache, reconciliation, Codex adapter config, Claude Desktop extension metadata, external agent adapters, Printing Press CLI adapters, and benchmark comparison runner. |
-| V3 | Implemented foundation | Adaptive model/provider routing, connector registry, dynamic DAG spawning guardrails, bounded model-pool roles, typed artifacts, and static workbench rendering. Learned provider orchestration remains a future extension. |
+| V2 | Implemented foundation | First-party optimization primitives, live sub-orchestrator control, four-layer task records, static DAG scheduling, content-addressed evidence cache, reconciliation, repo graph indexing, Codex adapter config, Claude Desktop extension metadata, external agent adapters, Printing Press CLI adapters, and benchmark comparison runner. |
+| V3 | Implemented foundation | Adaptive model/provider routing, graph-first codebase query workflow, connector registry, dynamic DAG spawning guardrails, bounded model-pool roles, typed artifacts, and static workbench rendering. Learned provider orchestration remains a future extension. |
 
 ## Four-Layer Ceiling
 
@@ -94,6 +94,19 @@ Child artifacts merge through `reconcileArtifacts`, which preserves evidence pro
 
 Raw source content can be stored through `createEvidenceCache`, which writes content-addressed SHA-256 records and allows compressed views to remain separate from the source of truth. The exposed `cache_evidence` MCP tool confines cache roots under the supplied `repoRoot`, or under the server working directory when no `repoRoot` is supplied.
 
+## Repo Index And Graph Query
+
+Wormhole includes a native Graphify-style repo index for codebase discovery. It is intentionally deterministic and local: it walks supported text/source files, skips generated/vendor directories, extracts TypeScript/JavaScript symbols and Markdown sections, resolves local imports and links, and exposes graph query primitives through MCP.
+
+The tools are:
+
+- `repo_index_build`: build or rebuild an in-memory file, symbol, import, and link graph for a repo root.
+- `repo_index_query`: search the graph and indexed snippets before broad grep or raw file reads.
+- `repo_index_explain`: explain a file or symbol using indexed symbols plus inbound and outbound edges.
+- `repo_index_path`: find a graph path between two files or symbols.
+
+This is not a replacement for source evidence. Query results are discovery hints; important claims still need `record_evidence` entries with source paths and line ranges before the gate opens. The capability model also declares a `graphify` connector target so a full external Graphify graph or MCP server can be registered later without changing the Wormhole mission loop.
+
 ## External Agent Adapters
 
 External AI agents and model providers are registered as bounded Wormhole workers through `agent_register`.
@@ -133,6 +146,7 @@ Client-specific compatibility is expressed as adapters:
 - Claude Desktop: install the MCPB-compatible scaffold in `plugins/wormhole-claude-desktop`.
 - Codex: consume `plugins/wormhole/.codex-plugin/plugin.json` and `plugins/wormhole/.mcp.json`.
 - Printing Press: register generated CLIs and MCP servers through `printing_press_register`, then convert them into Wormhole workers when useful.
+- Graphify: use the native `repo_index_*` graph tools by default, or represent an external Graphify graph through the `graphify` connector target when one is available.
 - Hermes Agent, Inflection Pi, and other agents: register through the external agent adapter contract when they expose a controllable MCP, HTTP, CLI, SDK, or provider API boundary.
 - Other clients: implement the connector manifest and call the generic MCP tools.
 

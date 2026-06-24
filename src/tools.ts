@@ -43,6 +43,18 @@ import {
   type PrintingPressCliDescriptor,
   type PrintingPressSelection,
 } from "./printing-press.js";
+import {
+  buildRepoIndex,
+  explainRepoIndex,
+  findRepoIndexPath,
+  queryRepoIndex,
+  summarizeRepoIndex,
+  type RepoIndex,
+  type RepoIndexBuildOptions,
+  type RepoIndexExplainInput,
+  type RepoIndexPathInput,
+  type RepoIndexQueryInput,
+} from "./repo-index.js";
 
 function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): string {
   const absoluteRoot = path.resolve(repoRoot);
@@ -57,6 +69,18 @@ function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): 
 export function createToolHandlers(kernel: WormholeKernel) {
   const agentRegistry = createAgentRegistry();
   const printingPressRegistry = createPrintingPressRegistry();
+  const repoIndexes = new Map<string, RepoIndex>();
+
+  function getRepoIndex(repoRoot: string): RepoIndex {
+    const absoluteRoot = path.resolve(repoRoot);
+    const existing = repoIndexes.get(absoluteRoot);
+    if (existing) {
+      return existing;
+    }
+    const index = buildRepoIndex({ repoRoot: absoluteRoot });
+    repoIndexes.set(absoluteRoot, index);
+    return index;
+  }
 
   return {
     missionStart(input: { objective: string; repoRoot: string }) {
@@ -237,6 +261,27 @@ export function createToolHandlers(kernel: WormholeKernel) {
     printingPressRegisterAgent(input: { cliId: string }) {
       const agent = printingPressRegistry.toAgentDescriptor(input.cliId);
       return agentRegistry.register(agent);
+    },
+
+    repoIndexBuild(input: RepoIndexBuildOptions) {
+      const index = buildRepoIndex(input);
+      repoIndexes.set(index.repoRoot, index);
+      return summarizeRepoIndex(index);
+    },
+
+    repoIndexQuery(input: { repoRoot: string } & RepoIndexQueryInput) {
+      const { repoRoot, ...query } = input;
+      return queryRepoIndex(getRepoIndex(repoRoot), query);
+    },
+
+    repoIndexExplain(input: { repoRoot: string } & RepoIndexExplainInput) {
+      const { repoRoot, ...explain } = input;
+      return explainRepoIndex(getRepoIndex(repoRoot), explain);
+    },
+
+    repoIndexPath(input: { repoRoot: string } & RepoIndexPathInput) {
+      const { repoRoot, ...pathInput } = input;
+      return findRepoIndexPath(getRepoIndex(repoRoot), pathInput);
     },
 
     missionStatus(input: { missionId: string }) {

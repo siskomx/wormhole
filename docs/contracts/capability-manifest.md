@@ -25,6 +25,7 @@ The manifest is intentionally client-neutral. Codex, Claude Code, and future con
 - `claude-desktop`: Claude Desktop using the MCPB-compatible extension scaffold
 - `codex`: Codex plugin manifest and MCP config
 - `printing-press`: Printing Press generated CLIs and MCP servers through the CLI adapter contract
+- `graphify`: native graph-first repo index tools or an external Graphify-compatible graph connector
 - `hermes-agent`: Hermes Agent through the external agent adapter contract
 - `inflection-pi`: Inflection Pi through the provider API adapter contract
 
@@ -43,11 +44,13 @@ V2 capabilities can be implemented incrementally. Implemented v2 capabilities in
 - `v2.codex-runtime-adapter`: Codex plugin/runtime adapter config generation and validation.
 - `v2.external-agent-adapters`: generic external agent registration, dispatch, status, interrupt, and completion records for systems such as Hermes Agent and Inflection Pi.
 - `v2.printing-press-cli-adapters`: Printing Press generated CLI registration, capability selection, and conversion into Wormhole external agent workers.
+- `v2.repo-index-graph`: deterministic repo-local file, symbol, import, link, query, explain, and dependency-path index.
 
 Implemented v3 capabilities include:
 
 - `v3.adaptive-routing-model-selection`: fast/balanced/deep mode selection and model choice from provider manifests.
 - `v3.connector-registry`: capability-based connector discovery and selection.
+- `v3.graph-first-codebase-query`: query-first codebase discovery workflow that asks the repo graph before broad grep or raw file-reading passes.
 - `v3.dynamic-task-spawning`: dynamic DAG task expansion with max-depth and max-task guardrails.
 - `v3.model-pool-orchestration`: bounded thinker, worker, and verifier provider orchestration.
 - `v3.workbench-artifacts`: static mission/task/gate/artifact workbench snapshots and HTML rendering.
