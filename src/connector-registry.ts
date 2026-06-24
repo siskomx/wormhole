@@ -4,7 +4,17 @@ export type ConnectorAuthentication = "on_install" | "on_use" | "none";
 export type ConnectorDescriptor = {
   connectorId: string;
   target: string;
-  transport: "mcp-stdio" | "plugin-manifest" | "http" | "connector-contract";
+  transport:
+    | "mcp-stdio"
+    | "mcp-http"
+    | "plugin-manifest"
+    | "mcpb"
+    | "http"
+    | "cli"
+    | "sdk"
+    | "agent-adapter"
+    | "provider-api"
+    | "connector-contract";
   capabilities: string[];
   installation: ConnectorInstallation;
   authentication: ConnectorAuthentication;

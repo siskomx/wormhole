@@ -2,7 +2,13 @@ export type WormholeTrack = "v1" | "v2" | "v3";
 
 export type CapabilityStatus = "implemented" | "planned";
 
-export type ConnectorTarget = "generic-mcp" | "claude-code" | "codex";
+export type ConnectorTarget =
+  | "generic-mcp"
+  | "claude-code"
+  | "claude-desktop"
+  | "codex"
+  | "hermes-agent"
+  | "inflection-pi";
 
 export type WormholeCapability = {
   id: string;
@@ -14,7 +20,13 @@ export type WormholeCapability = {
 export type WormholeConnector = {
   target: ConnectorTarget;
   status: CapabilityStatus;
-  transport: "mcp-stdio" | "plugin-manifest" | "connector-contract";
+  transport:
+    | "mcp-stdio"
+    | "plugin-manifest"
+    | "mcpb"
+    | "agent-adapter"
+    | "provider-api"
+    | "connector-contract";
   description: string;
 };
 
@@ -79,10 +91,28 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Claude Code can attach to the Wormhole MCP server and drive the v1 workflow.",
       },
       {
+        target: "claude-desktop",
+        status: "implemented",
+        transport: "mcpb",
+        description: "Claude Desktop can install the Wormhole MCP server through the repo-local MCPB extension scaffold.",
+      },
+      {
         target: "codex",
         status: "implemented",
         transport: "plugin-manifest",
         description: "Codex can consume the repo-local plugin metadata and MCP server configuration.",
+      },
+      {
+        target: "hermes-agent",
+        status: "implemented",
+        transport: "agent-adapter",
+        description: "Hermes Agent can be represented as an external Wormhole worker through the generic agent adapter contract.",
+      },
+      {
+        target: "inflection-pi",
+        status: "implemented",
+        transport: "provider-api",
+        description: "Inflection Pi can be represented as a provider-style worker for planning and research tasks.",
       },
     ],
     capabilities: [
@@ -145,6 +175,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         track: "v2",
         status: "implemented",
         description: "Codex adapter config generation and validation for local plugin/runtime attachment.",
+      },
+      {
+        id: "v2.external-agent-adapters",
+        track: "v2",
+        status: "implemented",
+        description: "Generic external agent registration, dispatch, status, interrupt, and completion contracts for Hermes, Pi, and other workers.",
       },
       {
         id: "v3.adaptive-routing-model-selection",

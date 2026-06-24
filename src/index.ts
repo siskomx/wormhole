@@ -16,3 +16,4 @@ export * from "./connector-registry.js";
 export * from "./model-pool.js";
 export * from "./workbench.js";
 export * from "./artifacts.js";
+export * from "./agent-adapter.js";

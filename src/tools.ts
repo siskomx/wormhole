@@ -32,6 +32,12 @@ import {
   renderWorkbenchHtml,
   type WorkbenchSnapshotInput,
 } from "./workbench.js";
+import {
+  createAgentRegistry,
+  type AgentDescriptor,
+  type AgentDispatchInput,
+  type AgentRunResult,
+} from "./agent-adapter.js";
 
 function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): string {
   const absoluteRoot = path.resolve(repoRoot);
@@ -44,6 +50,8 @@ function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): 
 }
 
 export function createToolHandlers(kernel: WormholeKernel) {
+  const agentRegistry = createAgentRegistry();
+
   return {
     missionStart(input: { objective: string; repoRoot: string }) {
       return kernel.startMission(input);
@@ -181,6 +189,31 @@ export function createToolHandlers(kernel: WormholeKernel) {
         snapshot,
         html: renderWorkbenchHtml(snapshot),
       };
+    },
+
+    agentRegister(input: AgentDescriptor) {
+      return agentRegistry.register(input);
+    },
+
+    agentList() {
+      return agentRegistry.list();
+    },
+
+    agentDispatch(input: AgentDispatchInput) {
+      return agentRegistry.dispatch(input);
+    },
+
+    agentStatus(input: { runId: string }) {
+      return agentRegistry.status(input.runId);
+    },
+
+    agentComplete(input: { runId: string } & AgentRunResult) {
+      const { runId, ...result } = input;
+      return agentRegistry.complete(runId, result);
+    },
+
+    agentInterrupt(input: { runId: string; reason: string }) {
+      return agentRegistry.interrupt(input.runId, input.reason);
     },
 
     missionStatus(input: { missionId: string }) {

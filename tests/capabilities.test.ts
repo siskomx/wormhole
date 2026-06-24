@@ -9,7 +9,10 @@ describe("capability manifest", () => {
     expect(manifest.connectors.map((connector) => connector.target)).toEqual([
       "generic-mcp",
       "claude-code",
+      "claude-desktop",
       "codex",
+      "hermes-agent",
+      "inflection-pi",
     ]);
     expect(new Set(manifest.capabilities.map((capability) => capability.track))).toEqual(
       new Set(["v1", "v2", "v3"]),
@@ -53,6 +56,30 @@ describe("capability manifest", () => {
     );
   });
 
+  it("declares Claude Desktop and external agent connector targets", () => {
+    const manifest = createDefaultCapabilityManifest();
+
+    expect(manifest.connectors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          target: "claude-desktop",
+          status: "implemented",
+          transport: "mcpb",
+        }),
+        expect.objectContaining({
+          target: "hermes-agent",
+          status: "implemented",
+          transport: "agent-adapter",
+        }),
+        expect.objectContaining({
+          target: "inflection-pi",
+          status: "implemented",
+          transport: "provider-api",
+        }),
+      ]),
+    );
+  });
+
   it("declares the remaining v2 and v3 foundations as implemented", () => {
     const manifest = createDefaultCapabilityManifest();
     const implementedIds = manifest.capabilities
@@ -66,6 +93,7 @@ describe("capability manifest", () => {
         "v2.reconciliation-engine",
         "v2.benchmark-runner",
         "v2.codex-runtime-adapter",
+        "v2.external-agent-adapters",
         "v3.adaptive-routing-model-selection",
         "v3.connector-registry",
         "v3.dynamic-task-spawning",

@@ -36,6 +36,17 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
     "patch_plan",
     "benchmark_report",
   ]);
+  const agentDescriptorSchema = {
+    agentId: z.string(),
+    displayName: z.string(),
+    target: z.string(),
+    transport: z.enum(["mcp-stdio", "mcp-http", "http", "cli", "sdk", "provider-api"]),
+    capabilities: z.array(z.string()),
+    installation: z.enum(["available", "installed", "disabled"]),
+    authentication: z.enum(["on_install", "on_use", "none"]),
+    maxConcurrentTasks: z.number(),
+    supportsInterrupt: z.boolean(),
+  };
 
   server.registerTool(
     "mission_start",
@@ -352,7 +363,18 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
           z.object({
             connectorId: z.string(),
             target: z.string(),
-            transport: z.enum(["mcp-stdio", "plugin-manifest", "http", "connector-contract"]),
+            transport: z.enum([
+              "mcp-stdio",
+              "mcp-http",
+              "plugin-manifest",
+              "mcpb",
+              "http",
+              "cli",
+              "sdk",
+              "agent-adapter",
+              "provider-api",
+              "connector-contract",
+            ]),
             capabilities: z.array(z.string()),
             installation: z.enum(["available", "installed", "disabled"]),
             authentication: z.enum(["on_install", "on_use", "none"]),
@@ -415,6 +437,79 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
       },
     },
     async (input) => jsonResult(tools.renderWorkbench(input)),
+  );
+
+  server.registerTool(
+    "agent_register",
+    {
+      description: "Register an external AI agent or model provider as a Wormhole worker.",
+      inputSchema: agentDescriptorSchema,
+    },
+    async (input) => jsonResult(tools.agentRegister(input)),
+  );
+
+  server.registerTool(
+    "agent_list",
+    {
+      description: "List external AI agents and model providers registered with this Wormhole runtime.",
+      inputSchema: {},
+    },
+    async () => jsonResult(tools.agentList()),
+  );
+
+  server.registerTool(
+    "agent_dispatch",
+    {
+      description: "Dispatch a Wormhole task to a registered external agent by required capability.",
+      inputSchema: {
+        missionId: z.string(),
+        taskId: z.string(),
+        objective: z.string(),
+        requiredCapabilities: z.array(z.string()),
+        preferredTargets: z.array(z.string()).optional(),
+        payload: z.unknown().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.agentDispatch(input)),
+  );
+
+  server.registerTool(
+    "agent_status",
+    {
+      description: "Return the current status for a dispatched external agent run.",
+      inputSchema: {
+        runId: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.agentStatus(input)),
+  );
+
+  server.registerTool(
+    "agent_complete",
+    {
+      description: "Record a completed or failed external agent run with provenance.",
+      inputSchema: {
+        runId: z.string(),
+        status: z.enum(["completed", "failed"]),
+        summary: z.string(),
+        evidenceIds: z.array(z.string()).optional(),
+        artifactIds: z.array(z.string()).optional(),
+        output: z.unknown().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.agentComplete(input)),
+  );
+
+  server.registerTool(
+    "agent_interrupt",
+    {
+      description: "Interrupt a dispatched external agent run when the target agent supports interrupts.",
+      inputSchema: {
+        runId: z.string(),
+        reason: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.agentInterrupt(input)),
   );
 
   return server;

@@ -9,7 +9,7 @@ V1 proves the evidence loop. V2 introduces bounded parallel orchestration. V3 in
 | Track | Status | Purpose |
 | --- | --- | --- |
 | V1 | Implemented foundation | Local MCP planning kernel, JSONL state, evidence records, question ledger, gate, Markdown plan artifact, benchmark fixtures. |
-| V2 | Implemented foundation | First-party optimization primitives, live sub-orchestrator control, four-layer task records, static DAG scheduling, content-addressed evidence cache, reconciliation, Codex adapter config, and benchmark comparison runner. |
+| V2 | Implemented foundation | First-party optimization primitives, live sub-orchestrator control, four-layer task records, static DAG scheduling, content-addressed evidence cache, reconciliation, Codex adapter config, Claude Desktop extension metadata, external agent adapters, and benchmark comparison runner. |
 | V3 | Implemented foundation | Adaptive model/provider routing, connector registry, dynamic DAG spawning guardrails, bounded model-pool roles, typed artifacts, and static workbench rendering. Learned provider orchestration remains a future extension. |
 
 ## Four-Layer Ceiling
@@ -94,6 +94,20 @@ Child artifacts merge through `reconcileArtifacts`, which preserves evidence pro
 
 Raw source content can be stored through `createEvidenceCache`, which writes content-addressed SHA-256 records and allows compressed views to remain separate from the source of truth. The exposed `cache_evidence` MCP tool confines cache roots under the supplied `repoRoot`, or under the server working directory when no `repoRoot` is supplied.
 
+## External Agent Adapters
+
+External AI agents and model providers are registered as bounded Wormhole workers through `agent_register`.
+
+Supported worker shapes include:
+
+- MCP-capable agents such as Hermes Agent through `mcp-stdio` or `mcp-http`.
+- HTTP, CLI, SDK, or provider API wrappers for model-style agents such as Inflection Pi.
+- Human-controlled clients such as Claude Code, Claude Desktop, and Codex when they call the generic MCP tools.
+
+Wormhole remains the source of truth. External agents receive dispatched task objectives and payloads through `agent_dispatch`, report back through `agent_complete`, expose current state through `agent_status`, and can be interrupted through `agent_interrupt` when the registered adapter supports interrupts.
+
+The adapter contract tracks declared capabilities, installation/authentication policy, concurrency, interrupt support, evidence IDs, artifact IDs, and task run status. It does not assume every external agent can spawn durable work or obey live interrupts; those behaviors must be declared by the adapter.
+
 ## Connector Model
 
 Wormhole should work through a generic MCP server first.
@@ -101,10 +115,14 @@ Wormhole should work through a generic MCP server first.
 Client-specific compatibility is expressed as adapters:
 
 - Claude Code: attach to the MCP stdio server.
+- Claude Desktop: install the MCPB-compatible scaffold in `plugins/wormhole-claude-desktop`.
 - Codex: consume `plugins/wormhole/.codex-plugin/plugin.json` and `plugins/wormhole/.mcp.json`.
+- Hermes Agent, Inflection Pi, and other agents: register through the external agent adapter contract when they expose a controllable MCP, HTTP, CLI, SDK, or provider API boundary.
 - Other clients: implement the connector manifest and call the generic MCP tools.
 
 The repo-local Codex plugin points to `../../dist/src/cli.js` from `plugins/wormhole`, so local plugin testing requires `npm run build` first.
+
+The repo-local Claude Desktop extension manifest points to `server/index.js` from `plugins/wormhole-claude-desktop`; the wrapper launches the built `dist/src/cli.js`, so local extension testing also requires `npm run build` first.
 
 ## Optimization Providers
 

@@ -182,4 +182,50 @@ describe("Wormhole MCP tool handlers", () => {
       rmSync(cacheRoot, { recursive: true, force: true });
     }
   });
+
+  it("registers, dispatches, completes, and interrupts external agent runs", () => {
+    const tools = createToolHandlers(createInMemoryKernel());
+    const agent = tools.agentRegister({
+      agentId: "hermes-local",
+      displayName: "Hermes Local",
+      target: "hermes-agent",
+      transport: "mcp-stdio",
+      capabilities: ["planning", "coding", "review"],
+      installation: "installed",
+      authentication: "none",
+      maxConcurrentTasks: 2,
+      supportsInterrupt: true,
+    });
+
+    const run = tools.agentDispatch({
+      missionId: "M1",
+      taskId: "T1",
+      objective: "Inspect orchestration gaps.",
+      requiredCapabilities: ["coding"],
+    });
+    const completed = tools.agentComplete({
+      runId: run.runId,
+      status: "completed",
+      summary: "Found missing worker adapter boundary.",
+      evidenceIds: ["E1"],
+      artifactIds: ["A1"],
+    });
+    const secondRun = tools.agentDispatch({
+      missionId: "M1",
+      taskId: "T2",
+      objective: "Review plugin surface.",
+      requiredCapabilities: ["review"],
+    });
+    const interrupted = tools.agentInterrupt({
+      runId: secondRun.runId,
+      reason: "User changed direction.",
+    });
+
+    expect(agent.agentId).toBe("hermes-local");
+    expect(run.assignedAgentId).toBe("hermes-local");
+    expect(completed.result?.artifactIds).toEqual(["A1"]);
+    expect(tools.agentStatus({ runId: run.runId }).status).toBe("completed");
+    expect(interrupted.status).toBe("interrupted");
+    expect(tools.agentList().map((registered) => registered.agentId)).toEqual(["hermes-local"]);
+  });
 });

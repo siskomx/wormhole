@@ -146,6 +146,7 @@ V1 includes:
 - One local MCP server
 - MCP server is the v1 kernel
 - Repo-local Codex plugin metadata for local MCP attachment
+- Repo-local Claude Desktop MCPB metadata for local MCP attachment
 - Existing-repo planning missions only
 - Bounded sequential loop
 - JSONL append-only event log
@@ -386,6 +387,12 @@ The runnable server exposes a generic tool surface across the v1 kernel plus imp
 - `select_connector`
 - `create_artifact`
 - `render_workbench`
+- `agent_register`
+- `agent_list`
+- `agent_dispatch`
+- `agent_status`
+- `agent_complete`
+- `agent_interrupt`
 
 DS9-inspired names stay out of tool contracts.
 
@@ -515,6 +522,8 @@ Tool and MCP results should be ingested by structure, not fragile text parsing. 
 
 Capability discovery should happen before tool selection. Codex, Claude Code, future UI clients, and third-party connectors should each declare what they can do. Wormhole should negotiate from those manifests instead of assuming every host supports the same behavior.
 
+External AI agents are treated as registered workers, not as alternate sources of truth. Hermes Agent, Inflection Pi, and similar systems can participate when an adapter declares transport, capabilities, authentication policy, concurrency, and interrupt support. Wormhole owns the task graph, evidence references, gate state, and artifact provenance.
+
 Gathering depth should scale with ambiguity and stakes. Simple requests should use a fast path; high-impact or ambiguous missions should trigger broader evidence gathering, stronger gates, and more review.
 
 ## Explicit V1 Deferrals
@@ -556,6 +565,8 @@ V2 implemented:
 - Benchmark comparison runner with anonymized review pairs
 - Deterministic adaptive routing and model selection
 - Connector registry and capability-based connector selection
+- External agent registration, dispatch, status, interrupt, and completion records
+- Claude Desktop MCPB-compatible extension metadata
 
 Implemented v2 control-plane tools:
 
@@ -565,6 +576,12 @@ Implemented v2 control-plane tools:
 - `control_ack`: acknowledges a control message and records response.
 - `task_inbox`: lists pending or acknowledged task messages.
 - `task_status`: returns task state and mailbox counts.
+- `agent_register`: registers an external AI agent or model provider worker.
+- `agent_list`: lists registered external workers.
+- `agent_dispatch`: assigns a Wormhole task to a worker by required capability.
+- `agent_status`: returns worker run state.
+- `agent_complete`: records worker completion or failure with evidence and artifact provenance.
+- `agent_interrupt`: interrupts a worker run when the adapter supports interrupts.
 
 The repo-level v2 contract is documented in `docs/architecture/v2-v3-orchestration.md` and `docs/contracts/capability-manifest.md`.
 
@@ -578,7 +595,7 @@ V3 implemented:
 - Connector ecosystem
 - Provider registry
 - More artifact types
-- Model/provider capability manifests
+- Model/provider and external agent capability manifests
 - Balanced vs deep mission modes
 - Bounded model-pool orchestration providers with thinker, worker, and verifier roles
 
