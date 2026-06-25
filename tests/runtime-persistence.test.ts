@@ -49,6 +49,16 @@ describe("runtime handler persistence", () => {
         query: "context persistence",
         maxChars: 240,
       });
+      const workspace = first.agentWorkspaceCreate({
+        missionId: "M1",
+        objective: "Persist shared agent workspace memory",
+      });
+      const workspaceRecord = first.agentWorkspaceWrite({
+        workspaceId: workspace.workspaceId,
+        runId: "run-a",
+        key: "finding",
+        value: "Agent workspace memory survives handler recreation.",
+      });
       await first.optimizedCommandRun({
         command: process.execPath,
         args: ["-e", "for (let i = 0; i < 20; i += 1) console.log(`persisted stat ${i}`);"],
@@ -125,6 +135,9 @@ describe("runtime handler persistence", () => {
         context.contextId,
       );
       expect(second.ctxPackRender({ packId: pack.packId })).toContain("Context packs should survive");
+      expect(second.agentWorkspaceRead({ workspaceId: workspace.workspaceId }).records[0]?.recordId).toBe(
+        workspaceRecord.recordId,
+      );
       expect(second.optimizationStats().runCount).toBe(1);
       expect(second.behaviorModeGet()).toEqual({ brevity: "dense", minimality: "strict" });
       expect(second.orchestrationPolicyGet()?.policyId).toBe("persisted-policy");

@@ -42,4 +42,5 @@ export * from "./project-onboard.js";
 export * from "./project-intelligence.js";
 export * from "./test-impact-v2.js";
 export * from "./agent-behavior-verification.js";
+export * from "./agent-workspace.js";
 export * from "./mission-delta-replan.js";

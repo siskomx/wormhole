@@ -78,4 +78,86 @@ describe("native context store", () => {
     );
     expect(second.renderPack({ packId: pack.packId })).toBe(pack.rendered);
   });
+
+  it("reviews context pack budget with pinned, stale, and changed-file eviction reasons", () => {
+    const store = createContextStore();
+    const pinned = store.record({
+      source: "src/critical.ts",
+      sourceType: "file",
+      text: "Critical payment routing evidence must stay in the pack.",
+      tags: ["payment", "routing"],
+    });
+    const changed = store.record({
+      source: "src/changed.ts",
+      sourceType: "file",
+      text: "Changed file context is relevant to the current mission delta.",
+      tags: ["delta"],
+    });
+    const stale = store.record({
+      source: "src/stale.ts",
+      sourceType: "file",
+      text: "Old stale implementation notes should be replaced.",
+      tags: ["old"],
+    });
+    const unrelated = store.record({
+      source: "docs/noise.md",
+      sourceType: "doc",
+      text: "Unrelated background text that should be evicted under the budget.",
+      tags: ["noise"],
+    });
+
+    const review = store.reviewPackBudget({
+      objective: "Refresh payment routing plan",
+      query: "payment changed routing",
+      maxChars: 180,
+      recordIds: [unrelated.contextId, stale.contextId, changed.contextId, pinned.contextId],
+      pinnedRecordIds: [pinned.contextId],
+      staleRecordIds: [stale.contextId],
+      changedFiles: ["src/changed.ts"],
+    });
+
+    expect(review.retained.map((record) => record.contextId)).toEqual([pinned.contextId, changed.contextId]);
+    expect(review.evicted).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contextId: stale.contextId,
+          reason: "stale",
+        }),
+        expect.objectContaining({
+          contextId: unrelated.contextId,
+          reason: "budget",
+        }),
+      ]),
+    );
+    expect(review.stats.evictedCount).toBe(2);
+    expect(review.stats.retainedChars).toBeLessThanOrEqual(180);
+  });
+
+  it("refreshes a context pack from budget review retained records", () => {
+    const store = createContextStore();
+    const retained = store.record({
+      source: "src/mission.ts",
+      sourceType: "file",
+      text: "Mission state and context refresh should remain available.",
+      tags: ["mission"],
+    });
+    const stale = store.record({
+      source: "src/old.ts",
+      sourceType: "file",
+      text: "Old context should leave refreshed packs.",
+      tags: ["stale"],
+    });
+
+    const refreshed = store.refreshPack({
+      objective: "Refresh mission context",
+      query: "mission context",
+      maxChars: 160,
+      recordIds: [retained.contextId, stale.contextId],
+      staleRecordIds: [stale.contextId],
+    });
+
+    expect(refreshed.pack.contextIds).toEqual([retained.contextId]);
+    expect(refreshed.review.evicted.map((record) => record.contextId)).toEqual([stale.contextId]);
+    expect(store.renderPack({ packId: refreshed.pack.packId })).toContain("Mission state");
+  });
 });

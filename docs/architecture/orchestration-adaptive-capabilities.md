@@ -142,12 +142,23 @@ Project intelligence sequencing composes the ground-truth tools into a higher-le
 - `project_onboard` runs contract detection, durable repo indexing, LSP probe, safety scan, diff/test impact, verification-plan selection, dependency security, action policy, and optional semantic search in one report.
 - `durable_repo_index_refresh`, `durable_index_status`, `durable_semantic_index_refresh`, and `durable_semantic_search` persist index data under `.wormhole/indexes`.
 - `test_impact_analyze_v2` maps unified diff hunks to changed symbols and confidence-scored test recommendations.
+- `mission_delta_replan` and `lsp_feedback_replan` re-scope missions from changed files, diagnostics, stale evidence, and LSP/typecheck feedback.
 - `dependency_security_report` summarizes package/lockfile metadata, direct and transitive counts, license data, and local-only vulnerability-provider status.
 - `action_policy_review` classifies proposed commands, file writes, deletes, tool writes, and network actions with approval and rollback guidance.
 - `lsp_session_start`, `lsp_session_request`, `lsp_session_status`, `lsp_session_list`, and `lsp_session_stop` provide bounded process-local JSON-RPC session management for installed language servers.
 - `optimization_adapter_register`, `optimization_adapter_select`, `optimization_adapter_list`, and `optimization_adapter_run` implement native, CLI, and HTTP optimization adapter contracts.
 
 These tools still keep TypeScript authoritative for gates, schemas, process bounds, and repo-root confinement. Live LSP behavior depends on installed server binaries; unavailable commands return structured unavailable results.
+
+## Native Coordination Feedback Loop
+
+Wormhole now has native coordination tools for the mid-session states that usually cause large-agent drift:
+
+- `ctx_pack_budget_review` explains which context records will be retained or evicted from a budgeted pack using pinned records, stale-record ids, changed-file relevance, query score, and explicit eviction reasons.
+- `ctx_pack_refresh` creates a refreshed context pack from that review instead of silently truncating context.
+- `lsp_feedback_replan` normalizes LSP diagnostics, records them in runtime diagnostics, infers repo-relative changed files, and feeds `mission_delta_replan`.
+- `agent_workspace_create`, `agent_workspace_write`, `agent_workspace_read`, and `agent_workspace_merge` provide shared mission workspace memory for concurrent agents, with run attribution, provenance, snapshot persistence, and conflict detection.
+- `orchestration_policy_live_feedback` records live outcomes and returns bounded advisory hints. It does not train or activate learned policies; activation remains replay-gated through `orchestration_policy_evaluate` and `orchestration_policy_activate`.
 
 ## Native Project Intelligence Spine
 
@@ -213,6 +224,7 @@ Wormhole implements these runtime surfaces as first-class native capabilities:
 - Repo graph artifacts: `repo_index_*`, `repo_graph_export`, `python_graph_metrics`, and `python_graph_communities`.
 - Project ground truth: `project_contract_detect`, `diagnostics_*`, `impact_analyze`, `test_plan_select`, `verification_run`, `secret_scan`, `operation_risk_review`, `semantic_*`, and `lsp_*`.
 - Project-intelligence sequencing: `project_onboard`, durable index tools, LSP session tools, `test_impact_analyze_v2`, `dependency_security_report`, `action_policy_review`, and `optimization_adapter_*`.
+- Coordination feedback loop: `ctx_pack_budget_review`, `ctx_pack_refresh`, `lsp_feedback_replan`, `agent_workspace_*`, and `orchestration_policy_live_feedback`.
 - Optimized command runner: `optimization_apply`, `optimization_retrieve`, `optimized_command_run`, and `optimization_stats`.
 - Native tool factory: `printing_press_*` runtime tools and `tool_factory_generate`.
 - Deterministic conductor: `model_profile_*`, `conductor_plan`, and `conductor_replay`.
@@ -241,7 +253,7 @@ Shell hooks expose `shell_hook_discover`, `shell_hook_plan`, `shell_hook_install
 
 Discovery exposes `discovery_har_import`, `discovery_openapi_import`, `discovery_http_crawl`, `discovery_browser_capture`, and `discovery_tool_spec_generate`. Sensitive headers are redacted before hashing or returning observations. Crawls are bounded and deny loopback/private/link-local hosts unless private-network crawling is explicitly enabled. Mutating API methods are marked side-effecting in generated specs.
 
-Learned orchestration exposes `orchestration_trace_record`, `orchestration_dataset_export`, `orchestration_policy_train`, `orchestration_policy_evaluate`, `orchestration_policy_compare_baselines`, `orchestration_policy_activate`, and `orchestration_policy_get`. Policies train offline from traces, compare against deterministic safe baselines, produce stored evaluation IDs, replay before activation, and are clamped at runtime. A learned policy cannot bypass max depth, budgets, evidence gates, shell apply requirements, or approvals.
+Learned orchestration exposes `orchestration_trace_record`, `orchestration_dataset_export`, `orchestration_policy_train`, `orchestration_policy_evaluate`, `orchestration_policy_compare_baselines`, `orchestration_policy_activate`, `orchestration_policy_get`, and `orchestration_policy_live_feedback`. Policies train offline from traces, compare against deterministic safe baselines, produce stored evaluation IDs, replay before activation, and are clamped at runtime. Live feedback records outcomes and returns advisory hints only. A learned policy cannot bypass max depth, budgets, evidence gates, shell apply requirements, or approvals.
 
 The orchestration policy lab expands the learned action space beyond worker/verifier/depth/model selection. Policy actions can also describe split strategy, context budget, evidence mode, and stop rule. These fields stay bounded to safe enums and are advisory: the TypeScript runtime still owns conductor decisions, task budgets, gates, and approvals.
 

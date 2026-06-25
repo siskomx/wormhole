@@ -38,6 +38,7 @@ Implemented `orchestration` capabilities include:
 
 - `orchestration.first-party-optimization-primitives`: deterministic local command-output compaction, context compression, dense summaries, and minimality review.
 - `orchestration.native-context-packs`: native source-backed context records, ranked context queries, and budgeted context pack rendering with provenance.
+- `orchestration.context-pack-eviction`: deterministic context-pack budget review and refresh with pinned records, stale-record eviction, changed-file relevance, and explicit evicted-record reasons.
 - `orchestration.reversible-optimization-pipeline`: reversible optimization records with retrieval handles, transform traces, JSON/log routing, and token-budget stats.
 - `orchestration.live-sub-orchestrator-control`: task registration, heartbeat/status reporting, mailbox messages, direction-change pause/ack, and immediate interrupts.
 - `orchestration.parallel-sub-orchestrators`: four-layer task records plus static DAG scheduling with read/write lock separation.
@@ -54,6 +55,8 @@ Implemented `orchestration` capabilities include:
 - `orchestration.native-project-intelligence-spine`: native architecture maps, entrypoint flow discovery, blast-radius analysis, and task-scoped project context packs derived from typed repo observations with provenance.
 - `orchestration.native-agent-behavior-verification`: native remit creation, capability inventory, behavior verification, rule coverage, drift analysis, and deterministic findings rendering.
 - `orchestration.mission-delta-replanning`: mid-mission re-scope reports that combine changed files, diagnostics, blast radius, stale evidence, focused tests, refreshed context, and gate guidance.
+- `orchestration.lsp-feedback-replanning`: LSP diagnostic feedback loop that records structured diagnostics and feeds mission-delta replanning with repo-relative changed files.
+- `orchestration.agent-workspace-memory`: shared mission workspace memory for concurrent agent runs with attributed records, provenance, snapshot persistence, merge views, and conflict detection.
 - `orchestration.graph-artifact-suite`: native graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis.
 - `orchestration.optimized-command-runner`: no-shell command execution with reversible output optimization, retrieval handles, hashes, and savings stats.
 - `orchestration.external-optimization-adapters`: native, CLI, and HTTP optimization adapter registry with capability selection and bounded CLI execution.
@@ -76,6 +79,7 @@ Implemented `adaptive` capabilities include:
 - `adaptive.shell-hook-manager`: dry-run-first shell hook discovery, plan-token-gated marker-based install, backup, verification, and uninstall for common terminals.
 - `adaptive.discovery-tool-generation`: HAR/OpenAPI import, bounded HTTP crawl with private-network guardrails, optional browser capture, endpoint normalization, secret redaction, and API tool-spec generation.
 - `adaptive.learned-orchestration-policy`: offline orchestration trace datasets, deterministic policy training/evaluation, stored evaluation IDs, replay thresholds, activation gates, and action clamps.
+- `adaptive.safe-live-policy-feedback`: live orchestration outcome feedback that records traces and returns bounded advisory hints without self-training or activating policies.
 - `adaptive.orchestration-policy-lab`: expanded orchestration action decisions, deterministic baseline comparison, scored reasoning traces, and strategy evaluation for plan/critique/revision/verifier research.
 - `adaptive.dynamic-task-spawning`: dynamic DAG task expansion with max-depth and max-task guardrails.
 - `adaptive.model-pool-orchestration`: bounded thinker, worker, and verifier provider orchestration.

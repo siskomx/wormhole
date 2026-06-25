@@ -250,4 +250,41 @@ describe("orchestration learning", () => {
     ]);
     expect(comparison.best.policyId).toBe("candidate");
   });
+
+  it("records live policy feedback as advisory hints without activating a policy", () => {
+    const store = createPolicyStore();
+    const feedback = store.recordLiveFeedback(
+      trace({
+        traceId: "live-failure",
+        openQuestions: 2,
+        outcome: {
+          testsPassed: false,
+          evidenceCount: 1,
+          openQuestions: 2,
+          durationMs: 90_000,
+          tokenEstimate: 80_000,
+          userCorrectionCount: 1,
+        },
+      }),
+    );
+
+    expect(feedback.reward).toBeLessThan(0);
+    expect(feedback.advisory.activationChanged).toBe(false);
+    expect(feedback.advisory.recommendedAction).toEqual(
+      expect.objectContaining({
+        verifierCount: 2,
+        evidenceMode: "strict",
+        stopRule: "escalate",
+        contextBudget: "small",
+      }),
+    );
+    expect(feedback.advisory.reasons).toEqual(
+      expect.arrayContaining([
+        "Failed tests require stricter verification before policy activation.",
+        "Open questions require escalation instead of automatic continuation.",
+      ]),
+    );
+    expect(store.getActive()).toBeUndefined();
+    expect(store.exportJsonl()).toContain("live-failure");
+  });
 });

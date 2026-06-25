@@ -60,6 +60,16 @@ export type PolicyBaselineComparison = {
   best: PolicyEvaluation;
 };
 
+export type PolicyLiveFeedbackReport = {
+  trace: OrchestrationTrace;
+  reward: number;
+  advisory: {
+    activationChanged: false;
+    recommendedAction: PolicyAction;
+    reasons: string[];
+  };
+};
+
 export type PolicyStoreSnapshot = {
   traces: OrchestrationTrace[];
   evaluations: PolicyEvaluation[];
@@ -246,6 +256,36 @@ function hashPolicy(input: unknown): string {
   return `policy:${createHash("sha256").update(JSON.stringify(input)).digest("hex").slice(0, 16)}`;
 }
 
+function liveFeedbackAdvice(trace: OrchestrationTrace): {
+  recommendedAction: PolicyAction;
+  reasons: string[];
+} {
+  const recommendedAction = clampPolicyAction(trace.action);
+  const reasons: string[] = [];
+  if (!trace.outcome.testsPassed) {
+    recommendedAction.verifierCount = 2;
+    recommendedAction.evidenceMode = "strict";
+    recommendedAction.stopRule = "escalate";
+    reasons.push("Failed tests require stricter verification before policy activation.");
+  }
+  if (trace.outcome.openQuestions > 0 || trace.openQuestions > 0) {
+    recommendedAction.stopRule = "escalate";
+    reasons.push("Open questions require escalation instead of automatic continuation.");
+  }
+  if (trace.outcome.tokenEstimate > 50_000) {
+    recommendedAction.contextBudget = "small";
+    reasons.push("High token use requires a smaller context budget on the next run.");
+  }
+  if (trace.outcome.evidenceCount < 2) {
+    recommendedAction.evidenceMode = "strict";
+    reasons.push("Low evidence count requires strict evidence mode.");
+  }
+  if (reasons.length === 0) {
+    reasons.push("Live feedback recorded without policy activation changes.");
+  }
+  return { recommendedAction: clampPolicyAction(recommendedAction), reasons };
+}
+
 export function createPolicyStore(
   snapshot: Partial<PolicyStoreSnapshot> = {},
   onChange?: (snapshot: PolicyStoreSnapshot) => void,
@@ -256,6 +296,7 @@ export function createPolicyStore(
   comparePolicyToBaselines(policyJson: unknown): PolicyBaselineComparison;
   activate(input: PolicyActivationInput): ActivePolicy;
   getActive(): ActivePolicy | undefined;
+  recordLiveFeedback(trace: OrchestrationTrace): PolicyLiveFeedbackReport;
   snapshot(): PolicyStoreSnapshot;
 } {
   const traces: OrchestrationTrace[] = (snapshot.traces ?? []).map((trace) => ({
@@ -440,6 +481,26 @@ export function createPolicyStore(
 
     getActive() {
       return active ? { ...active } : undefined;
+    },
+
+    recordLiveFeedback(trace) {
+      const recordedTrace = { ...trace, action: clampPolicyAction(trace.action), outcome: { ...trace.outcome } };
+      traces.push(recordedTrace);
+      notifyChange();
+      const advisory = liveFeedbackAdvice(recordedTrace);
+      return {
+        trace: {
+          ...recordedTrace,
+          action: { ...recordedTrace.action },
+          outcome: { ...recordedTrace.outcome },
+        },
+        reward: computeReward(recordedTrace.outcome),
+        advisory: {
+          activationChanged: false,
+          recommendedAction: advisory.recommendedAction,
+          reasons: advisory.reasons,
+        },
+      };
     },
 
     snapshot: snapshotState,

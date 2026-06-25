@@ -33,6 +33,38 @@ export type ContextPackInput = {
   recordIds?: string[];
 };
 
+export type ContextPackBudgetReviewInput = ContextPackInput & {
+  pinnedRecordIds?: string[];
+  staleRecordIds?: string[];
+  changedFiles?: string[];
+};
+
+export type ContextPackBudgetDecision = {
+  contextId: string;
+  source: string;
+  reason: "pinned" | "changed_file" | "query_match" | "budget" | "stale";
+  priority: number;
+  charCount: number;
+};
+
+export type ContextPackBudgetReview = {
+  objective: string;
+  query: string;
+  retained: ContextPackBudgetDecision[];
+  evicted: ContextPackBudgetDecision[];
+  stats: {
+    charBudget: number;
+    retainedChars: number;
+    retainedCount: number;
+    evictedCount: number;
+  };
+};
+
+export type ContextPackRefreshResult = {
+  review: ContextPackBudgetReview;
+  pack: ContextPack;
+};
+
 export type ContextPack = {
   packId: string;
   objective: string;
@@ -56,6 +88,8 @@ export type ContextStore = {
   record(input: ContextRecordInput): ContextRecord;
   query(input: ContextQueryInput): ContextQueryResult;
   createPack(input: ContextPackInput): ContextPack;
+  reviewPackBudget(input: ContextPackBudgetReviewInput): ContextPackBudgetReview;
+  refreshPack(input: ContextPackBudgetReviewInput): ContextPackRefreshResult;
   renderPack(input: { packId: string }): string;
   snapshot(): ContextStoreSnapshot;
 };
@@ -124,6 +158,15 @@ function clonePack(pack: ContextPack): ContextPack {
   };
 }
 
+function normalizePath(value: string): string {
+  return value.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function sourceMatchesChangedFile(source: string, changedFiles: Set<string>): boolean {
+  const normalizedSource = normalizePath(source);
+  return changedFiles.has(normalizedSource);
+}
+
 export function createContextStore(
   snapshot: Partial<ContextStoreSnapshot> = {},
   onChange?: (snapshot: ContextStoreSnapshot) => void,
@@ -164,6 +207,85 @@ export function createContextStore(
       .slice(0, limit);
   }
 
+  function recordsForPackInput(input: ContextPackInput): ContextRecord[] {
+    return input.recordIds && input.recordIds.length > 0
+      ? input.recordIds
+          .map((contextId) => records.get(contextId))
+          .filter((record): record is ContextRecord => Boolean(record))
+      : rankedRecords({ query: `${input.objective} ${input.query}`, limit: records.size })
+          .map((record) => records.get(record.contextId))
+          .filter((record): record is ContextRecord => Boolean(record));
+  }
+
+  function reviewPackBudget(input: ContextPackBudgetReviewInput): ContextPackBudgetReview {
+    const pinnedIds = new Set(input.pinnedRecordIds ?? []);
+    const staleIds = new Set(input.staleRecordIds ?? []);
+    const changedFiles = new Set((input.changedFiles ?? []).map(normalizePath));
+    const query = `${input.objective} ${input.query}`;
+    const scored = recordsForPackInput(input)
+      .map((record) => {
+        const pinned = pinnedIds.has(record.contextId);
+        const stale = staleIds.has(record.contextId);
+        const changed = sourceMatchesChangedFile(record.source, changedFiles);
+        const queryScore = scoreRecord(record, query);
+        const priority = (pinned ? 1_000 : 0) + (changed ? 100 : 0) + queryScore * 10 - (stale ? 10_000 : 0);
+        const reason: ContextPackBudgetDecision["reason"] = stale
+          ? "stale"
+          : pinned
+            ? "pinned"
+            : changed
+              ? "changed_file"
+              : "query_match";
+        return { record, priority, reason };
+      })
+      .sort((left, right) => {
+        if (right.priority !== left.priority) {
+          return right.priority - left.priority;
+        }
+        const dateCompare = right.record.recordedAt.localeCompare(left.record.recordedAt);
+        if (dateCompare !== 0) {
+          return dateCompare;
+        }
+        return left.record.source.localeCompare(right.record.source);
+      });
+
+    const retained: ContextPackBudgetDecision[] = [];
+    const evicted: ContextPackBudgetDecision[] = [];
+    let retainedChars = 0;
+    for (const candidate of scored) {
+      const decision = {
+        contextId: candidate.record.contextId,
+        source: candidate.record.source,
+        reason: candidate.reason,
+        priority: candidate.priority,
+        charCount: candidate.record.charCount,
+      };
+      if (candidate.reason === "stale") {
+        evicted.push(decision);
+        continue;
+      }
+      if (retainedChars + candidate.record.charCount <= input.maxChars || retained.length === 0) {
+        retained.push(decision);
+        retainedChars += candidate.record.charCount;
+        continue;
+      }
+      evicted.push({ ...decision, reason: "budget" });
+    }
+
+    return {
+      objective: input.objective,
+      query: input.query,
+      retained,
+      evicted,
+      stats: {
+        charBudget: input.maxChars,
+        retainedChars,
+        retainedCount: retained.length,
+        evictedCount: evicted.length,
+      },
+    };
+  }
+
   return {
     record(input: ContextRecordInput): ContextRecord {
       const record: ContextRecord = {
@@ -187,14 +309,7 @@ export function createContextStore(
     },
 
     createPack(input: ContextPackInput): ContextPack {
-      const candidates =
-        input.recordIds && input.recordIds.length > 0
-          ? input.recordIds
-              .map((contextId) => records.get(contextId))
-              .filter((record): record is ContextRecord => Boolean(record))
-          : rankedRecords({ query: `${input.objective} ${input.query}`, limit: records.size }).map(
-              (record) => records.get(record.contextId),
-            ).filter((record): record is ContextRecord => Boolean(record));
+      const candidates = recordsForPackInput(input);
       const included: ContextRecord[] = [];
       let usedChars = 0;
       for (const record of candidates) {
@@ -227,6 +342,19 @@ export function createContextStore(
       packs.set(packId, pack);
       emitChange();
       return clonePack(pack);
+    },
+
+    reviewPackBudget,
+
+    refreshPack(input: ContextPackBudgetReviewInput): ContextPackRefreshResult {
+      const review = reviewPackBudget(input);
+      const pack = this.createPack({
+        objective: input.objective,
+        query: input.query,
+        maxChars: input.maxChars,
+        recordIds: review.retained.map((decision) => decision.contextId),
+      });
+      return { review, pack };
     },
 
     renderPack(input: { packId: string }): string {

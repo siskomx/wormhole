@@ -602,6 +602,85 @@ describe("Wormhole MCP tool handlers", () => {
     }
   });
 
+  it("runs native coordination-loop context, workspace, and live policy handlers", () => {
+    const tools = createToolHandlers(createInMemoryKernel());
+    const pinned = tools.ctxRecord({
+      source: "src/shared.ts",
+      sourceType: "file",
+      text: "Shared coordination memory should stay available to workers.",
+      tags: ["coordination"],
+    });
+    const stale = tools.ctxRecord({
+      source: "src/old.ts",
+      sourceType: "file",
+      text: "Old coordination notes should be evicted from refreshed packs.",
+      tags: ["stale"],
+    });
+    const review = tools.ctxPackBudgetReview({
+      objective: "Coordinate parallel workers",
+      query: "coordination workers",
+      maxChars: 160,
+      recordIds: [pinned.contextId, stale.contextId],
+      pinnedRecordIds: [pinned.contextId],
+      staleRecordIds: [stale.contextId],
+    });
+    const refreshed = tools.ctxPackRefresh({
+      objective: "Coordinate parallel workers",
+      query: "coordination workers",
+      maxChars: 160,
+      recordIds: [pinned.contextId, stale.contextId],
+      pinnedRecordIds: [pinned.contextId],
+      staleRecordIds: [stale.contextId],
+    });
+    const workspace = tools.agentWorkspaceCreate({
+      missionId: "M1",
+      objective: "Share worker findings.",
+    });
+    tools.agentWorkspaceWrite({
+      workspaceId: workspace.workspaceId,
+      runId: "run-a",
+      key: "finding",
+      value: "Worker A found a test gap.",
+    });
+    tools.agentWorkspaceWrite({
+      workspaceId: workspace.workspaceId,
+      runId: "run-b",
+      key: "finding",
+      value: "Worker B found a context gap.",
+    });
+    const merge = tools.agentWorkspaceMerge({
+      workspaceId: workspace.workspaceId,
+      runIds: ["run-a", "run-b"],
+    });
+    const feedback = tools.orchestrationPolicyLiveFeedback({
+      traceId: "live-1",
+      taskKind: "feature",
+      graphNodeCount: 120,
+      evidenceCount: 1,
+      openQuestions: 1,
+      action: {
+        workerCount: 2,
+        verifierCount: 0,
+        maxDepth: 2,
+        modelProfile: "balanced",
+      },
+      outcome: {
+        testsPassed: false,
+        evidenceCount: 1,
+        openQuestions: 1,
+        durationMs: 60_000,
+        tokenEstimate: 75_000,
+        userCorrectionCount: 1,
+      },
+    });
+
+    expect(review.evicted.map((record) => record.contextId)).toEqual([stale.contextId]);
+    expect(refreshed.pack.contextIds).toEqual([pinned.contextId]);
+    expect(merge.conflicts.map((conflict) => conflict.key)).toEqual(["finding"]);
+    expect(feedback.advisory.activationChanged).toBe(false);
+    expect(feedback.advisory.recommendedAction.stopRule).toBe("escalate");
+  });
+
   it("builds and queries the repo index through generic tool handlers", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-index-"));
     mkdirSync(path.join(repoRoot, "src"), { recursive: true });

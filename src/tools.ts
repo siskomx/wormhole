@@ -11,10 +11,19 @@ import {
 import {
   createContextStore,
   type ContextRecordInput,
+  type ContextPackBudgetReviewInput,
   type ContextPackInput,
   type ContextQueryInput,
   type ContextStoreSnapshot,
 } from "./context-store.js";
+import {
+  createAgentWorkspaceStore,
+  type AgentWorkspaceCreateInput,
+  type AgentWorkspaceMergeInput,
+  type AgentWorkspaceReadInput,
+  type AgentWorkspaceSnapshot,
+  type AgentWorkspaceWriteInput,
+} from "./agent-workspace.js";
 import { createGraphArtifacts, type GraphCommunity } from "./graph-artifacts.js";
 import type {
   EvidenceInput,
@@ -228,6 +237,7 @@ type RuntimeToolState = {
   reasoning?: Partial<ReasoningResearchSnapshot>;
   diagnostics?: Partial<DiagnosticStoreSnapshot>;
   optimizationAdapters?: Partial<OptimizationAdapterSnapshot>;
+  agentWorkspace?: Partial<AgentWorkspaceSnapshot>;
 };
 
 function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): string {
@@ -259,6 +269,21 @@ function resolveAllowedRepoRoot(repoRoot: string, allowedRepoRoots: string[]): s
     throw new Error("Repo root must stay within an allowed workspace root");
   }
   return absoluteRoot;
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort((left, right) =>
+    left.localeCompare(right),
+  );
+}
+
+function repoRelativePath(repoRoot: string, value: string): string {
+  const absoluteValue = path.isAbsolute(value) ? path.resolve(value) : path.resolve(repoRoot, value);
+  const relativePath = path.relative(repoRoot, absoluteValue);
+  if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    return value.replace(/\\/g, "/");
+  }
+  return relativePath.replace(/\\/g, "/");
 }
 
 function defaultHomeDir(): string {
@@ -302,6 +327,9 @@ export function createToolHandlers(
   );
   const contextStore = createContextStore(runtimeState.context, (snapshot) =>
     persistRuntimeState("context", snapshot),
+  );
+  const agentWorkspaceStore = createAgentWorkspaceStore(runtimeState.agentWorkspace, (snapshot) =>
+    persistRuntimeState("agentWorkspace", snapshot),
   );
   const optimizationStore = createOptimizationStore(runtimeState.optimization, (snapshot) =>
     persistRuntimeState("optimization", snapshot),
@@ -449,6 +477,14 @@ export function createToolHandlers(
 
     ctxPackCreate(input: ContextPackInput) {
       return contextStore.createPack(input);
+    },
+
+    ctxPackBudgetReview(input: ContextPackBudgetReviewInput) {
+      return contextStore.reviewPackBudget(input);
+    },
+
+    ctxPackRefresh(input: ContextPackBudgetReviewInput) {
+      return contextStore.refreshPack(input);
     },
 
     ctxPackRender(input: { packId: string }) {
@@ -744,6 +780,10 @@ export function createToolHandlers(
       return policyStore.getActive();
     },
 
+    orchestrationPolicyLiveFeedback(input: OrchestrationTrace) {
+      return policyStore.recordLiveFeedback(input);
+    },
+
     reasoningTraceRecord(input: ReasoningTrace) {
       return reasoningStore.record(input);
     },
@@ -982,6 +1022,49 @@ export function createToolHandlers(
       return diagnosticStore.query(input);
     },
 
+    lspFeedbackReplan(
+      input: Parameters<typeof normalizeLspDiagnostics>[0] &
+        Omit<MissionDeltaReplanInput, "repoRoot" | "objective" | "changedFiles" | "diagnostics"> & {
+          repoRoot?: string;
+          objective?: string;
+          changedFiles?: string[];
+        },
+    ) {
+      const mission = input.missionId ? kernel.missionStatus(input.missionId).mission : undefined;
+      const repoRootInput = input.repoRoot ?? mission?.repoRoot;
+      const objective = input.objective ?? mission?.objective;
+      if (!repoRootInput) {
+        throw new Error("lsp_feedback_replan requires repoRoot or missionId");
+      }
+      if (!objective) {
+        throw new Error("lsp_feedback_replan requires objective or missionId");
+      }
+      const repoRoot = resolveAllowedRepoRoot(repoRootInput, allowedRepoRoots);
+      const diagnostics = normalizeLspDiagnostics(input).map((diagnostic) => ({
+        ...diagnostic,
+        file: diagnostic.file ? repoRelativePath(repoRoot, diagnostic.file) : undefined,
+      }));
+      const recordedDiagnostics = diagnosticStore.recordMany(diagnostics);
+      const changedFiles = uniqueSorted([
+        ...(input.changedFiles ?? []).map((file) => repoRelativePath(repoRoot, file)),
+        ...diagnostics.map((diagnostic) => diagnostic.file ?? ""),
+      ]);
+      return {
+        recorded: {
+          diagnostics: recordedDiagnostics,
+          count: recordedDiagnostics.length,
+        },
+        changedFiles,
+        replan: createMissionDeltaReplan({
+          ...input,
+          repoRoot,
+          objective,
+          changedFiles,
+          diagnostics,
+        }),
+      };
+    },
+
     impactAnalyze(input: { repoRoot: string; changedFiles: string[] }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return analyzeImpact({ ...input, repoRoot });
@@ -1192,6 +1275,22 @@ export function createToolHandlers(
 
     lspSessionStop(input: { sessionId: string }) {
       return lspSessionManager.stop(input);
+    },
+
+    agentWorkspaceCreate(input: AgentWorkspaceCreateInput) {
+      return agentWorkspaceStore.create(input);
+    },
+
+    agentWorkspaceWrite(input: AgentWorkspaceWriteInput) {
+      return agentWorkspaceStore.write(input);
+    },
+
+    agentWorkspaceRead(input: AgentWorkspaceReadInput) {
+      return agentWorkspaceStore.read(input);
+    },
+
+    agentWorkspaceMerge(input: AgentWorkspaceMergeInput) {
+      return agentWorkspaceStore.merge(input);
     },
 
     optimizationAdapterRegister(input: OptimizationAdapterDescriptor) {

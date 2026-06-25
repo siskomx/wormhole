@@ -27,6 +27,10 @@ describe("repo-local Codex plugin metadata", () => {
     expect(plugin.interface.longDescription).toContain("validated writable tool scaffolds");
     expect(plugin.interface.longDescription).toContain("executable external agent dispatch");
     expect(plugin.interface.longDescription).toContain("durable brevity/minimality policy");
+    expect(plugin.interface.longDescription).toContain("context-pack budget review");
+    expect(plugin.interface.longDescription).toContain("LSP feedback replanning");
+    expect(plugin.interface.longDescription).toContain("shared agent workspace memory");
+    expect(plugin.interface.longDescription).toContain("safe live policy feedback");
     expect(plugin.interface.longDescription).toContain("native media ingestion");
     expect(plugin.interface.longDescription).toContain("shell hook management");
     expect(plugin.interface.longDescription).toContain("discovery-driven tool generation");
@@ -72,9 +76,13 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.server.mcp_config.args).toEqual(["${__dirname}/server/index.js"]);
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_dispatch");
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_dispatch_execute");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("agent_workspace_create");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("agent_workspace_merge");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_plan_local");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_run_local");
     expect(manifest.tools.map((tool) => tool.name)).toContain("ctx_pack_create");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("ctx_pack_budget_review");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("ctx_pack_refresh");
     expect(manifest.tools.map((tool) => tool.name)).toContain("optimization_apply");
     expect(manifest.tools.map((tool) => tool.name)).toContain("repo_index_query");
     expect(manifest.tools.map((tool) => tool.name)).toContain("repo_index_explain");
@@ -108,6 +116,7 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("dependency_security_report");
     expect(manifest.tools.map((tool) => tool.name)).toContain("action_policy_review");
     expect(manifest.tools.map((tool) => tool.name)).toContain("lsp_session_start");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("lsp_feedback_replan");
     expect(manifest.tools.map((tool) => tool.name)).toContain("lsp_session_request");
     expect(manifest.tools.map((tool) => tool.name)).toContain("optimization_adapter_register");
     expect(manifest.tools.map((tool) => tool.name)).toContain("optimization_adapter_run");
@@ -131,6 +140,7 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("discovery_tool_spec_generate");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_policy_activate");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_policy_compare_baselines");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_policy_live_feedback");
     expect(manifest.tools.map((tool) => tool.name)).toContain("reasoning_trace_record");
     expect(manifest.tools.map((tool) => tool.name)).toContain("reasoning_strategy_evaluate");
     expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_register");
@@ -149,6 +159,12 @@ describe("Claude Desktop extension metadata", () => {
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "optimized_command_run",
+    );
+    expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
+      "agent_workspace_create",
+    );
+    expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
+      "lsp_feedback_replan",
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "reasoning_strategy_evaluate",

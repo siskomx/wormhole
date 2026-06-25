@@ -176,6 +176,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Durable native source-backed context records, ranked context queries, and budgeted context pack rendering with provenance.",
       },
       {
+        id: "orchestration.context-pack-eviction",
+        area: "orchestration",
+        status: "implemented",
+        description: "Deterministic context-pack budget review and refresh with pinned records, stale-record eviction, changed-file relevance, and explicit evicted-record reasons.",
+      },
+      {
         id: "orchestration.reversible-optimization-pipeline",
         area: "orchestration",
         status: "implemented",
@@ -264,6 +270,18 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         area: "orchestration",
         status: "implemented",
         description: "Automatic mid-mission re-scope reports from changed files, diagnostics, blast radius, stale evidence, focused tests, context packs, and gate guidance.",
+      },
+      {
+        id: "orchestration.lsp-feedback-replanning",
+        area: "orchestration",
+        status: "implemented",
+        description: "LSP diagnostic feedback loop that records structured diagnostics and feeds mission-delta replanning with repo-relative changed files.",
+      },
+      {
+        id: "orchestration.agent-workspace-memory",
+        area: "orchestration",
+        status: "implemented",
+        description: "Shared mission workspace memory for concurrent agent runs with attributed records, provenance, snapshot persistence, merge views, and conflict detection.",
       },
       {
         id: "orchestration.graph-artifact-suite",
@@ -366,6 +384,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         area: "adaptive",
         status: "implemented",
         description: "Offline trace datasets, deterministic policy training/evaluation, replay thresholds, activation gates, and runtime action clamps for learned orchestration policy.",
+      },
+      {
+        id: "adaptive.safe-live-policy-feedback",
+        area: "adaptive",
+        status: "implemented",
+        description: "Live orchestration outcome feedback that records traces and returns bounded advisory hints without self-training or activating policies.",
       },
       {
         id: "adaptive.orchestration-policy-lab",

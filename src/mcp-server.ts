@@ -240,6 +240,30 @@ export function createWormholeMcpServer(
     summary: z.string(),
     recordedAt: z.string().optional(),
   });
+  const contextPackBudgetReviewSchema = {
+    objective: z.string(),
+    query: z.string(),
+    maxChars: z.number(),
+    recordIds: z.array(z.string()).optional(),
+    pinnedRecordIds: z.array(z.string()).optional(),
+    staleRecordIds: z.array(z.string()).optional(),
+    changedFiles: z.array(z.string()).optional(),
+  };
+  const lspDiagnosticSchema = z.object({
+    range: z.object({
+      start: z.object({ line: z.number(), character: z.number() }),
+      end: z.object({ line: z.number(), character: z.number() }).optional(),
+    }),
+    severity: z.number().optional(),
+    code: z.union([z.string(), z.number()]).optional(),
+    source: z.string().optional(),
+    message: z.string(),
+  });
+  const agentWorkspaceProvenanceSchema = z.object({
+    sourceTool: z.string().optional(),
+    evidenceIds: z.array(z.string()).optional(),
+    artifactIds: z.array(z.string()).optional(),
+  });
 
   server.registerTool(
     "mission_start",
@@ -524,6 +548,24 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.ctxPackCreate(input)),
+  );
+
+  server.registerTool(
+    "ctx_pack_budget_review",
+    {
+      description: "Review context-pack budget pressure and return deterministic retain/evict decisions.",
+      inputSchema: contextPackBudgetReviewSchema,
+    },
+    async (input) => jsonResult(tools.ctxPackBudgetReview(input)),
+  );
+
+  server.registerTool(
+    "ctx_pack_refresh",
+    {
+      description: "Refresh a context pack using pinned, stale, changed-file, and budget eviction rules.",
+      inputSchema: contextPackBudgetReviewSchema,
+    },
+    async (input) => jsonResult(tools.ctxPackRefresh(input)),
   );
 
   server.registerTool(
@@ -1359,18 +1401,7 @@ export function createWormholeMcpServer(
       description: "Normalize LSP diagnostics into Wormhole's structured diagnostic records.",
       inputSchema: {
         uri: z.string(),
-        diagnostics: z.array(
-          z.object({
-            range: z.object({
-              start: z.object({ line: z.number(), character: z.number() }),
-              end: z.object({ line: z.number(), character: z.number() }).optional(),
-            }),
-            severity: z.number().optional(),
-            code: z.union([z.string(), z.number()]).optional(),
-            source: z.string().optional(),
-            message: z.string(),
-          }),
-        ),
+        diagnostics: z.array(lspDiagnosticSchema),
       },
     },
     async (input) => jsonResult(tools.diagnosticsFromLsp(input)),
@@ -1398,6 +1429,25 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.diagnosticsQuery(input)),
+  );
+
+  server.registerTool(
+    "lsp_feedback_replan",
+    {
+      description: "Record LSP diagnostics and re-scope the mission through mission-delta replanning.",
+      inputSchema: {
+        missionId: z.string().optional(),
+        repoRoot: z.string().optional(),
+        objective: z.string().optional(),
+        uri: z.string(),
+        diagnostics: z.array(lspDiagnosticSchema),
+        changedFiles: z.array(z.string()).optional(),
+        diffText: z.string().optional(),
+        evidenceRecords: z.array(missionDeltaEvidenceSchema).optional(),
+        maxContextChars: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.lspFeedbackReplan(input)),
   );
 
   server.registerTool(
@@ -1819,6 +1869,60 @@ export function createWormholeMcpServer(
   );
 
   server.registerTool(
+    "agent_workspace_create",
+    {
+      description: "Create shared mission workspace memory for concurrent agent runs.",
+      inputSchema: {
+        missionId: z.string(),
+        objective: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.agentWorkspaceCreate(input)),
+  );
+
+  server.registerTool(
+    "agent_workspace_write",
+    {
+      description: "Write an attributed shared-memory record for an agent run.",
+      inputSchema: {
+        workspaceId: z.string(),
+        runId: z.string().optional(),
+        key: z.string(),
+        value: z.unknown(),
+        visibility: z.enum(["shared", "private"]).optional(),
+        provenance: agentWorkspaceProvenanceSchema.optional(),
+      },
+    },
+    async (input) => jsonResult(tools.agentWorkspaceWrite(input)),
+  );
+
+  server.registerTool(
+    "agent_workspace_read",
+    {
+      description: "Read shared mission workspace records by workspace, key, run, or visibility.",
+      inputSchema: {
+        workspaceId: z.string(),
+        key: z.string().optional(),
+        runId: z.string().optional(),
+        visibility: z.enum(["shared", "private"]).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.agentWorkspaceRead(input)),
+  );
+
+  server.registerTool(
+    "agent_workspace_merge",
+    {
+      description: "Merge shared workspace records and report concurrent-write conflicts by key.",
+      inputSchema: {
+        workspaceId: z.string(),
+        runIds: z.array(z.string()).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.agentWorkspaceMerge(input)),
+  );
+
+  server.registerTool(
     "lsp_session_start",
     {
       description: "Start a bounded process-local LSP JSON-RPC session.",
@@ -2172,6 +2276,23 @@ export function createWormholeMcpServer(
       inputSchema: {},
     },
     async () => jsonResult(tools.orchestrationPolicyGet()),
+  );
+
+  server.registerTool(
+    "orchestration_policy_live_feedback",
+    {
+      description: "Record live orchestration feedback and return bounded advisory hints without activating policies.",
+      inputSchema: {
+        traceId: z.string(),
+        taskKind: z.string(),
+        graphNodeCount: z.number(),
+        evidenceCount: z.number(),
+        openQuestions: z.number(),
+        action: policyActionSchema,
+        outcome: policyOutcomeSchema,
+      },
+    },
+    async (input) => jsonResult(tools.orchestrationPolicyLiveFeedback(input)),
   );
 
   const reasoningTraceSchema = {
