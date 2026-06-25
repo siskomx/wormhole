@@ -248,6 +248,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "One-shot project onboarding, process-local LSP sessions, durable repo and semantic indexes, diff-aware test impact, dependency security reports, action admission policy, and optimization adapter execution.",
       },
       {
+        id: "orchestration.native-project-intelligence-spine",
+        area: "orchestration",
+        status: "implemented",
+        description: "Native architecture maps, entrypoint flow discovery, blast-radius analysis, and task-scoped project context packs built from typed repo observations with provenance.",
+      },
+      {
         id: "orchestration.graph-artifact-suite",
         area: "orchestration",
         status: "implemented",

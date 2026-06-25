@@ -149,6 +149,19 @@ Project intelligence sequencing composes the ground-truth tools into a higher-le
 
 These tools still keep TypeScript authoritative for gates, schemas, process bounds, and repo-root confinement. Live LSP behavior depends on installed server binaries; unavailable commands return structured unavailable results.
 
+## Native Project Intelligence Spine
+
+Wormhole now exposes a native project-intelligence spine above the repo index and project ground-truth tools. The spine treats architecture, entrypoints, blast radius, and context packs as typed Wormhole observations instead of external-tool summaries.
+
+The tools are:
+
+- `architecture_map`: groups indexed files into modules, attaches CODEOWNERS-style ownership, summarizes symbols, entrypoint counts, dependencies, dependents, and evidence.
+- `entrypoint_flow_discover`: detects API, CLI, worker, and package-script entrypoints and links them to downstream repo files through the native repo graph.
+- `blast_radius_analyze`: maps changed files and diff hunks to changed symbols, impacted files, impacted modules, impacted entrypoints, and confidence-scored likely tests.
+- `context_pack_generate`: renders a task-scoped context pack from architecture, entrypoints, blast radius, and relevant source snippets within a caller-supplied character budget.
+
+External tools can still sync observations into future versions of this model, but Wormhole's native tools remain the default source of project intelligence. Imported observations should carry provenance, confidence, source tool identity, and repo fingerprint metadata before they influence gates or context packs.
+
 ## External Agent Adapters
 
 External AI agents and model providers are registered as bounded Wormhole workers through `agent_register`.

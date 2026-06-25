@@ -107,6 +107,12 @@ import {
   type OptimizationAdapterSnapshot,
 } from "./optimization-adapter.js";
 import { projectOnboard } from "./project-onboard.js";
+import {
+  analyzeBlastRadius,
+  createArchitectureMap,
+  discoverEntrypointFlows,
+  generateProjectContextPack,
+} from "./project-intelligence.js";
 import { analyzeTestImpactV2 } from "./test-impact-v2.js";
 import { reconcileArtifacts, type ArtifactProposal } from "./reconciliation.js";
 import { createDagSchedule, type ScheduledTask } from "./scheduler.js";
@@ -1014,6 +1020,32 @@ export function createToolHandlers(
     projectOnboard(input: Parameters<typeof projectOnboard>[0]) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return projectOnboard({ ...input, repoRoot });
+    },
+
+    architectureMap(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return createArchitectureMap({ repoRoot });
+    },
+
+    entrypointFlowDiscover(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return discoverEntrypointFlows({ repoRoot });
+    },
+
+    blastRadiusAnalyze(input: { repoRoot: string; changedFiles: string[]; diffText?: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return analyzeBlastRadius({ ...input, repoRoot });
+    },
+
+    contextPackGenerate(input: {
+      repoRoot: string;
+      objective: string;
+      query: string;
+      changedFiles?: string[];
+      maxChars: number;
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return generateProjectContextPack({ ...input, repoRoot });
     },
 
     durableRepoIndexRefresh(input: RepoIndexBuildOptions) {

@@ -38,4 +38,5 @@ export * from "./durable-index-store.js";
 export * from "./lsp-session-manager.js";
 export * from "./optimization-adapter.js";
 export * from "./project-onboard.js";
+export * from "./project-intelligence.js";
 export * from "./test-impact-v2.js";

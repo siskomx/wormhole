@@ -1465,6 +1465,56 @@ export function createWormholeMcpServer(
   );
 
   server.registerTool(
+    "architecture_map",
+    {
+      description: "Create a native architecture map with modules, owners, dependencies, entrypoint counts, and source-backed evidence.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.architectureMap(input)),
+  );
+
+  server.registerTool(
+    "entrypoint_flow_discover",
+    {
+      description: "Discover native API, CLI, worker, and package-script entrypoints with downstream repo files.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.entrypointFlowDiscover(input)),
+  );
+
+  server.registerTool(
+    "blast_radius_analyze",
+    {
+      description: "Analyze changed files and diff hunks against the native project model to find impacted files, modules, entrypoints, and likely tests.",
+      inputSchema: {
+        repoRoot: z.string(),
+        changedFiles: z.array(z.string()),
+        diffText: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.blastRadiusAnalyze(input)),
+  );
+
+  server.registerTool(
+    "context_pack_generate",
+    {
+      description: "Generate a task-scoped native project context pack from architecture, entrypoints, blast radius, and relevant source files.",
+      inputSchema: {
+        repoRoot: z.string(),
+        objective: z.string(),
+        query: z.string(),
+        changedFiles: z.array(z.string()).optional(),
+        maxChars: z.number(),
+      },
+    },
+    async (input) => jsonResult(tools.contextPackGenerate(input)),
+  );
+
+  server.registerTool(
     "durable_repo_index_refresh",
     {
       description: "Refresh and persist the repo index under .wormhole/indexes.",
