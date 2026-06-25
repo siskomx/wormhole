@@ -57,6 +57,41 @@ import {
   type ReasoningTrace,
   type ReasoningResearchSnapshot,
 } from "./reasoning-research.js";
+import {
+  createDiagnosticStore,
+  normalizeCommandDiagnostics,
+  normalizeLspDiagnostics,
+  type DiagnosticRecord,
+  type DiagnosticStoreSnapshot,
+  type DiagnosticQuery,
+} from "./diagnostics.js";
+import { analyzeImpact } from "./impact-analysis.js";
+import {
+  detectProjectContract,
+  type ProjectContract,
+} from "./project-contract.js";
+import {
+  createVerificationPlan,
+  runVerificationPlan,
+  type VerificationCommand,
+} from "./verification-runner.js";
+import {
+  reviewOperationRisk,
+  scanRepoForSecrets,
+  scanTextForSecrets,
+} from "./safety-scan.js";
+import {
+  buildSemanticIndex,
+  semanticSearch,
+  type SemanticIndex,
+  type SemanticRecordInput,
+} from "./semantic-search.js";
+import {
+  detectLanguageServerConfigs,
+  lspProbe,
+  normalizeLspLocation,
+  type LspProtocolLocation,
+} from "./lsp-ground-truth.js";
 import { reconcileArtifacts, type ArtifactProposal } from "./reconciliation.js";
 import { createDagSchedule, type ScheduledTask } from "./scheduler.js";
 import { createShellHookManager, type ShellHookOperation, type ShellKind } from "./shell-hooks.js";
@@ -146,6 +181,7 @@ type RuntimeToolState = {
   behavior?: Partial<BehaviorMode>;
   policy?: Partial<PolicyStoreSnapshot>;
   reasoning?: Partial<ReasoningResearchSnapshot>;
+  diagnostics?: Partial<DiagnosticStoreSnapshot>;
 };
 
 function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): string {
@@ -240,6 +276,9 @@ export function createToolHandlers(
   );
   const reasoningStore = createReasoningResearchStore(runtimeState.reasoning, (snapshot) =>
     persistRuntimeState("reasoning", snapshot),
+  );
+  const diagnosticStore = createDiagnosticStore(runtimeState.diagnostics, (snapshot) =>
+    persistRuntimeState("diagnostics", snapshot),
   );
   const shellHookPlans = new Map<string, {
     operations: ShellHookOperation[];
@@ -848,6 +887,106 @@ export function createToolHandlers(
       return createGraphArtifacts(getRepoIndex(input.repoRoot), {
         communities: input.communities,
       });
+    },
+
+    projectContractDetect(input: { repoRoot: string }): ProjectContract {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return detectProjectContract({ repoRoot });
+    },
+
+    dependencyInventory(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const contract = detectProjectContract({ repoRoot });
+      return {
+        repoRoot,
+        packageManager: contract.packageManager,
+        dependencies: contract.dependencies,
+      };
+    },
+
+    projectCommandMap(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const contract = detectProjectContract({ repoRoot });
+      return {
+        repoRoot,
+        packageManager: contract.packageManager,
+        scripts: contract.scripts,
+      };
+    },
+
+    diagnosticsFromCommand(input: { source: string; output: string }) {
+      return normalizeCommandDiagnostics(input);
+    },
+
+    diagnosticsFromLsp(input: Parameters<typeof normalizeLspDiagnostics>[0]) {
+      return normalizeLspDiagnostics(input);
+    },
+
+    diagnosticsRecord(input: { diagnostics: DiagnosticRecord[] }) {
+      const diagnostics = diagnosticStore.recordMany(input.diagnostics);
+      return { diagnostics, count: diagnostics.length };
+    },
+
+    diagnosticsQuery(input: DiagnosticQuery = {}) {
+      return diagnosticStore.query(input);
+    },
+
+    impactAnalyze(input: { repoRoot: string; changedFiles: string[] }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return analyzeImpact({ ...input, repoRoot });
+    },
+
+    testPlanSelect(input: { repoRoot: string; changedFiles: string[] }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const contract = detectProjectContract({ repoRoot });
+      const impact = analyzeImpact({ repoRoot, changedFiles: input.changedFiles });
+      return createVerificationPlan({ contract, impact });
+    },
+
+    verificationRun(input: { commands: VerificationCommand[] }) {
+      return runVerificationPlan(input);
+    },
+
+    secretScan(input: { repoRoot?: string; source?: string; text?: string }) {
+      if (input.text !== undefined) {
+        return {
+          findings: scanTextForSecrets({
+            source: input.source ?? "inline",
+            text: input.text,
+          }),
+        };
+      }
+      if (!input.repoRoot) {
+        throw new Error("secret_scan requires repoRoot or text");
+      }
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return scanRepoForSecrets({ repoRoot });
+    },
+
+    operationRiskReview(input: { command: string; args?: string[] }) {
+      return reviewOperationRisk(input);
+    },
+
+    semanticIndexBuild(input: { records: SemanticRecordInput[] }) {
+      return buildSemanticIndex(input);
+    },
+
+    semanticSearch(input: { index: SemanticIndex; query: string; limit?: number }) {
+      return semanticSearch(input.index, { query: input.query, limit: input.limit });
+    },
+
+    lspProbe(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return lspProbe({ repoRoot });
+    },
+
+    lspServerConfigs(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return { repoRoot, servers: detectLanguageServerConfigs({ repoRoot }) };
+    },
+
+    lspNormalizeLocation(input: LspProtocolLocation) {
+      return normalizeLspLocation(input);
     },
 
     toolFactoryGenerate(input: ToolFactoryInput) {

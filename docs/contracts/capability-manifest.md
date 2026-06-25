@@ -49,6 +49,7 @@ Implemented `orchestration` capabilities include:
 - `orchestration.printing-press-cli-adapters`: Printing Press generated CLI registration, capability selection, structural verification, native execution, evidence capture, and conversion into Wormhole external agent workers.
 - `orchestration.printed-tool-runtime`: native printed-tool run records with stdout, stderr, exit code, timeout handling, and immutable evidence hashes.
 - `orchestration.repo-index-graph`: deterministic repo-local file, symbol, import, link, reference, provenance, confidence, query, explain, report, and dependency-path index.
+- `orchestration.project-ground-truth-suite`: project contract detection, dependency inventory, structured diagnostics, impact-aware test planning, verification execution, safety scanning, deterministic semantic fallback search, and safe LSP config probes.
 - `orchestration.graph-artifact-suite`: Graphify-near graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis.
 - `orchestration.optimized-command-runner`: Headroom/RTK-near no-shell command execution with reversible output optimization, retrieval handles, hashes, and savings stats.
 - `orchestration.native-tool-factory`: Printing-Press-near deterministic generation of CLI/MCP scaffold files from constrained tool specs.

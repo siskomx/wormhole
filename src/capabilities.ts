@@ -236,6 +236,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Deterministic repo-local index with file, symbol, import, link, reference, provenance, confidence, query, explain, report, and dependency-path tools.",
       },
       {
+        id: "orchestration.project-ground-truth-suite",
+        area: "orchestration",
+        status: "implemented",
+        description: "Project contract detection, dependency inventory, structured diagnostics, impact-aware test planning, verification execution, safety scanning, deterministic semantic fallback search, and safe LSP config probes.",
+      },
+      {
         id: "orchestration.graph-artifact-suite",
         area: "orchestration",
         status: "implemented",

@@ -120,6 +120,21 @@ Edges carry explicit provenance and confidence: source-backed definitions/import
 
 The MCP-exposed repo index tools are confined to allowed workspace roots. By default, the only allowed root is the server working directory. Hosts can set `WORMHOLE_ALLOWED_REPO_ROOTS` to a comma- or semicolon-separated allowlist when they need multiple repo roots. Index caches are keyed by repo root plus build options and refreshed from a content fingerprint before query, explain, or path operations. `include` and `exclude` are path patterns: plain names match path segments, slash-containing values match exact paths or descendants, and `*`/`**`/`?` provide glob-style matching.
 
+## Project Ground Truth Suite
+
+Wormhole includes first-party project-onboarding tools for agents entering a new or changed repository:
+
+- `project_contract_detect`, `dependency_inventory`, and `project_command_map` detect package-manager state, scripts, lockfiles, dependencies, env hints, and ports.
+- `diagnostics_from_command`, `diagnostics_from_lsp`, `diagnostics_record`, and `diagnostics_query` normalize and persist compiler, test, command, and LSP diagnostics.
+- `impact_analyze` combines changed files with repo graph edges and test-file heuristics.
+- `test_plan_select` creates focused verification commands from project contracts and impact analysis.
+- `verification_run` executes selected checks through the optimized command runner, preserving hashes and compacted output.
+- `secret_scan` and `operation_risk_review` provide lightweight preflight safety checks before agents run risky actions.
+- `semantic_index_build` and `semantic_search` provide a deterministic local fallback when an embedding provider is unavailable.
+- `lsp_probe`, `lsp_server_configs`, and `lsp_normalize_location` provide safe language-server startup config discovery and protocol normalization. This slice does not start or supervise long-lived language-server processes.
+
+These tools are repo-root confined where they read project files. They complement the repo graph; source-backed claims still need evidence records before the gate opens.
+
 ## External Agent Adapters
 
 External AI agents and model providers are registered as bounded Wormhole workers through `agent_register`.
@@ -156,6 +171,7 @@ Printing Press factory parity is implemented as a bounded native tool-spec pipel
 Wormhole implements native near-equivalent runtime capabilities for the practical parts of the systems that influenced it:
 
 - Graphify-near: `repo_index_*`, `repo_graph_export`, `python_graph_metrics`, and `python_graph_communities`.
+- Project-ground-truth-near: `project_contract_detect`, `diagnostics_*`, `impact_analyze`, `test_plan_select`, `verification_run`, `secret_scan`, `operation_risk_review`, `semantic_*`, and `lsp_*`.
 - Headroom/RTK-near: `optimization_apply`, `optimization_retrieve`, `optimized_command_run`, and `optimization_stats`.
 - Printing Press-near: `printing_press_*` runtime tools and `tool_factory_generate`.
 - Fugu-near: `model_profile_*`, `conductor_plan`, and `conductor_replay`.

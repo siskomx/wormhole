@@ -85,6 +85,54 @@ export function createWormholeMcpServer(
     privacy: z.enum(["local", "external"]),
     contextWindow: z.number(),
   };
+  const diagnosticSeveritySchema = z.enum(["error", "warning", "info", "hint"]);
+  const diagnosticRecordSchema = z.object({
+    diagnosticId: z.string(),
+    source: z.string(),
+    severity: diagnosticSeveritySchema,
+    message: z.string(),
+    file: z.string().optional(),
+    line: z.number().optional(),
+    column: z.number().optional(),
+    code: z.string().optional(),
+    recordedAt: z.string(),
+  });
+  const verificationCommandSchema = z.object({
+    name: z.string(),
+    command: z.string(),
+    args: z.array(z.string()).optional(),
+    cwd: z.string().optional(),
+    timeoutMs: z.number().optional(),
+    stdin: z.string().optional(),
+    reason: z.string().optional(),
+  });
+  const semanticRecordSchema = z.object({
+    id: z.string(),
+    path: z.string().optional(),
+    text: z.string(),
+  });
+  const semanticIndexSchema = z.object({
+    indexId: z.string(),
+    provider: z.literal("deterministic-token-overlap"),
+    records: z.array(
+      semanticRecordSchema.extend({
+        tokens: z.array(z.string()),
+      }),
+    ),
+  });
+  const lspLocationSchema = z.object({
+    uri: z.string(),
+    range: z.object({
+      start: z.object({
+        line: z.number(),
+        character: z.number(),
+      }),
+      end: z.object({
+        line: z.number(),
+        character: z.number(),
+      }),
+    }),
+  });
 
   server.registerTool(
     "mission_start",
@@ -1151,6 +1199,213 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.repoGraphExport(input)),
+  );
+
+  server.registerTool(
+    "project_contract_detect",
+    {
+      description: "Detect package manager, scripts, dependencies, env hints, lockfiles, and ports for a repo.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.projectContractDetect(input)),
+  );
+
+  server.registerTool(
+    "dependency_inventory",
+    {
+      description: "Return dependency inventory from the detected project contract.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.dependencyInventory(input)),
+  );
+
+  server.registerTool(
+    "project_command_map",
+    {
+      description: "Return package scripts and package-manager command context for a repo.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.projectCommandMap(input)),
+  );
+
+  server.registerTool(
+    "diagnostics_from_command",
+    {
+      description: "Normalize compiler, test, and command output into structured diagnostics.",
+      inputSchema: {
+        source: z.string(),
+        output: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.diagnosticsFromCommand(input)),
+  );
+
+  server.registerTool(
+    "diagnostics_from_lsp",
+    {
+      description: "Normalize LSP diagnostics into Wormhole's structured diagnostic records.",
+      inputSchema: {
+        uri: z.string(),
+        diagnostics: z.array(
+          z.object({
+            range: z.object({
+              start: z.object({ line: z.number(), character: z.number() }),
+              end: z.object({ line: z.number(), character: z.number() }).optional(),
+            }),
+            severity: z.number().optional(),
+            code: z.union([z.string(), z.number()]).optional(),
+            source: z.string().optional(),
+            message: z.string(),
+          }),
+        ),
+      },
+    },
+    async (input) => jsonResult(tools.diagnosticsFromLsp(input)),
+  );
+
+  server.registerTool(
+    "diagnostics_record",
+    {
+      description: "Persist structured diagnostics in handler runtime state.",
+      inputSchema: {
+        diagnostics: z.array(diagnosticRecordSchema),
+      },
+    },
+    async (input) => jsonResult(tools.diagnosticsRecord(input)),
+  );
+
+  server.registerTool(
+    "diagnostics_query",
+    {
+      description: "Query persisted diagnostics by severity, source, or file suffix.",
+      inputSchema: {
+        severity: diagnosticSeveritySchema.optional(),
+        source: z.string().optional(),
+        file: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.diagnosticsQuery(input)),
+  );
+
+  server.registerTool(
+    "impact_analyze",
+    {
+      description: "Analyze impacted files and likely tests from changed files using the native repo graph.",
+      inputSchema: {
+        repoRoot: z.string(),
+        changedFiles: z.array(z.string()),
+      },
+    },
+    async (input) => jsonResult(tools.impactAnalyze(input)),
+  );
+
+  server.registerTool(
+    "test_plan_select",
+    {
+      description: "Select a focused verification plan from project contract and impact analysis.",
+      inputSchema: {
+        repoRoot: z.string(),
+        changedFiles: z.array(z.string()),
+      },
+    },
+    async (input) => jsonResult(tools.testPlanSelect(input)),
+  );
+
+  server.registerTool(
+    "verification_run",
+    {
+      description: "Run selected verification commands through the optimized command runner.",
+      inputSchema: {
+        commands: z.array(verificationCommandSchema),
+      },
+    },
+    async (input) => jsonResult(await tools.verificationRun(input)),
+  );
+
+  server.registerTool(
+    "secret_scan",
+    {
+      description: "Scan repo files or supplied text for likely secrets with redacted findings.",
+      inputSchema: {
+        repoRoot: z.string().optional(),
+        source: z.string().optional(),
+        text: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.secretScan(input)),
+  );
+
+  server.registerTool(
+    "operation_risk_review",
+    {
+      description: "Review a command for destructive or approval-worthy operation risk.",
+      inputSchema: {
+        command: z.string(),
+        args: z.array(z.string()).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.operationRiskReview(input)),
+  );
+
+  server.registerTool(
+    "semantic_index_build",
+    {
+      description: "Build a deterministic local semantic fallback index from caller-supplied records.",
+      inputSchema: {
+        records: z.array(semanticRecordSchema),
+      },
+    },
+    async (input) => jsonResult(tools.semanticIndexBuild(input)),
+  );
+
+  server.registerTool(
+    "semantic_search",
+    {
+      description: "Search a deterministic semantic fallback index by token-overlap relevance.",
+      inputSchema: {
+        index: semanticIndexSchema,
+        query: z.string(),
+        limit: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.semanticSearch(input)),
+  );
+
+  server.registerTool(
+    "lsp_probe",
+    {
+      description: "Detect safe language-server startup config without spawning long-lived servers.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.lspProbe(input)),
+  );
+
+  server.registerTool(
+    "lsp_server_configs",
+    {
+      description: "Return detected language-server command configs for a repo.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.lspServerConfigs(input)),
+  );
+
+  server.registerTool(
+    "lsp_normalize_location",
+    {
+      description: "Normalize an LSP file location into one-based editor coordinates.",
+      inputSchema: lspLocationSchema.shape,
+    },
+    async (input) => jsonResult(tools.lspNormalizeLocation(input)),
   );
 
   server.registerTool(

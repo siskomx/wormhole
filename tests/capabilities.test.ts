@@ -122,6 +122,7 @@ describe("capability manifest", () => {
         "orchestration.printing-press-cli-adapters",
         "orchestration.printed-tool-runtime",
         "orchestration.repo-index-graph",
+        "orchestration.project-ground-truth-suite",
         "orchestration.graph-artifact-suite",
         "orchestration.optimized-command-runner",
         "orchestration.native-tool-factory",
