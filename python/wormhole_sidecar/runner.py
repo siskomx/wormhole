@@ -5,6 +5,11 @@ import sys
 from wormhole_sidecar import __version__
 from wormhole_sidecar.community import detect_communities
 from wormhole_sidecar.graph_metrics import compute_graph_metrics
+from wormhole_sidecar.media_image import dependency_report as image_dependency_report
+from wormhole_sidecar.media_image import inspect_image
+from wormhole_sidecar.media_pdf import dependency_report as pdf_dependency_report
+from wormhole_sidecar.media_pdf import extract_pdf
+from wormhole_sidecar.policy_train import evaluate_policy, train_policy
 from wormhole_sidecar.trace_analysis import summarize_traces
 
 
@@ -25,6 +30,19 @@ def run_job(request):
         return summarize_traces(payload)
     if job == "graph_communities":
         return detect_communities(payload)
+    if job == "media_dependency_report":
+        return {
+            "pdf": pdf_dependency_report(),
+            "image": image_dependency_report(),
+        }
+    if job == "pdf_extract":
+        return extract_pdf(payload)
+    if job == "image_inspect":
+        return inspect_image(payload)
+    if job == "policy_train":
+        return train_policy(payload)
+    if job == "policy_evaluate":
+        return evaluate_policy(payload)
 
     raise ValueError(f"Unsupported sidecar job: {job}")
 

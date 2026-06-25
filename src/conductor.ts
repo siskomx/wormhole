@@ -11,6 +11,13 @@ export type ConductorInput = {
   complexity: ConductorComplexity;
   requiredStrengths: string[];
   modelProfileIds: string[];
+  policyHint?: {
+    policyId: string;
+    workerCount?: number;
+    verifierCount?: number;
+    maxDepth?: number;
+    modelProfile?: string;
+  };
 };
 
 export type ConductorStep = {
@@ -44,11 +51,15 @@ function cloneInput(input: ConductorInput): ConductorInput {
     complexity: input.complexity,
     requiredStrengths: [...input.requiredStrengths],
     modelProfileIds: [...input.modelProfileIds],
+    ...(input.policyHint ? { policyHint: { ...input.policyHint } } : {}),
   };
 }
 
 function determineScaffoldId(input: ConductorInput): ConductorScaffoldId {
   if (input.risk === "high") {
+    return "plan-execute-verify";
+  }
+  if ((input.policyHint?.verifierCount ?? 0) > 0) {
     return "plan-execute-verify";
   }
   if (input.complexity === "high") {
@@ -58,7 +69,13 @@ function determineScaffoldId(input: ConductorInput): ConductorScaffoldId {
 }
 
 function buildSteps(input: ConductorInput, scaffoldId: ConductorScaffoldId): ConductorStep[] {
-  const profiles = input.modelProfileIds.length > 0 ? [...input.modelProfileIds] : ["default"];
+  const hintedProfiles = input.policyHint?.modelProfile
+    ? [
+        input.policyHint.modelProfile,
+        ...input.modelProfileIds.filter((profile) => profile !== input.policyHint?.modelProfile),
+      ]
+    : input.modelProfileIds;
+  const profiles = hintedProfiles.length > 0 ? [...hintedProfiles] : ["default"];
   if (scaffoldId === "single-pass") {
     return [
       {
@@ -110,6 +127,7 @@ function buildReasonCodes(input: ConductorInput, scaffoldId: ConductorScaffoldId
     `risk:${input.risk}`,
     `complexity:${input.complexity}`,
     `scaffold:${scaffoldId}`,
+    ...(input.policyHint ? [`policy:${input.policyHint.policyId}`] : []),
   ];
 }
 

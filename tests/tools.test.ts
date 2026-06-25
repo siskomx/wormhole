@@ -400,6 +400,149 @@ describe("Wormhole MCP tool handlers", () => {
     }
   });
 
+  it("runs advanced native media, shell, discovery, and policy handlers", async () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-advanced-tools-"));
+    const imagePath = path.join(repoRoot, "tiny.png");
+    writeFileSync(
+      imagePath,
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGNgYPgPAAEDAQDq1X4bAAAAAElFTkSuQmCC",
+        "base64",
+      ),
+    );
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+      });
+      const mediaDeps = await tools.mediaDependencyReport();
+      const image = await tools.mediaIngestImage({
+        repoRoot,
+        sourcePath: imagePath,
+        ocrMode: "auto",
+      });
+      const hookPlan = tools.shellHookPlan({
+        shells: ["bash"],
+        dryRun: true,
+      });
+      expect(() => tools.shellHookInstall({ shells: ["cmd"] })).toThrow(/apply/);
+      expect(() => tools.shellHookInstall({ shells: ["bash"], apply: true })).toThrow(/planToken/);
+
+      const har = tools.discoveryHarImport({
+        harJson: {
+          log: {
+            version: "1.2",
+            entries: [
+              {
+                request: {
+                  method: "GET",
+                  url: "https://api.example.test/users/123?expand=1",
+                  headers: [{ name: "Authorization", value: "secret" }],
+                },
+                response: {
+                  status: 200,
+                  headers: [{ name: "Content-Type", value: "application/json" }],
+                  content: { mimeType: "application/json", text: "{}" },
+                },
+              },
+              {
+                request: {
+                  method: "GET",
+                  url: "https://api.example.test/users/456?expand=1",
+                  headers: [],
+                },
+                response: {
+                  status: 200,
+                  headers: [{ name: "Content-Type", value: "application/json" }],
+                  content: { mimeType: "application/json", text: "{}" },
+                },
+              },
+            ],
+          },
+        },
+      });
+      const openapi = tools.discoveryOpenApiImport({
+        specText: JSON.stringify({
+          openapi: "3.0.0",
+          servers: [{ url: "https://api.example.test" }],
+          paths: {
+            "/users/{id}": {
+              get: {
+                operationId: "getUser",
+                responses: { "200": { content: { "application/json": {} } } },
+              },
+            },
+          },
+        }),
+        sourceName: "users.json",
+      });
+      const generated = tools.discoveryToolSpecGenerate({
+        observations: [...har.observations, ...openapi.observations],
+        baseCommand: "api-call",
+      });
+      const browser = await tools.discoveryBrowserCapture({
+        url: "https://api.example.test",
+        maxRequests: 1,
+        timeoutMs: 10,
+      });
+      const trace = {
+        traceId: "trace-1",
+        taskKind: "feature",
+        graphNodeCount: 100,
+        evidenceCount: 4,
+        openQuestions: 0,
+        action: { workerCount: 2, verifierCount: 1, maxDepth: 3, modelProfile: "balanced" },
+        outcome: {
+          testsPassed: true,
+          evidenceCount: 4,
+          openQuestions: 0,
+          durationMs: 1_000,
+          tokenEstimate: 2_000,
+          userCorrectionCount: 0,
+        },
+      };
+      const recorded = tools.orchestrationTraceRecord(trace);
+      for (let index = 2; index <= 60; index += 1) {
+        tools.orchestrationTraceRecord({ ...trace, traceId: `trace-${index}` });
+      }
+      const dataset = tools.orchestrationDatasetExport();
+      const evaluation = tools.orchestrationPolicyEvaluate({
+        policyJson: {
+          policyId: "candidate",
+          qTable: {
+            "feature|graph:medium|evidence:medium|risk:low": {
+              "workers=2|verifiers=1|depth=3|model=balanced": 1,
+            },
+          },
+        },
+      });
+      tools.orchestrationPolicyActivate({ evaluationId: evaluation.evaluationId });
+      const policyConductor = tools.conductorPlan({
+        objective: "Use active policy",
+        risk: "low",
+        complexity: "low",
+        requiredStrengths: ["coding"],
+        modelProfileIds: ["small-local"],
+      });
+
+      expect(mediaDeps.job).toBe("media_dependency_report");
+      expect(image.kind).toBe("image");
+      expect(hookPlan.operations[0]).toEqual(expect.objectContaining({ shell: "bash" }));
+      expect(hookPlan.planToken).toMatch(/^shell-plan:/);
+      expect(har.observations[0]?.pathTemplate).toBe("/users/{id}");
+      expect(generated.toolSpecs.map((tool) => tool.toolId)).toEqual(["api_getUser"]);
+      expect(browser.available).toBe(false);
+      expect(recorded.traceId).toBe("trace-1");
+      expect(dataset).toContain("trace-1");
+      expect(evaluation.safetyViolations).toEqual([]);
+      expect(tools.orchestrationPolicyGet()?.policyId).toBe("candidate");
+      expect(policyConductor.trace.reasonCodes).toContain("policy:candidate");
+      expect(policyConductor.scaffoldId).toBe("plan-execute-verify");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("builds and queries the repo index through generic tool handlers", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-index-"));
     mkdirSync(path.join(repoRoot, "src"), { recursive: true });

@@ -1,5 +1,7 @@
 import path from "node:path";
+import { homedir } from "node:os";
 import { createBehaviorPolicyStore, type BehaviorMode } from "./behavior-policy.js";
+import { captureBrowserNetwork } from "./browser-capture.js";
 import {
   createConductorPlan,
   replayConductorPlan,
@@ -28,9 +30,23 @@ import {
 import { createOptimizedCommandRunner, type OptimizedCommandInput } from "./optimized-command-runner.js";
 import { createOptimizationStats } from "./optimization-stats.js";
 import { createPythonSidecar } from "./python-sidecar.js";
+import { createMediaIngestion, type MediaIngestInput } from "./media-ingestion.js";
 import { createEvidenceCache } from "./evidence-cache.js";
+import {
+  generateToolSpecsFromDiscovery,
+  type EndpointObservation,
+} from "./api-discovery.js";
+import { importHar } from "./har-import.js";
+import { importOpenApi } from "./openapi-import.js";
+import { crawlHttp } from "./http-crawler.js";
+import {
+  createPolicyStore,
+  type OrchestrationTrace,
+  type PolicyActivationInput,
+} from "./orchestration-learning.js";
 import { reconcileArtifacts, type ArtifactProposal } from "./reconciliation.js";
 import { createDagSchedule, type ScheduledTask } from "./scheduler.js";
+import { createShellHookManager, type ShellHookOperation, type ShellKind } from "./shell-hooks.js";
 import {
   createProviderRegistry,
   selectRoutingPlan,
@@ -126,6 +142,10 @@ function resolveAllowedRepoRoot(repoRoot: string, allowedRepoRoots: string[]): s
   return absoluteRoot;
 }
 
+function defaultHomeDir(): string {
+  return process.env.USERPROFILE ?? process.env.HOME ?? homedir();
+}
+
 function evictOldestRepoIndex(repoIndexes: Map<string, RepoIndex>, maxCachedRepoIndexes: number) {
   while (repoIndexes.size > maxCachedRepoIndexes) {
     const oldestKey = repoIndexes.keys().next().value;
@@ -149,6 +169,14 @@ export function createToolHandlers(
   const modelProfileRegistry = createModelProfileRegistry();
   const pythonSidecar = createPythonSidecar();
   const behaviorPolicy = createBehaviorPolicyStore();
+  const policyStore = createPolicyStore();
+  const shellHookPlans = new Map<string, {
+    operations: ShellHookOperation[];
+    homeDir: string;
+    repoRoot: string;
+    allowRegistry?: boolean;
+    action: "install" | "uninstall";
+  }>();
   const repoIndexes = new Map<string, RepoIndex>();
   const allowedRepoRoots = parseAllowedRepoRoots(options);
   const maxCachedRepoIndexes = options.maxCachedRepoIndexes ?? 8;
@@ -294,6 +322,259 @@ export function createToolHandlers(
       }>;
     }) {
       return pythonSidecar.run({ job: "trace_summary", payload: input });
+    },
+
+    mediaDependencyReport() {
+      return pythonSidecar.run({ job: "media_dependency_report", payload: {} });
+    },
+
+    async mediaIngestPdf(input: { repoRoot: string; missionId?: string; recordEvidence?: boolean } & MediaIngestInput) {
+      const { repoRoot, missionId, recordEvidence, ...mediaInput } = input;
+      const absoluteRoot = resolveAllowedRepoRoot(repoRoot, allowedRepoRoots);
+      const ingestion = createMediaIngestion({
+        repoRoot: absoluteRoot,
+        sidecar: {
+          run: (request) =>
+            pythonSidecar.run({
+              job: request.job as "pdf_extract",
+              payload: request.payload,
+            }),
+        },
+      });
+      const result = await ingestion.ingestPdf(mediaInput);
+      if (recordEvidence && missionId) {
+        const evidence = kernel.recordEvidence(missionId, {
+          sourceType: "file",
+          sourcePath: result.sourcePath,
+          retrievalMethod: "media_ingest_pdf",
+          summary: result.evidenceCandidate.summary,
+          rawContent: result.extractedText || undefined,
+        });
+        return { ...result, evidence };
+      }
+      return result;
+    },
+
+    async mediaIngestImage(
+      input: { repoRoot: string; missionId?: string; recordEvidence?: boolean } & MediaIngestInput,
+    ) {
+      const { repoRoot, missionId, recordEvidence, ...mediaInput } = input;
+      const absoluteRoot = resolveAllowedRepoRoot(repoRoot, allowedRepoRoots);
+      const ingestion = createMediaIngestion({
+        repoRoot: absoluteRoot,
+        sidecar: {
+          run: (request) =>
+            pythonSidecar.run({
+              job: request.job as "image_inspect",
+              payload: request.payload,
+            }),
+        },
+      });
+      const result = await ingestion.ingestImage(mediaInput);
+      if (recordEvidence && missionId) {
+        const evidence = kernel.recordEvidence(missionId, {
+          sourceType: "file",
+          sourcePath: result.sourcePath,
+          retrievalMethod: "media_ingest_image",
+          summary: result.evidenceCandidate.summary,
+          rawContent: result.extractedText || undefined,
+        });
+        return { ...result, evidence };
+      }
+      return result;
+    },
+
+    shellHookDiscover(input: { homeDir?: string; repoRoot?: string } = {}) {
+      if (input.homeDir) {
+        throw new Error("shell_hook_discover does not accept custom homeDir");
+      }
+      return createShellHookManager({
+        homeDir: defaultHomeDir(),
+        repoRoot: input.repoRoot ? resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots) : process.cwd(),
+      }).discover();
+    },
+
+    shellHookPlan(input: {
+      shells: ShellKind[];
+      dryRun?: boolean;
+      allowRegistry?: boolean;
+      homeDir?: string;
+      repoRoot?: string;
+      action?: "install" | "uninstall";
+    }) {
+      if (input.homeDir) {
+        throw new Error("shell_hook_plan does not accept custom homeDir");
+      }
+      const homeDir = defaultHomeDir();
+      const repoRoot = input.repoRoot
+        ? resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots)
+        : process.cwd();
+      const manager = createShellHookManager({ homeDir, repoRoot });
+      const action = input.action ?? "install";
+      const plan =
+        action === "uninstall"
+          ? manager.planUninstall({ shells: input.shells, allowRegistry: input.allowRegistry })
+          : manager.planInstall({
+              shells: input.shells,
+              dryRun: input.dryRun ?? true,
+              allowRegistry: input.allowRegistry,
+            });
+      if (plan.planToken) {
+        shellHookPlans.set(plan.planToken, {
+          operations: plan.operations,
+          homeDir,
+          repoRoot,
+          allowRegistry: input.allowRegistry,
+          action,
+        });
+      }
+      return plan;
+    },
+
+    shellHookInstall(input: {
+      shells: ShellKind[];
+      apply?: boolean;
+      planToken?: string;
+      allowRegistry?: boolean;
+    }) {
+      if (!input.apply) {
+        throw new Error("shell_hook_install requires apply: true");
+      }
+      if (!input.planToken) {
+        throw new Error("shell_hook_install requires a planToken from shell_hook_plan");
+      }
+      const planned = shellHookPlans.get(input.planToken);
+      if (!planned) {
+        throw new Error("Unknown shell hook planToken");
+      }
+      if (planned.action !== "install") {
+        throw new Error("shell_hook_install requires an install planToken");
+      }
+      const manager = createShellHookManager({
+        homeDir: planned.homeDir,
+        repoRoot: planned.repoRoot,
+      });
+      const current = manager.planInstall({
+        shells: input.shells,
+        dryRun: true,
+        allowRegistry: planned.allowRegistry,
+      });
+      if (JSON.stringify(current.operations) !== JSON.stringify(planned.operations)) {
+        throw new Error("Shell hook plan is stale; run shell_hook_plan again");
+      }
+      const result = manager.install({ shells: input.shells, allowRegistry: planned.allowRegistry });
+      shellHookPlans.delete(input.planToken);
+      return result;
+    },
+
+    shellHookUninstall(input: {
+      shells: ShellKind[];
+      apply?: boolean;
+      planToken?: string;
+      allowRegistry?: boolean;
+    }) {
+      if (!input.apply) {
+        throw new Error("shell_hook_uninstall requires apply: true");
+      }
+      if (!input.planToken) {
+        throw new Error("shell_hook_uninstall requires a planToken from shell_hook_plan");
+      }
+      const planned = shellHookPlans.get(input.planToken);
+      if (!planned) {
+        throw new Error("Unknown shell hook planToken");
+      }
+      if (planned.action !== "uninstall") {
+        throw new Error("shell_hook_uninstall requires an uninstall planToken");
+      }
+      const manager = createShellHookManager({
+        homeDir: planned.homeDir,
+        repoRoot: planned.repoRoot,
+      });
+      const current = manager.planUninstall({
+        shells: input.shells,
+        allowRegistry: planned.allowRegistry,
+      });
+      if (JSON.stringify(current.operations) !== JSON.stringify(planned.operations)) {
+        throw new Error("Shell hook uninstall plan is stale; run shell_hook_plan again");
+      }
+      const result = manager.uninstall({ shells: input.shells, allowRegistry: planned.allowRegistry });
+      shellHookPlans.delete(input.planToken);
+      return result;
+    },
+
+    shellHookVerify(input: { shells: ShellKind[]; homeDir?: string; repoRoot?: string }) {
+      if (input.homeDir) {
+        throw new Error("shell_hook_verify does not accept custom homeDir");
+      }
+      return createShellHookManager({
+        homeDir: defaultHomeDir(),
+        repoRoot: input.repoRoot ? resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots) : process.cwd(),
+      }).verify({ shells: input.shells });
+    },
+
+    discoveryHarImport(input: { harJson: unknown; maxEntries?: number }) {
+      return importHar(input);
+    },
+
+    discoveryOpenApiImport(input: { specText: string; sourceName: string }) {
+      return importOpenApi(input);
+    },
+
+    discoveryHttpCrawl(input: {
+      startUrl: string;
+      maxPages?: number;
+      maxDepth?: number;
+      allowOrigins?: string[];
+      userAgent?: string;
+      timeoutMs?: number;
+      allowPrivateNetwork?: boolean;
+      maxResponseBytes?: number;
+    }) {
+      return crawlHttp(input);
+    },
+
+    discoveryBrowserCapture(input: {
+      url: string;
+      maxRequests?: number;
+      browserEndpoint?: string;
+      timeoutMs?: number;
+    }) {
+      return captureBrowserNetwork(input);
+    },
+
+    discoveryToolSpecGenerate(input: {
+      observations: EndpointObservation[];
+      baseCommand?: string;
+      authMode?: "none" | "bearer-env" | "api-key-env";
+    }) {
+      return generateToolSpecsFromDiscovery(input);
+    },
+
+    orchestrationTraceRecord(input: OrchestrationTrace) {
+      policyStore.record(input);
+      return input;
+    },
+
+    orchestrationDatasetExport() {
+      return policyStore.exportJsonl();
+    },
+
+    orchestrationPolicyTrain(input: { traceJsonl: string; learningRate?: number; discount?: number; epochs?: number }) {
+      return pythonSidecar.run({ job: "policy_train", payload: input });
+    },
+
+    orchestrationPolicyEvaluate(input: {
+      policyJson: unknown;
+    }) {
+      return policyStore.evaluate(input.policyJson);
+    },
+
+    orchestrationPolicyActivate(input: PolicyActivationInput) {
+      return policyStore.activate(input);
+    },
+
+    orchestrationPolicyGet() {
+      return policyStore.getActive();
     },
 
     cacheEvidence(input: {
@@ -463,7 +744,14 @@ export function createToolHandlers(
     },
 
     conductorPlan(input: ConductorInput) {
-      return createConductorPlan(input);
+      const activePolicy = policyStore.getActive();
+      const { policyHint: _ignoredPolicyHint, ...publicInput } = input;
+      return createConductorPlan({
+        ...publicInput,
+        policyHint: activePolicy
+          ? { policyId: activePolicy.policyId, ...activePolicy.recommendedAction }
+          : undefined,
+      });
     },
 
     conductorReplay(input: ConductorTrace) {

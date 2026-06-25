@@ -906,6 +906,206 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
     async (input) => jsonResult(await tools.pythonTraceSummary(input)),
   );
 
+  const mediaInputSchema = {
+    repoRoot: z.string(),
+    sourcePath: z.string(),
+    missionId: z.string().optional(),
+    recordEvidence: z.boolean().optional(),
+    maxBytes: z.number().int().min(1).max(25 * 1024 * 1024).optional(),
+  };
+
+  server.registerTool(
+    "media_dependency_report",
+    {
+      description: "Report optional Python media extraction dependency availability.",
+      inputSchema: {},
+    },
+    async () => jsonResult(await tools.mediaDependencyReport()),
+  );
+
+  server.registerTool(
+    "media_ingest_pdf",
+    {
+      description: "Ingest a repo-local PDF into an evidence-ready media record.",
+      inputSchema: {
+        ...mediaInputSchema,
+        maxPages: z.number().int().min(1).max(500).optional(),
+      },
+    },
+    async (input) => jsonResult(await tools.mediaIngestPdf(input)),
+  );
+
+  server.registerTool(
+    "media_ingest_image",
+    {
+      description: "Ingest a repo-local image into an evidence-ready media record.",
+      inputSchema: {
+        ...mediaInputSchema,
+        ocrMode: z.enum(["off", "auto", "required"]).optional(),
+      },
+    },
+    async (input) => jsonResult(await tools.mediaIngestImage(input)),
+  );
+
+  const shellKindSchema = z.enum([
+    "powershell",
+    "windows-powershell",
+    "bash",
+    "zsh",
+    "fish",
+    "nushell",
+    "cmd",
+  ]);
+  const shellHookInputSchema = {
+    shells: z.array(shellKindSchema),
+    allowRegistry: z.boolean().optional(),
+    repoRoot: z.string().optional(),
+  };
+
+  server.registerTool(
+    "shell_hook_discover",
+    {
+      description: "Discover supported shell hook targets without editing profiles.",
+      inputSchema: {
+        repoRoot: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.shellHookDiscover(input)),
+  );
+
+  server.registerTool(
+    "shell_hook_plan",
+    {
+      description: "Plan marker-based Wormhole shell hook installation without editing profiles.",
+      inputSchema: {
+        ...shellHookInputSchema,
+        dryRun: z.boolean().optional(),
+        action: z.enum(["install", "uninstall"]).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.shellHookPlan(input)),
+  );
+
+  server.registerTool(
+    "shell_hook_install",
+    {
+      description: "Install marker-based Wormhole shell hooks after explicit apply confirmation.",
+      inputSchema: {
+        shells: z.array(shellKindSchema),
+        allowRegistry: z.boolean().optional(),
+        planToken: z.string(),
+        apply: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.shellHookInstall(input)),
+  );
+
+  server.registerTool(
+    "shell_hook_uninstall",
+    {
+      description: "Uninstall marker-based Wormhole shell hooks after explicit apply confirmation.",
+      inputSchema: {
+        shells: z.array(shellKindSchema),
+        allowRegistry: z.boolean().optional(),
+        planToken: z.string(),
+        apply: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.shellHookUninstall(input)),
+  );
+
+  server.registerTool(
+    "shell_hook_verify",
+    {
+      description: "Verify marker-based Wormhole shell hook presence.",
+      inputSchema: shellHookInputSchema,
+    },
+    async (input) => jsonResult(tools.shellHookVerify(input)),
+  );
+
+  const endpointObservationSchema = z.object({
+    method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]),
+    origin: z.string(),
+    pathTemplate: z.string(),
+    queryKeys: z.array(z.string()),
+    requestContentType: z.string().optional(),
+    responseContentType: z.string().optional(),
+    statusClass: z.enum(["2xx", "3xx", "4xx", "5xx"]).optional(),
+    sampleHash: z.string().optional(),
+    source: z.enum(["har", "openapi", "http-crawl", "browser-capture"]),
+    operationId: z.string().optional(),
+  });
+
+  server.registerTool(
+    "discovery_har_import",
+    {
+      description: "Import HAR 1.2 entries as redacted API endpoint observations.",
+      inputSchema: {
+        harJson: z.any(),
+        maxEntries: z.number().int().min(1).max(1000).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.discoveryHarImport(input)),
+  );
+
+  server.registerTool(
+    "discovery_openapi_import",
+    {
+      description: "Import OpenAPI JSON or constrained YAML into endpoint observations and tool specs.",
+      inputSchema: {
+        specText: z.string(),
+        sourceName: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.discoveryOpenApiImport(input)),
+  );
+
+  server.registerTool(
+    "discovery_http_crawl",
+    {
+      description: "Run a bounded same-origin HTTP crawl and return endpoint observations.",
+      inputSchema: {
+        startUrl: z.string(),
+        maxPages: z.number().int().min(1).max(25).optional(),
+        maxDepth: z.number().int().min(0).max(3).optional(),
+        allowOrigins: z.array(z.string()).optional(),
+        userAgent: z.string().optional(),
+        timeoutMs: z.number().int().min(100).max(5000).optional(),
+        allowPrivateNetwork: z.boolean().optional(),
+        maxResponseBytes: z.number().int().min(1024).max(1_000_000).optional(),
+      },
+    },
+    async (input) => jsonResult(await tools.discoveryHttpCrawl(input)),
+  );
+
+  server.registerTool(
+    "discovery_browser_capture",
+    {
+      description: "Capture browser network observations when optional browser dependencies are available.",
+      inputSchema: {
+        url: z.string(),
+        maxRequests: z.number().int().min(1).max(100).optional(),
+        browserEndpoint: z.string().optional(),
+        timeoutMs: z.number().int().min(100).max(10_000).optional(),
+        allowPrivateNetwork: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(await tools.discoveryBrowserCapture(input)),
+  );
+
+  server.registerTool(
+    "discovery_tool_spec_generate",
+    {
+      description: "Generate deterministic API tool specs from endpoint observations.",
+      inputSchema: {
+        observations: z.array(endpointObservationSchema),
+        baseCommand: z.string().optional(),
+        authMode: z.enum(["none", "bearer-env", "api-key-env"]).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.discoveryToolSpecGenerate(input)),
+  );
+
   server.registerTool(
     "repo_graph_export",
     {
@@ -1047,6 +1247,93 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
       },
     },
     async (input) => jsonResult(tools.behaviorMinimalityReview(input)),
+  );
+
+  const policyOutcomeSchema = z.object({
+    testsPassed: z.boolean(),
+    evidenceCount: z.number(),
+    openQuestions: z.number(),
+    durationMs: z.number(),
+    tokenEstimate: z.number(),
+    userCorrectionCount: z.number(),
+  });
+  const policyActionSchema = z.object({
+    workerCount: z.number(),
+    verifierCount: z.number(),
+    maxDepth: z.number(),
+    modelProfile: z.string(),
+  });
+  const policyActivationSchema = {
+    evaluationId: z.string(),
+  };
+
+  server.registerTool(
+    "orchestration_trace_record",
+    {
+      description: "Record an orchestration trace for offline policy learning.",
+      inputSchema: {
+        traceId: z.string(),
+        taskKind: z.string(),
+        graphNodeCount: z.number(),
+        evidenceCount: z.number(),
+        openQuestions: z.number(),
+        action: policyActionSchema,
+        outcome: policyOutcomeSchema,
+      },
+    },
+    async (input) => jsonResult(tools.orchestrationTraceRecord(input)),
+  );
+
+  server.registerTool(
+    "orchestration_dataset_export",
+    {
+      description: "Export recorded orchestration traces as JSONL for offline learning.",
+      inputSchema: {},
+    },
+    async () => jsonResult(tools.orchestrationDatasetExport()),
+  );
+
+  server.registerTool(
+    "orchestration_policy_train",
+    {
+      description: "Train a deterministic offline orchestration policy through the optional Python sidecar.",
+      inputSchema: {
+        traceJsonl: z.string().max(1_000_000),
+        learningRate: z.number().min(0).max(1).optional(),
+        discount: z.number().optional(),
+        epochs: z.number().int().min(1).max(100).optional(),
+      },
+    },
+    async (input) => jsonResult(await tools.orchestrationPolicyTrain(input)),
+  );
+
+  server.registerTool(
+    "orchestration_policy_evaluate",
+    {
+      description: "Evaluate candidate orchestration policy metrics and safety violations.",
+      inputSchema: {
+        policyJson: z.any(),
+      },
+    },
+    async (input) => jsonResult(tools.orchestrationPolicyEvaluate(input)),
+  );
+
+  server.registerTool(
+    "orchestration_policy_activate",
+    {
+      description: "Activate an orchestration policy only after replay thresholds pass.",
+      inputSchema: policyActivationSchema,
+    },
+    async (input) => jsonResult(tools.orchestrationPolicyActivate(input)),
+  );
+
+  server.registerTool(
+    "orchestration_policy_get",
+    {
+      description: "Return the active learned orchestration policy metadata.",
+      inputSchema: {},
+    },
+    async () => jsonResult(tools.orchestrationPolicyGet()),
   );
 
   return server;

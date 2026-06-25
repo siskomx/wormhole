@@ -293,7 +293,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "adaptive.optional-python-sidecar",
         area: "adaptive",
         status: "implemented",
-        description: "Optional Python stdlib sidecar for deterministic graph metrics, graph communities, and model-profile trace summaries while TypeScript remains the authoritative MCP runtime.",
+        description: "Optional Python sidecar for deterministic graph metrics, graph communities, media extraction, trace summaries, and offline policy jobs while TypeScript remains the authoritative MCP runtime.",
       },
       {
         id: "adaptive.deterministic-conductor",
@@ -306,6 +306,30 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         area: "adaptive",
         status: "implemented",
         description: "Caveman/Ponytail-near durable brevity and minimality modes with dense output and minimality review primitives.",
+      },
+      {
+        id: "adaptive.native-media-ingestion",
+        area: "adaptive",
+        status: "implemented",
+        description: "Repo-confined PDF and image ingestion with byte hashes, optional Python extraction, evidence-ready records, dependency reporting, and OCR safety gates.",
+      },
+      {
+        id: "adaptive.shell-hook-manager",
+        area: "adaptive",
+        status: "implemented",
+        description: "Dry-run-first, marker-based shell hook discovery, install, verify, and uninstall for common terminals with backups and Cmd registry guards.",
+      },
+      {
+        id: "adaptive.discovery-tool-generation",
+        area: "adaptive",
+        status: "implemented",
+        description: "HAR, OpenAPI, bounded HTTP crawl, optional browser capture, endpoint normalization, redaction, and deterministic API tool-spec generation.",
+      },
+      {
+        id: "adaptive.learned-orchestration-policy",
+        area: "adaptive",
+        status: "implemented",
+        description: "Offline trace datasets, deterministic policy training/evaluation, replay thresholds, activation gates, and runtime action clamps for learned orchestration policy.",
       },
       {
         id: "adaptive.connector-marketplace",

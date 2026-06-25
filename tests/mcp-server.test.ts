@@ -5,7 +5,28 @@ import { createWormholeMcpServer } from "../src/mcp-server.js";
 describe("Wormhole MCP server", () => {
   it("creates an MCP server for the native near-equivalent tool surface", () => {
     const server = createWormholeMcpServer(createInMemoryKernel());
+    const registeredTools = Object.keys(
+      (server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools,
+    );
 
     expect(server.isConnected()).toBe(false);
+    expect(registeredTools).toEqual(
+      expect.arrayContaining([
+        "media_dependency_report",
+        "media_ingest_pdf",
+        "media_ingest_image",
+        "shell_hook_plan",
+        "shell_hook_install",
+        "discovery_har_import",
+        "discovery_openapi_import",
+        "discovery_http_crawl",
+        "discovery_browser_capture",
+        "discovery_tool_spec_generate",
+        "orchestration_trace_record",
+        "orchestration_policy_train",
+        "orchestration_policy_evaluate",
+        "orchestration_policy_activate",
+      ]),
+    );
   });
 });

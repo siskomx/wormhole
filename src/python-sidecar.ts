@@ -2,7 +2,16 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import path from "node:path";
 
-export type PythonSidecarJobName = "probe" | "graph_metrics" | "trace_summary" | "graph_communities";
+export type PythonSidecarJobName =
+  | "probe"
+  | "graph_metrics"
+  | "trace_summary"
+  | "graph_communities"
+  | "media_dependency_report"
+  | "pdf_extract"
+  | "image_inspect"
+  | "policy_train"
+  | "policy_evaluate";
 
 export type PythonSidecarJobRequest = {
   job: PythonSidecarJobName;
@@ -39,7 +48,13 @@ const allowedJobs = new Set<PythonSidecarJobName>([
   "graph_metrics",
   "trace_summary",
   "graph_communities",
+  "media_dependency_report",
+  "pdf_extract",
+  "image_inspect",
+  "policy_train",
+  "policy_evaluate",
 ]);
+const MAX_CAPTURED_OUTPUT_CHARS = 2_000_000;
 
 function sha256(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
@@ -187,10 +202,14 @@ export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSid
         child.stdout.setEncoding("utf8");
         child.stderr.setEncoding("utf8");
         child.stdout.on("data", (chunk: string) => {
-          stdout += chunk;
+          if (stdout.length < MAX_CAPTURED_OUTPUT_CHARS) {
+            stdout = (stdout + chunk).slice(0, MAX_CAPTURED_OUTPUT_CHARS);
+          }
         });
         child.stderr.on("data", (chunk: string) => {
-          stderr += chunk;
+          if (stderr.length < MAX_CAPTURED_OUTPUT_CHARS) {
+            stderr = (stderr + chunk).slice(0, MAX_CAPTURED_OUTPUT_CHARS);
+          }
         });
         child.on("error", (error) => {
           stderr += error.message;

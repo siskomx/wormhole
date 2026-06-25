@@ -62,12 +62,16 @@ Implemented `adaptive` capabilities include:
 - `adaptive.connector-registry`: capability-based connector discovery and selection.
 - `adaptive.graph-first-codebase-query`: query-first codebase discovery workflow that asks the repo graph before broad grep or raw file-reading passes.
 - `adaptive.model-profile-learning`: native model-profile registration, deterministic selection, outcome recording, and replayable route trace export.
-- `adaptive.optional-python-sidecar`: optional Python stdlib worker for deterministic graph metrics, graph communities, and model-profile trace summaries, bounded by TypeScript-owned MCP schemas, timeouts, and evidence hashes.
+- `adaptive.optional-python-sidecar`: optional Python worker for deterministic graph metrics, graph communities, media extraction, model-profile trace summaries, and offline policy jobs, bounded by TypeScript-owned MCP schemas, timeouts, and evidence hashes.
 - `adaptive.deterministic-conductor`: Fugu-near deterministic planner, worker, and verifier scaffolds with replayable conductor traces.
 - `adaptive.durable-behavior-policy`: Caveman/Ponytail-near durable brevity and minimality modes with dense output and minimality review primitives.
+- `adaptive.native-media-ingestion`: repo-confined PDF/image ingestion with byte hashes, optional Python extraction, dependency reports, OCR safety gates, and evidence-ready records.
+- `adaptive.shell-hook-manager`: dry-run-first shell hook discovery, plan-token-gated marker-based install, backup, verification, and uninstall for common terminals.
+- `adaptive.discovery-tool-generation`: HAR/OpenAPI import, bounded HTTP crawl with private-network guardrails, optional browser capture, endpoint normalization, secret redaction, and API tool-spec generation.
+- `adaptive.learned-orchestration-policy`: offline orchestration trace datasets, deterministic policy training/evaluation, stored evaluation IDs, replay thresholds, activation gates, and action clamps.
 - `adaptive.dynamic-task-spawning`: dynamic DAG task expansion with max-depth and max-task guardrails.
 - `adaptive.model-pool-orchestration`: bounded thinker, worker, and verifier provider orchestration.
 - `adaptive.workbench-artifacts`: static mission/task/gate/artifact workbench snapshots and HTML rendering.
 - `adaptive.rich-artifact-types`: typed artifact records for plans, reports, workbench HTML, patch plans, and benchmark reports.
 
-Future adaptive extensions may still add learned model-pool routing, external provider marketplaces, richer interactive UI behavior, and persistent evidence graphs.
+Future adaptive extensions may still add external provider marketplaces, richer interactive UI behavior, and persistent evidence graphs.

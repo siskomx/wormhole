@@ -3,3 +3,5 @@ dist/
 coverage/
 .wormhole/
 *.log
+__pycache__/
+*.pyc

@@ -62,4 +62,23 @@ describe("conductor plan generation", () => {
 
     expect(replayConductorPlan(original.trace)).toEqual(original);
   });
+
+  it("uses a safe active policy hint when choosing scaffold and profile", () => {
+    const plan = createConductorPlan({
+      objective: "Inspect docs",
+      risk: "low",
+      complexity: "low",
+      requiredStrengths: ["research"],
+      modelProfileIds: ["small-local"],
+      policyHint: {
+        policyId: "policy-1",
+        verifierCount: 1,
+        modelProfile: "balanced",
+      },
+    });
+
+    expect(plan.scaffoldId).toBe("plan-execute-verify");
+    expect(plan.steps[0]?.preferredProfileId).toBe("balanced");
+    expect(plan.trace.reasonCodes).toContain("policy:policy-1");
+  });
 });

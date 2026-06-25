@@ -10,7 +10,7 @@ The core area proves the evidence loop. The orchestration area adds bounded para
 | --- | --- | --- |
 | Core | Implemented foundation | Local MCP planning kernel, JSONL state, evidence records, question ledger, gate, Markdown plan artifact, benchmark fixtures. |
 | Orchestration | Implemented foundation | First-party optimization primitives, live sub-orchestrator control, four-layer task records, static DAG scheduling, adapter-free local orchestration runs, content-addressed evidence cache, reconciliation, repo graph indexing, Codex adapter config, Claude Desktop extension metadata, external agent adapters, Printing Press CLI adapters, and benchmark comparison runner. |
-| Adaptive | Implemented foundation | Adaptive model/provider routing, graph-first codebase query workflow, connector registry, dynamic DAG spawning guardrails, bounded model-pool roles, typed artifacts, and static workbench rendering. Learned provider orchestration remains a future extension. |
+| Adaptive | Implemented foundation | Adaptive model/provider routing, graph-first codebase query workflow, connector registry, dynamic DAG spawning guardrails, bounded model-pool roles, native media ingestion, shell hooks, discovery-driven tool generation, learned policy gates, typed artifacts, and static workbench rendering. |
 
 ## Four-Layer Ceiling
 
@@ -149,7 +149,7 @@ The Printing Press contract tracks:
 
 Wormhole can select a printed CLI with `printing_press_select`, verify it with `printing_press_verify`, run it with `printing_press_run`, and convert it into a dispatchable external worker with `printing_press_register_agent`. Native runs capture stdout, stderr, exit code, timeout status, and immutable evidence hashes. Printing Press tools therefore remain subordinate to Wormhole's task graph and evidence gate instead of becoming separate orchestrators.
 
-Printing Press factory parity is not claimed in this runtime layer. Generating a new CLI/MCP server from an API, website, OpenAPI spec, HAR capture, or managed research pipeline remains future work or delegated to Printing Press itself.
+Printing Press factory parity is implemented as a bounded native tool-spec pipeline: HAR/OpenAPI imports, HTTP crawl observations, optional browser-capture observations, and deterministic generated tool specs feed the Wormhole `tool_factory_generate` path. Generated tools remain subordinate to Wormhole's task graph and evidence gate.
 
 ## Near-Equivalent Runtime Suite
 
@@ -161,9 +161,30 @@ Wormhole implements native near-equivalent runtime capabilities for the practica
 - Fugu-near: `model_profile_*`, `conductor_plan`, and `conductor_replay`.
 - Caveman/Ponytail-near: `behavior_mode_set`, `behavior_mode_get`, `behavior_apply`, and `behavior_minimality_review`.
 
-TypeScript remains authoritative for MCP schemas, state projection, gates, evidence, routing policy, and plugin packaging. Python is optional and receives one JSON request at a time for graph metrics, graph communities, and trace summaries. Python results are treated as derived analysis and do not decide whether a gate opens.
+TypeScript remains authoritative for MCP schemas, state projection, gates, evidence, routing policy, and plugin packaging. Python is optional and receives one JSON request at a time for graph metrics, graph communities, media extraction, trace summaries, and offline policy jobs. Python results are treated as derived analysis and do not decide whether a gate opens.
 
-The near-equivalent suite does not claim full product parity for multimodal extraction, shell hooks, website crawling, or learned RL orchestration. Those remain future extensions or external adapters.
+The near-equivalent suite now includes native advanced capability tracks for media ingestion, shell hooks, discovery-driven tool generation, and learned orchestration policy. These tracks are constrained by the same evidence, path, and approval boundaries as the rest of Wormhole.
+
+```mermaid
+flowchart LR
+  "PDF/Image" --> "TypeScript path gate"
+  "TypeScript path gate" --> "Python media sidecar"
+  "HAR/OpenAPI/HTTP" --> "Discovery observations"
+  "Discovery observations" --> "Tool factory"
+  "Conductor traces" --> "Policy trainer"
+  "Policy trainer" --> "Policy evaluator"
+  "Policy evaluator" --> "Safety-clamped activation"
+```
+
+## Advanced Native Tracks
+
+Media ingestion exposes `media_dependency_report`, `media_ingest_pdf`, and `media_ingest_image`. TypeScript validates repo roots and file size limits before Python sees a path. Python media modules use optional `pypdf`, `Pillow`, and OCR support when available; missing dependencies become structured warnings unless OCR is explicitly required.
+
+Shell hooks expose `shell_hook_discover`, `shell_hook_plan`, `shell_hook_install`, `shell_hook_uninstall`, and `shell_hook_verify`. Plans are dry-run-first and return a plan token tied to file hashes. Installs use marker blocks, backups, and idempotent replacement, and reject stale plans. Cmd AutoRun support is guarded behind explicit registry permission.
+
+Discovery exposes `discovery_har_import`, `discovery_openapi_import`, `discovery_http_crawl`, `discovery_browser_capture`, and `discovery_tool_spec_generate`. Sensitive headers are redacted before hashing or returning observations. Crawls are bounded and deny loopback/private/link-local hosts unless private-network crawling is explicitly enabled. Mutating API methods are marked side-effecting in generated specs.
+
+Learned orchestration exposes `orchestration_trace_record`, `orchestration_dataset_export`, `orchestration_policy_train`, `orchestration_policy_evaluate`, `orchestration_policy_activate`, and `orchestration_policy_get`. Policies train offline from traces, produce stored evaluation IDs, replay before activation, and are clamped at runtime. A learned policy cannot bypass max depth, budgets, evidence gates, shell apply requirements, or approvals.
 
 ## Connector Model
 
@@ -232,7 +253,7 @@ The native model-profile layer adds deterministic small-model profile learning t
 - Worker: drafts scoped work from the thinker output.
 - Verifier: checks the worker output and returns a verified or partial result.
 
-Each model-pool run has an explicit turn budget. Budget exhaustion returns a partial result with trace data instead of silently continuing. Learned model-pool routing, external provider marketplaces, and benchmark-trained selection remain future extensions.
+Each model-pool run has an explicit turn budget. Budget exhaustion returns a partial result with trace data instead of silently continuing. External provider marketplaces and benchmark-trained model-pool selection can be added as separate connector and policy layers.
 
 ## Connector Registry
 
