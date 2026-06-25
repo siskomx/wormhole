@@ -90,7 +90,7 @@ If no focused metadata test exists, update docs only and rely on typecheck/build
 
 - [ ] **Step 2: Document the new native layer**
 
-Add the behavior-verification tools to Current Surface, Near-Equivalent Runtime Suite, and capability manifest.
+Add the behavior-verification tools to Current Surface, Native Runtime Suite, and capability manifest.
 
 - [ ] **Step 3: Verify full repo**
 

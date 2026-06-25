@@ -204,23 +204,23 @@ The Printing Press contract tracks:
 
 Wormhole can select a printed CLI with `printing_press_select`, verify it with `printing_press_verify`, run it with `printing_press_run`, and convert it into a dispatchable external worker with `printing_press_register_agent`. Native runs capture stdout, stderr, exit code, timeout status, and immutable evidence hashes. Printing Press tools therefore remain subordinate to Wormhole's task graph and evidence gate instead of becoming separate orchestrators.
 
-Printing Press factory parity is implemented as a bounded native tool-spec pipeline: HAR/OpenAPI imports, HTTP crawl observations, optional browser-capture observations, and deterministic generated tool specs feed the Wormhole `tool_factory_generate` path. Generated tools remain subordinate to Wormhole's task graph and evidence gate.
+Wormhole's tool factory is implemented as a bounded native tool-spec pipeline: HAR/OpenAPI imports, HTTP crawl observations, optional browser-capture observations, and deterministic generated tool specs feed the Wormhole `tool_factory_generate` path. Generated tools remain subordinate to Wormhole's task graph and evidence gate.
 
-## Near-Equivalent Runtime Suite
+## Native Runtime Suite
 
-Wormhole implements native near-equivalent runtime capabilities for the practical parts of the systems that influenced it:
+Wormhole implements these runtime surfaces as first-class native capabilities:
 
-- Graphify-near: `repo_index_*`, `repo_graph_export`, `python_graph_metrics`, and `python_graph_communities`.
-- Project-ground-truth-near: `project_contract_detect`, `diagnostics_*`, `impact_analyze`, `test_plan_select`, `verification_run`, `secret_scan`, `operation_risk_review`, `semantic_*`, and `lsp_*`.
+- Repo graph artifacts: `repo_index_*`, `repo_graph_export`, `python_graph_metrics`, and `python_graph_communities`.
+- Project ground truth: `project_contract_detect`, `diagnostics_*`, `impact_analyze`, `test_plan_select`, `verification_run`, `secret_scan`, `operation_risk_review`, `semantic_*`, and `lsp_*`.
 - Project-intelligence sequencing: `project_onboard`, durable index tools, LSP session tools, `test_impact_analyze_v2`, `dependency_security_report`, `action_policy_review`, and `optimization_adapter_*`.
-- Headroom/RTK-near: `optimization_apply`, `optimization_retrieve`, `optimized_command_run`, and `optimization_stats`.
-- Printing Press-near: `printing_press_*` runtime tools and `tool_factory_generate`.
-- Fugu-near: `model_profile_*`, `conductor_plan`, and `conductor_replay`.
-- Caveman/Ponytail-near: `behavior_mode_set`, `behavior_mode_get`, `behavior_apply`, and `behavior_minimality_review`.
+- Optimized command runner: `optimization_apply`, `optimization_retrieve`, `optimized_command_run`, and `optimization_stats`.
+- Native tool factory: `printing_press_*` runtime tools and `tool_factory_generate`.
+- Deterministic conductor: `model_profile_*`, `conductor_plan`, and `conductor_replay`.
+- Durable behavior policy: `behavior_mode_set`, `behavior_mode_get`, `behavior_apply`, and `behavior_minimality_review`.
 
 TypeScript remains authoritative for MCP schemas, state projection, gates, evidence, routing policy, and plugin packaging. Python is optional and receives one JSON request at a time for graph metrics, graph communities, media extraction, trace summaries, and offline policy jobs. Python results are treated as derived analysis and do not decide whether a gate opens.
 
-The near-equivalent suite now includes native advanced capability tracks for media ingestion, shell hooks, discovery-driven tool generation, and learned orchestration policy. These tracks are constrained by the same evidence, path, and approval boundaries as the rest of Wormhole.
+The native runtime suite includes advanced capability tracks for media ingestion, shell hooks, discovery-driven tool generation, and learned orchestration policy. These tracks are constrained by the same evidence, path, and approval boundaries as the rest of Wormhole.
 
 ```mermaid
 flowchart LR

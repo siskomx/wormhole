@@ -257,7 +257,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "orchestration.native-agent-behavior-verification",
         area: "orchestration",
         status: "implemented",
-        description: "Praxen-inspired native remit creation, capability inventory, behavior verification, remit coverage, drift analysis, and deterministic findings rendering.",
+        description: "Native remit creation, capability inventory, behavior verification, remit coverage, drift analysis, and deterministic findings rendering.",
       },
       {
         id: "orchestration.mission-delta-replanning",
@@ -269,19 +269,19 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "orchestration.graph-artifact-suite",
         area: "orchestration",
         status: "implemented",
-        description: "Graphify-near graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis for native repo graphs.",
+        description: "Native graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis for repo graphs.",
       },
       {
         id: "orchestration.optimized-command-runner",
         area: "orchestration",
         status: "implemented",
-        description: "Headroom/RTK-near no-shell command execution with reversible output optimization, retrieval handles, hashes, and savings stats.",
+        description: "No-shell command execution with reversible output optimization, retrieval handles, hashes, and savings stats.",
       },
       {
         id: "orchestration.native-tool-factory",
         area: "orchestration",
         status: "implemented",
-        description: "Printing-Press-near deterministic generation, validation, and validated workspace writes of CLI/MCP scaffold files from constrained tool specs.",
+        description: "Deterministic generation, validation, and validated workspace writes of CLI/MCP scaffold files from constrained tool specs.",
       },
       {
         id: "orchestration.local-runner",
@@ -335,13 +335,13 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "adaptive.deterministic-conductor",
         area: "adaptive",
         status: "implemented",
-        description: "Fugu-near deterministic planner, worker, and verifier scaffolds with replayable conductor traces.",
+        description: "Deterministic planner, worker, and verifier scaffolds with replayable conductor traces.",
       },
       {
         id: "adaptive.durable-behavior-policy",
         area: "adaptive",
         status: "implemented",
-        description: "Caveman/Ponytail-near durable brevity and minimality modes with dense output and minimality review primitives.",
+        description: "Durable brevity and minimality modes with dense output and minimality review primitives.",
       },
       {
         id: "adaptive.native-media-ingestion",

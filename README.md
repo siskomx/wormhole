@@ -30,24 +30,24 @@ The repository also includes implemented orchestration and adaptive foundations:
 - Codex plugin scaffold: `plugins/wormhole`
 - Capability manifest: `src/capabilities.ts`
 
-## Near-Equivalent Runtime Suite
+## Native Runtime Suite
 
-Wormhole implements native runtime equivalents for the practical parts of several systems that influenced its design:
+Wormhole implements these runtime surfaces as first-class native capabilities:
 
-- Graphify-near: `repo_index_*`, `repo_graph_export`, JS/TS/Python symbol and import extraction, basic call-reference edges, Python graph metrics, and graph communities.
-- Project-ground-truth-near: `project_contract_detect`, `diagnostics_*`, `impact_analyze`, `test_plan_select`, `verification_run`, `secret_scan`, `operation_risk_review`, `semantic_*`, and `lsp_*`.
+- Repo graph artifacts: `repo_index_*`, `repo_graph_export`, JS/TS/Python symbol and import extraction, basic call-reference edges, Python graph metrics, and graph communities.
+- Project ground truth: `project_contract_detect`, `diagnostics_*`, `impact_analyze`, `test_plan_select`, `verification_run`, `secret_scan`, `operation_risk_review`, `semantic_*`, and `lsp_*`.
 - Project-intelligence sequencing: `project_onboard`, durable index tools, LSP session tools, `test_impact_analyze_v2`, `mission_delta_replan`, `dependency_security_report`, `action_policy_review`, and `optimization_adapter_*`.
 - Native project-intelligence spine: `architecture_map`, `entrypoint_flow_discover`, `blast_radius_analyze`, and `context_pack_generate`.
 - Agent-facing routing: `project_intelligence_snapshot`, `next_best_tool`, `mission_route`, and `agent_context_prepare`.
-- Praxen-near: `agent_remit_create`, `agent_capability_inventory`, `agent_behavior_verify`, `remit_coverage_report`, `agent_drift_analyze`, and `behavior_findings_render` implement native declared-intent versus observed-capability checks without depending on Praxen.
-- Headroom/RTK-near: `optimization_apply`, `optimization_retrieve`, `optimized_command_run`, and `optimization_stats`.
-- Printing Press-near: `printing_press_*` runtime tools plus `tool_factory_generate`, `tool_factory_validate`, and `tool_factory_write`.
-- Fugu-near: `model_profile_*`, `conductor_plan`, and `conductor_replay`.
-- Caveman/Ponytail-near: `behavior_mode_set`, `behavior_mode_get`, `behavior_apply`, and `behavior_minimality_review`.
-- Agent-runtime-near: `agent_dispatch_execute` runs configured local CLI or HTTP agents with bounded execution and evidence hashes.
+- Agent behavior verification: `agent_remit_create`, `agent_capability_inventory`, `agent_behavior_verify`, `remit_coverage_report`, `agent_drift_analyze`, and `behavior_findings_render` implement native declared-intent versus observed-capability checks.
+- Optimized command runner: `optimization_apply`, `optimization_retrieve`, `optimized_command_run`, and `optimization_stats`.
+- Native tool factory: `printing_press_*` runtime tools plus `tool_factory_generate`, `tool_factory_validate`, and `tool_factory_write`.
+- Deterministic conductor: `model_profile_*`, `conductor_plan`, and `conductor_replay`.
+- Durable behavior policy: `behavior_mode_set`, `behavior_mode_get`, `behavior_apply`, and `behavior_minimality_review`.
+- Agent dispatch runtime: `agent_dispatch_execute` runs configured local CLI or HTTP agents with bounded execution and evidence hashes.
 - Advanced native capabilities: `media_*`, `shell_hook_*`, `discovery_*`, `orchestration_policy_*`, and `reasoning_*`.
 
-These features are native Wormhole capabilities. They do not vendor the external projects. Runtime state is local JSON and not a replacement for the mission event log; repo index caches and shell-hook apply tokens remain process-local by design. Media extraction uses repo-confined realpath checks, byte hashing, and optional Python dependencies; shell hooks are opt-in, marker-based, planned with a token, and backed up before writes; discovery redacts secrets before tool generation and denies private-network crawling unless explicitly enabled; browser capture is complementary input rather than Wormhole's core runtime; learned policy remains offline-trained, baseline-compared, stored-evaluation-gated, and safety-clamped; reasoning research traces score plan, critique, revision, and verifier strategies.
+These features are native Wormhole capabilities. Runtime state is local JSON and not a replacement for the mission event log; repo index caches and shell-hook apply tokens remain process-local by design. Media extraction uses repo-confined realpath checks, byte hashing, and optional Python dependencies; shell hooks are opt-in, marker-based, planned with a token, and backed up before writes; discovery redacts secrets before tool generation and denies private-network crawling unless explicitly enabled; browser capture is complementary input rather than Wormhole's core runtime; learned policy remains offline-trained, baseline-compared, stored-evaluation-gated, and safety-clamped; reasoning research traces score plan, critique, revision, and verifier strategies.
 
 ## Optional Python Sidecar
 

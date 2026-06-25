@@ -52,12 +52,12 @@ Implemented `orchestration` capabilities include:
 - `orchestration.project-ground-truth-suite`: project contract detection, dependency inventory, structured diagnostics, impact-aware test planning, verification execution, safety scanning, deterministic semantic fallback search, and safe LSP config probes.
 - `orchestration.project-intelligence-sequencing`: one-shot project onboarding, process-local LSP sessions, durable repo and semantic indexes, diff-aware test impact, dependency security reports, action admission policy, and optimization adapter execution.
 - `orchestration.native-project-intelligence-spine`: native architecture maps, entrypoint flow discovery, blast-radius analysis, and task-scoped project context packs derived from typed repo observations with provenance.
-- `orchestration.native-agent-behavior-verification`: Praxen-inspired native remit creation, capability inventory, behavior verification, rule coverage, drift analysis, and deterministic findings rendering.
+- `orchestration.native-agent-behavior-verification`: native remit creation, capability inventory, behavior verification, rule coverage, drift analysis, and deterministic findings rendering.
 - `orchestration.mission-delta-replanning`: mid-mission re-scope reports that combine changed files, diagnostics, blast radius, stale evidence, focused tests, refreshed context, and gate guidance.
-- `orchestration.graph-artifact-suite`: Graphify-near graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis.
-- `orchestration.optimized-command-runner`: Headroom/RTK-near no-shell command execution with reversible output optimization, retrieval handles, hashes, and savings stats.
+- `orchestration.graph-artifact-suite`: native graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis.
+- `orchestration.optimized-command-runner`: no-shell command execution with reversible output optimization, retrieval handles, hashes, and savings stats.
 - `orchestration.external-optimization-adapters`: native, CLI, and HTTP optimization adapter registry with capability selection and bounded CLI execution.
-- `orchestration.native-tool-factory`: Printing-Press-near deterministic generation of CLI/MCP scaffold files from constrained tool specs.
+- `orchestration.native-tool-factory`: deterministic generation of CLI/MCP scaffold files from constrained tool specs.
 - `orchestration.local-runner`: adapter-free local orchestration planning and deterministic execution over DAG waves, depth limits, task budgets, and spawned local tasks.
 
 The repo-index MCP tools are workspace-confined by the runtime. The default allowed root is the server working directory; hosts can configure additional allowed roots with `WORMHOLE_ALLOWED_REPO_ROOTS`.
@@ -70,8 +70,8 @@ Implemented `adaptive` capabilities include:
 - `adaptive.agent-facing-routing`: curated project snapshots, next-tool recommendations, mission routes, and prepared context packs that keep agents off the full tool surface unless needed.
 - `adaptive.model-profile-learning`: native model-profile registration, deterministic selection, outcome recording, and replayable route trace export.
 - `adaptive.optional-python-sidecar`: optional Python worker for deterministic graph metrics, graph communities, media extraction, model-profile trace summaries, and offline policy jobs, bounded by TypeScript-owned MCP schemas, timeouts, and evidence hashes.
-- `adaptive.deterministic-conductor`: Fugu-near deterministic planner, worker, and verifier scaffolds with replayable conductor traces.
-- `adaptive.durable-behavior-policy`: Caveman/Ponytail-near durable brevity and minimality modes with dense output and minimality review primitives.
+- `adaptive.deterministic-conductor`: deterministic planner, worker, and verifier scaffolds with replayable conductor traces.
+- `adaptive.durable-behavior-policy`: durable brevity and minimality modes with dense output and minimality review primitives.
 - `adaptive.native-media-ingestion`: repo-confined PDF/image ingestion with byte hashes, optional Python extraction, dependency reports, OCR safety gates, and evidence-ready records.
 - `adaptive.shell-hook-manager`: dry-run-first shell hook discovery, plan-token-gated marker-based install, backup, verification, and uninstall for common terminals.
 - `adaptive.discovery-tool-generation`: HAR/OpenAPI import, bounded HTTP crawl with private-network guardrails, optional browser capture, endpoint normalization, secret redaction, and API tool-spec generation.

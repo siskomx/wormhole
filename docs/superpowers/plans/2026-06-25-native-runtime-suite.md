@@ -1,4 +1,4 @@
-# Near-Equivalent Runtime Suite Implementation Plan
+# Native Runtime Suite Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -12,13 +12,13 @@
 
 ## Scope
 
-This plan targets **near-equivalent practical capability**, not source-compatible clones:
+This plan targets **first-class native capability**, not source-compatible clones:
 
-- Graphify-near: persistent graph exports, graph report, HTML view, communities, and graph metrics for code/docs.
-- Headroom/RTK-near: optimized command execution, reversible output records, retrieval handles, and savings stats.
-- Printing Press-near: spec-to-tool factory that emits CLI/MCP scaffolds plus manifest/evidence files.
-- Fugu-near: deterministic conductor scaffolds, model-profile routing traces, and replayable policy evaluation.
-- Caveman/Ponytail-near: durable brevity and minimality modes with measurable stats.
+- Repo graph artifacts: persistent graph exports, graph report, HTML view, communities, and graph metrics for code/docs.
+- Optimized command runner: optimized command execution, reversible output records, retrieval handles, and savings stats.
+- Native tool factory: spec-to-tool factory that emits CLI/MCP scaffolds plus manifest/evidence files.
+- Deterministic conductor: deterministic conductor scaffolds, model-profile routing traces, and replayable policy evaluation.
+- Durable behavior policy: durable brevity and minimality modes with measurable stats.
 
 Out of scope for this implementation batch:
 
@@ -57,9 +57,9 @@ Out of scope for this implementation batch:
 - Modify: `src/mcp-server.ts`
   - Registers the new MCP tools.
 - Modify: `src/capabilities.ts`
-  - Adds implemented near-equivalent capability IDs.
+  - Adds implemented native capability IDs.
 - Modify: `README.md`
-  - Documents the near-equivalent suite.
+  - Documents the native runtime suite.
 - Modify: `docs/architecture/orchestration-adaptive-capabilities.md`
   - Documents boundaries, data flow, and safety model.
 - Modify: `docs/contracts/capability-manifest.md`
@@ -67,7 +67,7 @@ Out of scope for this implementation batch:
 - Modify: `plugins/wormhole-claude-desktop/manifest.json`
   - Exposes new MCP tool names to Claude Desktop.
 - Modify: `plugins/wormhole/.codex-plugin/plugin.json`
-  - Describes the near-equivalent native runtime suite.
+  - Describes the native runtime suite.
 - Test: `tests/python-sidecar-communities.test.ts`
 - Test: `tests/graph-artifacts.test.ts`
 - Test: `tests/optimized-command-runner.test.ts`
@@ -1439,7 +1439,7 @@ In `tests/plugin.test.ts`, assert the Claude Desktop tool list includes:
 In `tests/mcp-server.test.ts`, rename the test:
 
 ```ts
-  it("creates an MCP server for the native near-equivalent tool surface", () => {
+  it("creates an MCP server for the native tool surface", () => {
 ```
 
 Keep the existing `server.isConnected()` assertion. This repository does not currently expose MCP SDK internals for direct tool enumeration in this test.
@@ -1453,50 +1453,50 @@ In `src/capabilities.ts`, add implemented capability entries:
         id: "orchestration.graph-artifact-suite",
         area: "orchestration",
         status: "implemented",
-        description: "Graphify-near graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis for native repo graphs.",
+        description: "Native graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis for repo graphs.",
       },
       {
         id: "orchestration.optimized-command-runner",
         area: "orchestration",
         status: "implemented",
-        description: "Headroom/RTK-near no-shell command execution with reversible output optimization, retrieval handles, hashes, and savings stats.",
+        description: "No-shell command execution with reversible output optimization, retrieval handles, hashes, and savings stats.",
       },
       {
         id: "orchestration.native-tool-factory",
         area: "orchestration",
         status: "implemented",
-        description: "Printing-Press-near deterministic generation of CLI/MCP scaffold files from constrained tool specs.",
+        description: "Deterministic generation of CLI/MCP scaffold files from constrained tool specs.",
       },
       {
         id: "adaptive.deterministic-conductor",
         area: "adaptive",
         status: "implemented",
-        description: "Fugu-near deterministic planner/worker/verifier scaffolds with replayable conductor traces.",
+        description: "Deterministic planner/worker/verifier scaffolds with replayable conductor traces.",
       },
       {
         id: "adaptive.durable-behavior-policy",
         area: "adaptive",
         status: "implemented",
-        description: "Caveman/Ponytail-near durable brevity and minimality modes with dense output and minimality review primitives.",
+        description: "Durable brevity and minimality modes with dense output and minimality review primitives.",
       },
 ```
 
 - [ ] **Step 5: Update docs**
 
-In `README.md`, add a `## Near-Equivalent Runtime Suite` section:
+In `README.md`, add a `## Native Runtime Suite` section:
 
 ```md
-## Near-Equivalent Runtime Suite
+## Native Runtime Suite
 
-Wormhole implements native runtime equivalents for the practical parts of several systems that influenced its design:
+Wormhole implements these runtime surfaces as first-class native capabilities:
 
-- Graphify-near: `repo_index_*`, `repo_graph_export`, Python graph metrics, and graph communities.
-- Headroom/RTK-near: `optimization_apply`, `optimization_retrieve`, `optimized_command_run`, and `optimization_stats`.
-- Printing Press-near: `printing_press_*` runtime tools and `tool_factory_generate`.
-- Fugu-near: `model_profile_*`, `conductor_plan`, and `conductor_replay`.
-- Caveman/Ponytail-near: `behavior_mode_set`, `behavior_mode_get`, `behavior_apply`, and `behavior_minimality_review`.
+- Repo graph artifacts: `repo_index_*`, `repo_graph_export`, Python graph metrics, and graph communities.
+- Optimized command runner: `optimization_apply`, `optimization_retrieve`, `optimized_command_run`, and `optimization_stats`.
+- Native tool factory: `printing_press_*` runtime tools and `tool_factory_generate`.
+- Deterministic conductor: `model_profile_*`, `conductor_plan`, and `conductor_replay`.
+- Durable behavior policy: `behavior_mode_set`, `behavior_mode_get`, `behavior_apply`, and `behavior_minimality_review`.
 
-These features are native Wormhole capabilities. They do not vendor the external projects and do not claim full product parity for multimodal extraction, shell hooks, website crawling, or learned RL orchestration.
+These features are native Wormhole capabilities with explicit evidence, path, and approval boundaries.
 ```
 
 In `docs/architecture/orchestration-adaptive-capabilities.md`, add a matching architecture section with the same tool names and a note that TypeScript owns policy while Python owns optional graph/trace analysis jobs.
@@ -1523,7 +1523,7 @@ In `plugins/wormhole-claude-desktop/manifest.json`, add tool entries for:
 In `plugins/wormhole/.codex-plugin/plugin.json`, add this sentence to the long description:
 
 ```json
-"Wormhole also exposes near-equivalent native runtime tools for graph artifacts, optimized command execution, deterministic tool generation, conductor scaffolds, and durable brevity/minimality policy."
+"Wormhole also exposes native runtime tools for graph artifacts, optimized command execution, deterministic tool generation, conductor scaffolds, and durable brevity/minimality policy."
 ```
 
 - [ ] **Step 7: Run surface tests**
@@ -1540,7 +1540,7 @@ Expected: PASS.
 
 ```bash
 git add src/capabilities.ts README.md docs/architecture/orchestration-adaptive-capabilities.md docs/contracts/capability-manifest.md plugins/wormhole-claude-desktop/manifest.json plugins/wormhole/.codex-plugin/plugin.json tests/capabilities.test.ts tests/plugin.test.ts tests/mcp-server.test.ts
-git commit -m "docs: expose near-equivalent runtime suite"
+git commit -m "docs: expose native runtime suite"
 ```
 
 ---
@@ -1630,7 +1630,7 @@ git diff --stat
 git diff --check
 ```
 
-Expected: only intended near-equivalent runtime suite files changed; `git diff --check` has no whitespace errors.
+Expected: only intended native runtime suite files changed; `git diff --check` has no whitespace errors.
 
 - [ ] **Step 9: Push**
 
@@ -1646,7 +1646,7 @@ Expected: `main -> main`.
 
 ## Self-Review
 
-**Spec coverage:** Graphify-near is covered by Tasks 1-2. Headroom/RTK-near is covered by Task 3. Printing Press-near is covered by Task 4. Fugu-near is covered by Task 5. Caveman/Ponytail-near is covered by Task 6. Python usage is covered by Tasks 0-1 and remains optional.
+**Spec coverage:** Repo graph artifacts are covered by Tasks 1-2. Optimized command runner is covered by Task 3. Native tool factory is covered by Task 4. Deterministic conductor is covered by Task 5. Durable behavior policy is covered by Task 6. Python usage is covered by Tasks 0-1 and remains optional.
 
 **Placeholder scan:** The plan contains concrete files, tests, code snippets, commands, and expected outcomes. It does not rely on unnamed modules or unspecified behavior.
 

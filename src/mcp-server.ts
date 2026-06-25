@@ -2007,7 +2007,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "conductor_plan",
     {
-      description: "Create a deterministic Fugu-near planner/worker/verifier conductor scaffold.",
+      description: "Create a deterministic planner/worker/verifier conductor scaffold.",
       inputSchema: conductorInputSchema,
     },
     async (input) => jsonResult(tools.conductorPlan(input)),

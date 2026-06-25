@@ -4,7 +4,7 @@
 
 **Goal:** Make Wormhole's context, optimization, graph, printed-tool, and model-profile capabilities native executable runtime features, not only capability declarations or adapter notes.
 
-**Architecture:** Add focused TypeScript modules with deterministic behavior and MCP tool-handler wiring. The first batch implements runtime primitives: context records/packs, reversible compression retrieval, graph provenance/reporting, printed-tool CLI execution/verification/evidence capture, and model-profile routing traces. External factory parity, learned Fugu-style orchestration, and multimodal Graphify parity remain future work.
+**Architecture:** Add focused TypeScript modules with deterministic behavior and MCP tool-handler wiring. The first batch implements runtime primitives: context records/packs, reversible compression retrieval, graph provenance/reporting, printed-tool CLI execution/verification/evidence capture, and model-profile routing traces. Native factory expansion, learned orchestration, and multimodal graph workflows remain future work.
 
 **Tech Stack:** TypeScript, Vitest, Node.js `child_process`, existing MCP server/tool-handler patterns.
 
@@ -66,7 +66,7 @@
 - [ ] Add failing tests for structural verification, CLI execution, timeout handling, output capture, and evidence bundle hashing.
 - [ ] Implement native printed-tool verification and CLI execution with deterministic result records.
 - [ ] Wire MCP tools: `printing_press_verify`, `printing_press_run`.
-- [ ] Keep CLI generation/factory parity out of this batch.
+- [ ] Keep CLI generation and factory expansion out of this batch.
 - [ ] Run targeted printed-tool tests.
 
 ### Task 5: Model-Profile Learning Traces

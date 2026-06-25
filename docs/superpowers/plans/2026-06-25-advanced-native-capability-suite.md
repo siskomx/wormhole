@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development for parallel execution, or superpowers:executing-plans for single-agent execution. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Close the remaining native-capability gaps called out after the near-equivalent runtime suite: multimodal ingestion for PDFs/images, shell hooks across common terminals, Browser/HAR/API discovery for automatic tool generation, and learned orchestration policy. These must be Wormhole-native features, not README claims or delegated external products.
+**Goal:** Close the remaining native-capability gaps called out after the native runtime suite: multimodal ingestion for PDFs/images, shell hooks across common terminals, Browser/HAR/API discovery for automatic tool generation, and learned orchestration policy. These must be Wormhole-native features, not README claims or delegated external products.
 
 **Architecture:** TypeScript remains authoritative for MCP schemas, path policy, evidence state, side-effect permissions, tool manifests, and plugin packaging. Python remains an optional bounded sidecar for workloads where it materially helps: media extraction and offline policy training/evaluation. Browser and shell features are opt-in, dry-run first, reversible, and evidence-recording by default.
 
@@ -1054,7 +1054,7 @@ Expected: PASS.
 - [ ] **Step 3: Search for stale caveats**
 
 ```bash
-rg -n "not claim full product parity|future extensions|multimodal extraction, shell hooks, website crawling, or learned RL orchestration|Out of scope for this implementation batch" README.md docs plugins src tests
+rg -n "not claim native ownership|future extensions|multimodal extraction, shell hooks, website crawling, or learned RL orchestration|Out of scope for this implementation batch" README.md docs plugins src tests
 ```
 
 Expected: no matches except historical plan documents that intentionally describe previous scope.

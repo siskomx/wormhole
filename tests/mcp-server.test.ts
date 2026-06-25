@@ -3,7 +3,7 @@ import { createInMemoryKernel } from "../src/kernel.js";
 import { createWormholeMcpServer } from "../src/mcp-server.js";
 
 describe("Wormhole MCP server", () => {
-  it("creates an MCP server for the native near-equivalent tool surface", () => {
+  it("creates an MCP server for the native tool surface", () => {
     const server = createWormholeMcpServer(createInMemoryKernel());
     const registeredTools = Object.keys(
       (server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools,

@@ -347,7 +347,7 @@ Run:
 ```powershell
 git add docs/superpowers/plans/2026-06-25-orchestration-policy-lab.md src tests python docs README.md plugins
 git commit -m "feat: add orchestration policy lab"
-git push origin IQx/near-equivalent-runtime-suite
+git push origin IQx/native-runtime-suite
 ```
 
 Expected: commit succeeds and branch pushes to origin.
