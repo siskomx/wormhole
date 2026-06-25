@@ -62,7 +62,16 @@ const traceJsonl = [
     graphNodeCount: 120,
     evidenceCount: 4,
     openQuestions: 0,
-    action: { workerCount: 2, verifierCount: 1, maxDepth: 3, modelProfile: "balanced" },
+    action: {
+      workerCount: 2,
+      verifierCount: 1,
+      maxDepth: 3,
+      modelProfile: "balanced",
+      splitStrategy: "parallel",
+      contextBudget: "large",
+      evidenceMode: "strict",
+      stopRule: "verify",
+    },
     outcome: {
       testsPassed: true,
       evidenceCount: 4,
@@ -78,7 +87,16 @@ const traceJsonl = [
     graphNodeCount: 150,
     evidenceCount: 5,
     openQuestions: 0,
-    action: { workerCount: 2, verifierCount: 1, maxDepth: 3, modelProfile: "balanced" },
+    action: {
+      workerCount: 2,
+      verifierCount: 1,
+      maxDepth: 3,
+      modelProfile: "balanced",
+      splitStrategy: "parallel",
+      contextBudget: "large",
+      evidenceMode: "strict",
+      stopRule: "verify",
+    },
     outcome: {
       testsPassed: true,
       evidenceCount: 5,
@@ -118,6 +136,15 @@ describe("Python policy trainer", () => {
     expect(Object.keys((first as { qTable: Record<string, unknown> }).qTable)).toEqual([
       "feature|graph:medium|evidence:medium|risk:low",
     ]);
+    expect(
+      Object.keys(
+        (first as { qTable: Record<string, Record<string, number>> }).qTable[
+          "feature|graph:medium|evidence:medium|risk:low"
+        ],
+      ),
+    ).toEqual([
+      "workers=2|verifiers=1|depth=3|model=balanced|split=parallel|context=large|evidence=strict|stop=verify",
+    ]);
   });
 
   it("evaluates replay pass rate and reports unsafe candidate actions", () => {
@@ -132,7 +159,7 @@ describe("Python policy trainer", () => {
         policyId: "unsafe",
         qTable: {
           "feature|graph:medium|evidence:medium|risk:low": {
-            "workers=99|verifiers=5|depth=9|model=risky": 1,
+            "workers=99|verifiers=5|depth=9|model=risky|split=single|context=medium|evidence=standard|stop=verify": 1,
           },
         },
       },
@@ -148,7 +175,39 @@ describe("Python policy trainer", () => {
       trainingSamples: 2,
     });
     expect((result as { safetyViolations: string[] }).safetyViolations).toEqual([
-      "workers=99|verifiers=5|depth=9|model=risky",
+      "workers=99|verifiers=5|depth=9|model=risky|split=single|context=medium|evidence=standard|stop=verify",
     ]);
+  });
+
+  it("compares policies with deterministic baselines in the sidecar", () => {
+    const script = [
+      "import json, sys",
+      "from wormhole_sidecar.policy_train import compare_policy_baselines",
+      "print(json.dumps(compare_policy_baselines(json.loads(sys.argv[1])), sort_keys=True))",
+    ].join("\n");
+    const result = runPolicyScript(script, {
+      traceJsonl,
+      policy: {
+        policyId: "candidate",
+        qTable: {
+          "feature|graph:medium|evidence:medium|risk:low": {
+            "workers=2|verifiers=1|depth=3|model=balanced|split=parallel|context=large|evidence=strict|stop=verify": 1,
+          },
+        },
+      },
+    });
+
+    if (!result) {
+      expect(result).toBeUndefined();
+      return;
+    }
+
+    expect((result as { candidate: { replayPassRate: number } }).candidate.replayPassRate).toBe(1);
+    expect((result as { baselines: Array<{ policyId: string }> }).baselines.map((baseline) => baseline.policyId)).toEqual([
+      "baseline:single-balanced",
+      "baseline:parallel-verify",
+      "baseline:strict-deep",
+    ]);
+    expect((result as { best: { policyId: string } }).best.policyId).toBe("candidate");
   });
 });

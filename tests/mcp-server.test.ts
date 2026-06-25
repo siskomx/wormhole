@@ -25,7 +25,11 @@ describe("Wormhole MCP server", () => {
         "orchestration_trace_record",
         "orchestration_policy_train",
         "orchestration_policy_evaluate",
+        "orchestration_policy_compare_baselines",
         "orchestration_policy_activate",
+        "reasoning_trace_record",
+        "reasoning_dataset_export",
+        "reasoning_strategy_evaluate",
       ]),
     );
   });

@@ -44,6 +44,10 @@ import {
   type OrchestrationTrace,
   type PolicyActivationInput,
 } from "./orchestration-learning.js";
+import {
+  createReasoningResearchStore,
+  type ReasoningTrace,
+} from "./reasoning-research.js";
 import { reconcileArtifacts, type ArtifactProposal } from "./reconciliation.js";
 import { createDagSchedule, type ScheduledTask } from "./scheduler.js";
 import { createShellHookManager, type ShellHookOperation, type ShellKind } from "./shell-hooks.js";
@@ -170,6 +174,7 @@ export function createToolHandlers(
   const pythonSidecar = createPythonSidecar();
   const behaviorPolicy = createBehaviorPolicyStore();
   const policyStore = createPolicyStore();
+  const reasoningStore = createReasoningResearchStore();
   const shellHookPlans = new Map<string, {
     operations: ShellHookOperation[];
     homeDir: string;
@@ -569,12 +574,30 @@ export function createToolHandlers(
       return policyStore.evaluate(input.policyJson);
     },
 
+    orchestrationPolicyCompareBaselines(input: {
+      policyJson: unknown;
+    }) {
+      return policyStore.comparePolicyToBaselines(input.policyJson);
+    },
+
     orchestrationPolicyActivate(input: PolicyActivationInput) {
       return policyStore.activate(input);
     },
 
     orchestrationPolicyGet() {
       return policyStore.getActive();
+    },
+
+    reasoningTraceRecord(input: ReasoningTrace) {
+      return reasoningStore.record(input);
+    },
+
+    reasoningDatasetExport() {
+      return reasoningStore.exportJsonl();
+    },
+
+    reasoningStrategyEvaluate() {
+      return reasoningStore.evaluateStrategies();
     },
 
     cacheEvidence(input: {

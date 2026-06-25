@@ -137,6 +137,7 @@ describe("capability manifest", () => {
         "adaptive.shell-hook-manager",
         "adaptive.discovery-tool-generation",
         "adaptive.learned-orchestration-policy",
+        "adaptive.orchestration-policy-lab",
         "adaptive.dynamic-task-spawning",
         "adaptive.model-pool-orchestration",
         "adaptive.workbench-artifacts",

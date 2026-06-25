@@ -29,6 +29,7 @@ describe("repo-local Codex plugin metadata", () => {
     expect(plugin.interface.longDescription).toContain("shell hook management");
     expect(plugin.interface.longDescription).toContain("discovery-driven tool generation");
     expect(plugin.interface.longDescription).toContain("learned orchestration policy");
+    expect(plugin.interface.longDescription).toContain("reasoning strategy research");
     expect(serialized).not.toContain("TODO");
     expect(mcp.mcpServers.wormhole.command).toBe("node");
     expect(mcp.mcpServers.wormhole.args).toEqual(["../../dist/src/cli.js"]);
@@ -84,6 +85,9 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("shell_hook_plan");
     expect(manifest.tools.map((tool) => tool.name)).toContain("discovery_tool_spec_generate");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_policy_activate");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_policy_compare_baselines");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("reasoning_trace_record");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("reasoning_strategy_evaluate");
     expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_register");
     expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_register_agent");
     expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_run");
@@ -94,6 +98,9 @@ describe("Claude Desktop extension metadata", () => {
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "optimized_command_run",
+    );
+    expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
+      "reasoning_strategy_evaluate",
     );
     expect(serialized).not.toContain("TODO");
   });

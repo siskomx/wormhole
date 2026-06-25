@@ -11,7 +11,8 @@ export type PythonSidecarJobName =
   | "pdf_extract"
   | "image_inspect"
   | "policy_train"
-  | "policy_evaluate";
+  | "policy_evaluate"
+  | "policy_compare_baselines";
 
 export type PythonSidecarJobRequest = {
   job: PythonSidecarJobName;
@@ -53,6 +54,7 @@ const allowedJobs = new Set<PythonSidecarJobName>([
   "image_inspect",
   "policy_train",
   "policy_evaluate",
+  "policy_compare_baselines",
 ]);
 const MAX_CAPTURED_OUTPUT_CHARS = 2_000_000;
 

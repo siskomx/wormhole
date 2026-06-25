@@ -10,7 +10,7 @@ The core area proves the evidence loop. The orchestration area adds bounded para
 | --- | --- | --- |
 | Core | Implemented foundation | Local MCP planning kernel, JSONL state, evidence records, question ledger, gate, Markdown plan artifact, benchmark fixtures. |
 | Orchestration | Implemented foundation | First-party optimization primitives, live sub-orchestrator control, four-layer task records, static DAG scheduling, adapter-free local orchestration runs, content-addressed evidence cache, reconciliation, repo graph indexing, Codex adapter config, Claude Desktop extension metadata, external agent adapters, Printing Press CLI adapters, and benchmark comparison runner. |
-| Adaptive | Implemented foundation | Adaptive model/provider routing, graph-first codebase query workflow, connector registry, dynamic DAG spawning guardrails, bounded model-pool roles, native media ingestion, shell hooks, discovery-driven tool generation, learned policy gates, typed artifacts, and static workbench rendering. |
+| Adaptive | Implemented foundation | Adaptive model/provider routing, graph-first codebase query workflow, connector registry, dynamic DAG spawning guardrails, bounded model-pool roles, native media ingestion, shell hooks, discovery-driven tool generation, learned policy gates, orchestration policy lab, reasoning strategy research, typed artifacts, and static workbench rendering. |
 
 ## Four-Layer Ceiling
 
@@ -184,7 +184,13 @@ Shell hooks expose `shell_hook_discover`, `shell_hook_plan`, `shell_hook_install
 
 Discovery exposes `discovery_har_import`, `discovery_openapi_import`, `discovery_http_crawl`, `discovery_browser_capture`, and `discovery_tool_spec_generate`. Sensitive headers are redacted before hashing or returning observations. Crawls are bounded and deny loopback/private/link-local hosts unless private-network crawling is explicitly enabled. Mutating API methods are marked side-effecting in generated specs.
 
-Learned orchestration exposes `orchestration_trace_record`, `orchestration_dataset_export`, `orchestration_policy_train`, `orchestration_policy_evaluate`, `orchestration_policy_activate`, and `orchestration_policy_get`. Policies train offline from traces, produce stored evaluation IDs, replay before activation, and are clamped at runtime. A learned policy cannot bypass max depth, budgets, evidence gates, shell apply requirements, or approvals.
+Learned orchestration exposes `orchestration_trace_record`, `orchestration_dataset_export`, `orchestration_policy_train`, `orchestration_policy_evaluate`, `orchestration_policy_compare_baselines`, `orchestration_policy_activate`, and `orchestration_policy_get`. Policies train offline from traces, compare against deterministic safe baselines, produce stored evaluation IDs, replay before activation, and are clamped at runtime. A learned policy cannot bypass max depth, budgets, evidence gates, shell apply requirements, or approvals.
+
+The orchestration policy lab expands the learned action space beyond worker/verifier/depth/model selection. Policy actions can also describe split strategy, context budget, evidence mode, and stop rule. These fields stay bounded to safe enums and are advisory: the TypeScript runtime still owns conductor decisions, task budgets, gates, and approvals.
+
+Reasoning research exposes `reasoning_trace_record`, `reasoning_dataset_export`, and `reasoning_strategy_evaluate`. Traces score plan, critique, revision, and verifier behavior from evidence coverage, open-question resolution, outcome labels, and user corrections. Strategy evaluation is for research and routing guidance; it does not replace the evidence gate or claim proof of correctness.
+
+Browser and HAR/API discovery remain complementary inputs. `discovery_browser_capture` can provide network observations for tool generation and evidence gathering, but Wormhole does not make a full browser agent its core runtime.
 
 ## Connector Model
 

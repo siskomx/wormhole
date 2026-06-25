@@ -80,6 +80,34 @@ describe("orchestration learning", () => {
       verifierCount: 2,
       maxDepth: 4,
       modelProfile: "balanced",
+      splitStrategy: "single",
+      contextBudget: "medium",
+      evidenceMode: "standard",
+      stopRule: "verify",
+    });
+  });
+
+  it("clamps expanded orchestration policy actions to safe research decisions", () => {
+    const action = clampPolicyAction({
+      workerCount: 8,
+      verifierCount: 9,
+      maxDepth: 99,
+      modelProfile: "untrusted",
+      splitStrategy: "chaos",
+      contextBudget: "everything",
+      evidenceMode: "none",
+      stopRule: "ignore",
+    } as any);
+
+    expect(action).toEqual({
+      workerCount: 6,
+      verifierCount: 2,
+      maxDepth: 4,
+      modelProfile: "balanced",
+      splitStrategy: "single",
+      contextBudget: "medium",
+      evidenceMode: "standard",
+      stopRule: "verify",
     });
   });
 
@@ -117,7 +145,7 @@ describe("orchestration learning", () => {
       policyId: "candidate",
       qTable: {
         "feature|graph:medium|evidence:medium|risk:low": {
-          "workers=99|verifiers=5|depth=9|model=risky": 2,
+          "workers=99|verifiers=5|depth=9|model=risky|split=single|context=medium|evidence=standard|stop=verify": 2,
         },
       },
     });
@@ -126,7 +154,9 @@ describe("orchestration learning", () => {
     expect(evaluation.evaluationId).toMatch(/^evaluation:[a-f0-9]{16}$/);
     expect(evaluation.sampleCount).toBe(2);
     expect(evaluation.replayPassRate).toBe(0);
-    expect(evaluation.safetyViolations).toContain("workers=99|verifiers=5|depth=9|model=risky");
+    expect(evaluation.safetyViolations).toContain(
+      "workers=99|verifiers=5|depth=9|model=risky|split=single|context=medium|evidence=standard|stop=verify",
+    );
   });
 
   it("does not activate a policy below replay thresholds", () => {
@@ -158,7 +188,7 @@ describe("orchestration learning", () => {
       policyId: "strong",
       qTable: {
         "feature|graph:medium|evidence:medium|risk:low": {
-          "workers=3|verifiers=1|depth=3|model=balanced": 1,
+          "workers=3|verifiers=1|depth=3|model=balanced|split=single|context=medium|evidence=standard|stop=verify": 1,
         },
       },
     });
@@ -176,7 +206,48 @@ describe("orchestration learning", () => {
         verifierCount: 1,
         maxDepth: 3,
         modelProfile: "balanced",
+        splitStrategy: "single",
+        contextBudget: "medium",
+        evidenceMode: "standard",
+        stopRule: "verify",
       },
     });
+  });
+
+  it("compares a candidate policy against deterministic orchestration baselines", () => {
+    const store = createPolicyStore();
+    for (let index = 0; index < 12; index += 1) {
+      store.record(trace({
+        traceId: `trace-${index}`,
+        action: {
+          workerCount: 3,
+          verifierCount: 1,
+          maxDepth: 3,
+          modelProfile: "balanced",
+          splitStrategy: "parallel",
+          contextBudget: "large",
+          evidenceMode: "strict",
+          stopRule: "verify",
+        },
+      }));
+    }
+
+    const comparison = store.comparePolicyToBaselines({
+      policyId: "candidate",
+      qTable: {
+        "feature|graph:medium|evidence:medium|risk:low": {
+          "workers=3|verifiers=1|depth=3|model=balanced|split=parallel|context=large|evidence=strict|stop=verify": 1,
+        },
+      },
+    });
+
+    expect(comparison.candidate.policyId).toBe("candidate");
+    expect(comparison.candidate.replayPassRate).toBe(1);
+    expect(comparison.baselines.map((baseline) => baseline.policyId)).toEqual([
+      "baseline:single-balanced",
+      "baseline:parallel-verify",
+      "baseline:strict-deep",
+    ]);
+    expect(comparison.best.policyId).toBe("candidate");
   });
 });

@@ -7,6 +7,7 @@ export type PolicyOutcome = {
   durationMs: number;
   tokenEstimate: number;
   userCorrectionCount: number;
+  reasoningScore?: number;
 };
 
 export type PolicyAction = {
@@ -14,6 +15,10 @@ export type PolicyAction = {
   verifierCount: number;
   maxDepth: number;
   modelProfile: string;
+  splitStrategy?: "single" | "parallel" | "sequential";
+  contextBudget?: "small" | "medium" | "large";
+  evidenceMode?: "minimal" | "standard" | "strict";
+  stopRule?: "continue" | "verify" | "escalate";
 };
 
 export type OrchestrationTrace = {
@@ -49,7 +54,17 @@ export type ActivePolicy = {
   recommendedAction?: PolicyAction;
 };
 
+export type PolicyBaselineComparison = {
+  candidate: PolicyEvaluation;
+  baselines: PolicyEvaluation[];
+  best: PolicyEvaluation;
+};
+
 const SAFE_MODELS = new Set(["fast", "balanced", "deep", "ultra", "small-local", "deep-reviewer"]);
+const SAFE_SPLIT_STRATEGIES = new Set(["single", "parallel", "sequential"]);
+const SAFE_CONTEXT_BUDGETS = new Set(["small", "medium", "large"]);
+const SAFE_EVIDENCE_MODES = new Set(["minimal", "standard", "strict"]);
+const SAFE_STOP_RULES = new Set(["continue", "verify", "escalate"]);
 
 export function computeReward(outcome: PolicyOutcome): number {
   const testScore = outcome.testsPassed ? 10 : -8;
@@ -58,8 +73,17 @@ export function computeReward(outcome: PolicyOutcome): number {
   const correctionPenalty = Math.min(outcome.userCorrectionCount, 10) * 1.2;
   const durationPenalty = Math.min(outcome.durationMs / 60_000, 4);
   const tokenPenalty = Math.min(outcome.tokenEstimate / 50_000, 4);
+  const reasoningScore = Math.max(0, Math.min(outcome.reasoningScore ?? 0, 1)) * 2;
   return Number(
-    (testScore + evidenceScore - questionPenalty - correctionPenalty - durationPenalty - tokenPenalty).toFixed(4),
+    (
+      testScore +
+      evidenceScore +
+      reasoningScore -
+      questionPenalty -
+      correctionPenalty -
+      durationPenalty -
+      tokenPenalty
+    ).toFixed(4),
   );
 }
 
@@ -69,6 +93,10 @@ export function clampPolicyAction(action: PolicyAction): PolicyAction {
     verifierCount: Math.max(0, Math.min(2, Math.trunc(action.verifierCount || 0))),
     maxDepth: Math.max(1, Math.min(4, Math.trunc(action.maxDepth || 1))),
     modelProfile: SAFE_MODELS.has(action.modelProfile) ? action.modelProfile : "balanced",
+    splitStrategy: SAFE_SPLIT_STRATEGIES.has(action.splitStrategy ?? "") ? action.splitStrategy : "single",
+    contextBudget: SAFE_CONTEXT_BUDGETS.has(action.contextBudget ?? "") ? action.contextBudget : "medium",
+    evidenceMode: SAFE_EVIDENCE_MODES.has(action.evidenceMode ?? "") ? action.evidenceMode : "standard",
+    stopRule: SAFE_STOP_RULES.has(action.stopRule ?? "") ? action.stopRule : "verify",
   };
 }
 
@@ -98,27 +126,54 @@ function stateKey(trace: OrchestrationTrace): string {
 }
 
 function actionKey(action: PolicyAction): string {
+  const clamped = clampPolicyAction(action);
   return [
-    `workers=${action.workerCount}`,
-    `verifiers=${action.verifierCount}`,
-    `depth=${action.maxDepth}`,
-    `model=${action.modelProfile}`,
+    `workers=${clamped.workerCount}`,
+    `verifiers=${clamped.verifierCount}`,
+    `depth=${clamped.maxDepth}`,
+    `model=${clamped.modelProfile}`,
+    `split=${clamped.splitStrategy}`,
+    `context=${clamped.contextBudget}`,
+    `evidence=${clamped.evidenceMode}`,
+    `stop=${clamped.stopRule}`,
   ].join("|");
 }
 
+function parseActionValues(action: string): Record<string, string> | undefined {
+  const entries: Array<[string, string]> = [];
+  for (const part of action.split("|")) {
+    const separatorIndex = part.indexOf("=");
+    if (separatorIndex <= 0) {
+      return undefined;
+    }
+    entries.push([part.slice(0, separatorIndex), part.slice(separatorIndex + 1)]);
+  }
+  return Object.fromEntries(entries);
+}
+
 function isActionSafe(action: string): boolean {
-  const values = Object.fromEntries(action.split("|").map((part) => part.split("=")));
+  const values = parseActionValues(action);
+  if (!values) {
+    return false;
+  }
   const workerCount = Number(values.workers);
   const verifierCount = Number(values.verifiers);
   const maxDepth = Number(values.depth);
   return (
+    Number.isInteger(workerCount) &&
+    Number.isInteger(verifierCount) &&
+    Number.isInteger(maxDepth) &&
     workerCount >= 1 &&
     workerCount <= 6 &&
     verifierCount >= 0 &&
     verifierCount <= 2 &&
     maxDepth >= 1 &&
     maxDepth <= 4 &&
-    SAFE_MODELS.has(values.model)
+    SAFE_MODELS.has(values.model) &&
+    SAFE_SPLIT_STRATEGIES.has(values.split ?? "single") &&
+    SAFE_CONTEXT_BUDGETS.has(values.context ?? "medium") &&
+    SAFE_EVIDENCE_MODES.has(values.evidence ?? "standard") &&
+    SAFE_STOP_RULES.has(values.stop ?? "verify")
   );
 }
 
@@ -126,13 +181,42 @@ function parseActionKey(action: string): PolicyAction | undefined {
   if (!isActionSafe(action)) {
     return undefined;
   }
-  const values = Object.fromEntries(action.split("|").map((part) => part.split("=")));
-  return {
+  const values = parseActionValues(action);
+  if (!values) {
+    return undefined;
+  }
+  return clampPolicyAction({
     workerCount: Number(values.workers),
     verifierCount: Number(values.verifiers),
     maxDepth: Number(values.depth),
     modelProfile: values.model,
-  };
+    splitStrategy: values.split as PolicyAction["splitStrategy"],
+    contextBudget: values.context as PolicyAction["contextBudget"],
+    evidenceMode: values.evidence as PolicyAction["evidenceMode"],
+    stopRule: values.stop as PolicyAction["stopRule"],
+  });
+}
+
+function normalizeActionKey(action: string): string | undefined {
+  const parsed = parseActionKey(action);
+  return parsed ? actionKey(parsed) : undefined;
+}
+
+function bestActionForState(actions: Record<string, number> = {}): string | undefined {
+  return Object.entries(actions).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0];
+}
+
+function fixedPolicyForTraces(
+  policyId: string,
+  traces: OrchestrationTrace[],
+  action: PolicyAction,
+): { policyId: string; qTable: Record<string, Record<string, number>> } {
+  const qTable: Record<string, Record<string, number>> = {};
+  const key = actionKey(action);
+  for (const trace of traces) {
+    qTable[stateKey(trace)] = { [key]: 1 };
+  }
+  return { policyId, qTable };
 }
 
 export function serializeTraceForTraining(trace: OrchestrationTrace): string {
@@ -160,12 +244,63 @@ export function createPolicyStore(): {
   record(trace: OrchestrationTrace): void;
   exportJsonl(): string;
   evaluate(policyJson: unknown): PolicyEvaluation;
+  comparePolicyToBaselines(policyJson: unknown): PolicyBaselineComparison;
   activate(input: PolicyActivationInput): ActivePolicy;
   getActive(): ActivePolicy | undefined;
 } {
   const traces: OrchestrationTrace[] = [];
   const evaluations = new Map<string, PolicyEvaluation>();
   let active: ActivePolicy | undefined;
+
+  function evaluateCandidate(policyJson: unknown): PolicyEvaluation {
+    const candidate = typeof policyJson === "object" && policyJson !== null ? policyJson as {
+      policyId?: string;
+      replayPassRate?: number;
+      averageReward?: number;
+      sampleCount?: number;
+      qTable?: Record<string, Record<string, number>>;
+    } : {};
+    const safetyViolations = Object.values(candidate.qTable ?? {})
+      .flatMap((actions) => Object.keys(actions))
+      .filter((action) => !isActionSafe(action));
+    const safeActions = Object.values(candidate.qTable ?? {})
+      .flatMap((actions) => Object.entries(actions))
+      .filter(([selectedAction]) => isActionSafe(selectedAction))
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+    const policyId = candidate.policyId ?? hashPolicy(candidate);
+    let matches = 0;
+    const rewards: number[] = [];
+    for (const trace of traces) {
+      const actions = candidate.qTable?.[stateKey(trace)] ?? {};
+      const selected = bestActionForState(actions);
+      if (selected && normalizeActionKey(selected) === actionKey(trace.action)) {
+        matches += 1;
+      }
+      rewards.push(computeReward(trace.outcome));
+    }
+    const sampleCount = traces.length;
+    const replayPassRate = sampleCount > 0 && safetyViolations.length === 0 ? matches / sampleCount : 0;
+    const averageReward =
+      rewards.length > 0
+        ? Number((rewards.reduce((sum, reward) => sum + reward, 0) / rewards.length).toFixed(4))
+        : 0;
+    return {
+      evaluationId: hashPolicy({
+        policyId,
+        replayPassRate,
+        averageReward,
+        sampleCount,
+        safetyViolations,
+        qTable: candidate.qTable ?? {},
+      }).replace("policy:", "evaluation:"),
+      policyId,
+      replayPassRate,
+      averageReward,
+      sampleCount,
+      safetyViolations,
+      recommendedAction: safeActions[0] ? parseActionKey(safeActions[0][0]) : undefined,
+    };
+  }
 
   return {
     record(trace) {
@@ -177,55 +312,52 @@ export function createPolicyStore(): {
     },
 
     evaluate(policyJson) {
-      const candidate = typeof policyJson === "object" && policyJson !== null ? policyJson as {
-        policyId?: string;
-        replayPassRate?: number;
-        averageReward?: number;
-        sampleCount?: number;
-        qTable?: Record<string, Record<string, number>>;
-      } : {};
-      const safetyViolations = Object.values(candidate.qTable ?? {})
-        .flatMap((actions) => Object.keys(actions))
-        .filter((action) => !isActionSafe(action));
-      const safeActions = Object.values(candidate.qTable ?? {})
-        .flatMap((actions) => Object.entries(actions))
-        .filter(([action]) => isActionSafe(action))
-        .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
-      const policyId = candidate.policyId ?? hashPolicy(candidate);
-      let matches = 0;
-      const rewards: number[] = [];
-      for (const trace of traces) {
-        const actions = candidate.qTable?.[stateKey(trace)] ?? {};
-        const selected = Object.entries(actions).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0];
-        if (selected && isActionSafe(selected) && selected === actionKey(trace.action)) {
-          matches += 1;
-        }
-        rewards.push(computeReward(trace.outcome));
-      }
-      const sampleCount = traces.length;
-      const replayPassRate = sampleCount > 0 && safetyViolations.length === 0 ? matches / sampleCount : 0;
-      const averageReward =
-        rewards.length > 0
-          ? Number((rewards.reduce((sum, reward) => sum + reward, 0) / rewards.length).toFixed(4))
-          : 0;
-      const evaluation: PolicyEvaluation = {
-        evaluationId: hashPolicy({
-          policyId,
-          replayPassRate,
-          averageReward,
-          sampleCount,
-          safetyViolations,
-          qTable: candidate.qTable ?? {},
-        }).replace("policy:", "evaluation:"),
-        policyId,
-        replayPassRate,
-        averageReward,
-        sampleCount,
-        safetyViolations,
-        recommendedAction: safeActions[0] ? parseActionKey(safeActions[0][0]) : undefined,
-      };
+      const evaluation = evaluateCandidate(policyJson);
       evaluations.set(evaluation.evaluationId, evaluation);
       return evaluation;
+    },
+
+    comparePolicyToBaselines(policyJson) {
+      const candidate = evaluateCandidate(policyJson);
+      const baselines = [
+        fixedPolicyForTraces("baseline:single-balanced", traces, {
+          workerCount: 1,
+          verifierCount: 0,
+          maxDepth: 1,
+          modelProfile: "balanced",
+          splitStrategy: "single",
+          contextBudget: "medium",
+          evidenceMode: "standard",
+          stopRule: "verify",
+        }),
+        fixedPolicyForTraces("baseline:parallel-verify", traces, {
+          workerCount: 3,
+          verifierCount: 1,
+          maxDepth: 3,
+          modelProfile: "balanced",
+          splitStrategy: "parallel",
+          contextBudget: "large",
+          evidenceMode: "standard",
+          stopRule: "verify",
+        }),
+        fixedPolicyForTraces("baseline:strict-deep", traces, {
+          workerCount: 2,
+          verifierCount: 2,
+          maxDepth: 4,
+          modelProfile: "deep",
+          splitStrategy: "sequential",
+          contextBudget: "large",
+          evidenceMode: "strict",
+          stopRule: "escalate",
+        }),
+      ].map(evaluateCandidate);
+      const best = [candidate, ...baselines].sort(
+        (left, right) =>
+          right.replayPassRate - left.replayPassRate ||
+          right.averageReward - left.averageReward ||
+          left.policyId.localeCompare(right.policyId),
+      )[0];
+      return { candidate, baselines, best };
     },
 
     activate(input) {

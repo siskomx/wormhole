@@ -9,7 +9,7 @@ from wormhole_sidecar.media_image import dependency_report as image_dependency_r
 from wormhole_sidecar.media_image import inspect_image
 from wormhole_sidecar.media_pdf import dependency_report as pdf_dependency_report
 from wormhole_sidecar.media_pdf import extract_pdf
-from wormhole_sidecar.policy_train import evaluate_policy, train_policy
+from wormhole_sidecar.policy_train import compare_policy_baselines, evaluate_policy, train_policy
 from wormhole_sidecar.trace_analysis import summarize_traces
 
 
@@ -43,6 +43,8 @@ def run_job(request):
         return train_policy(payload)
     if job == "policy_evaluate":
         return evaluate_policy(payload)
+    if job == "policy_compare_baselines":
+        return compare_policy_baselines(payload)
 
     raise ValueError(f"Unsupported sidecar job: {job}")
 

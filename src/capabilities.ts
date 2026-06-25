@@ -332,6 +332,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Offline trace datasets, deterministic policy training/evaluation, replay thresholds, activation gates, and runtime action clamps for learned orchestration policy.",
       },
       {
+        id: "adaptive.orchestration-policy-lab",
+        area: "adaptive",
+        status: "implemented",
+        description: "Research-grade orchestration policy lab with expanded action decisions, deterministic baseline comparison, reasoning trace scoring, and strategy evaluation.",
+      },
+      {
         id: "adaptive.connector-marketplace",
         area: "adaptive",
         status: "implemented",

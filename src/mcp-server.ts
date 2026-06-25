@@ -1256,12 +1256,17 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
     durationMs: z.number(),
     tokenEstimate: z.number(),
     userCorrectionCount: z.number(),
+    reasoningScore: z.number().min(0).max(1).optional(),
   });
   const policyActionSchema = z.object({
     workerCount: z.number(),
     verifierCount: z.number(),
     maxDepth: z.number(),
     modelProfile: z.string(),
+    splitStrategy: z.enum(["single", "parallel", "sequential"]).optional(),
+    contextBudget: z.enum(["small", "medium", "large"]).optional(),
+    evidenceMode: z.enum(["minimal", "standard", "strict"]).optional(),
+    stopRule: z.enum(["continue", "verify", "escalate"]).optional(),
   });
   const policyActivationSchema = {
     evaluationId: z.string(),
@@ -1319,6 +1324,17 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
   );
 
   server.registerTool(
+    "orchestration_policy_compare_baselines",
+    {
+      description: "Compare a candidate orchestration policy against deterministic safe baselines.",
+      inputSchema: {
+        policyJson: z.any(),
+      },
+    },
+    async (input) => jsonResult(tools.orchestrationPolicyCompareBaselines(input)),
+  );
+
+  server.registerTool(
     "orchestration_policy_activate",
     {
       description: "Activate an orchestration policy only after replay thresholds pass.",
@@ -1334,6 +1350,49 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
       inputSchema: {},
     },
     async () => jsonResult(tools.orchestrationPolicyGet()),
+  );
+
+  const reasoningTraceSchema = {
+    traceId: z.string(),
+    strategy: z.enum(["plan-first", "critique-revise", "verify-repair"]),
+    taskKind: z.string(),
+    planSummary: z.string(),
+    critiqueSummary: z.string().optional(),
+    revisionSummary: z.string().optional(),
+    verifierSummary: z.string().optional(),
+    evidenceReferenced: z.number().int().min(0),
+    evidenceAvailable: z.number().int().min(0),
+    openQuestionsResolved: z.number().int().min(0),
+    openQuestionsRemaining: z.number().int().min(0),
+    outcome: z.enum(["succeeded", "partial", "failed"]),
+    userCorrections: z.number().int().min(0),
+  };
+
+  server.registerTool(
+    "reasoning_trace_record",
+    {
+      description: "Record a scored reasoning trace for plan, critique, revision, and verifier research.",
+      inputSchema: reasoningTraceSchema,
+    },
+    async (input) => jsonResult(tools.reasoningTraceRecord(input)),
+  );
+
+  server.registerTool(
+    "reasoning_dataset_export",
+    {
+      description: "Export scored reasoning traces as JSONL.",
+      inputSchema: {},
+    },
+    async () => jsonResult(tools.reasoningDatasetExport()),
+  );
+
+  server.registerTool(
+    "reasoning_strategy_evaluate",
+    {
+      description: "Evaluate reasoning strategies and recommend supported winners from observed traces.",
+      inputSchema: {},
+    },
+    async () => jsonResult(tools.reasoningStrategyEvaluate()),
   );
 
   return server;

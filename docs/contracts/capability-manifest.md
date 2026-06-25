@@ -69,9 +69,10 @@ Implemented `adaptive` capabilities include:
 - `adaptive.shell-hook-manager`: dry-run-first shell hook discovery, plan-token-gated marker-based install, backup, verification, and uninstall for common terminals.
 - `adaptive.discovery-tool-generation`: HAR/OpenAPI import, bounded HTTP crawl with private-network guardrails, optional browser capture, endpoint normalization, secret redaction, and API tool-spec generation.
 - `adaptive.learned-orchestration-policy`: offline orchestration trace datasets, deterministic policy training/evaluation, stored evaluation IDs, replay thresholds, activation gates, and action clamps.
+- `adaptive.orchestration-policy-lab`: expanded orchestration action decisions, deterministic baseline comparison, scored reasoning traces, and strategy evaluation for plan/critique/revision/verifier research.
 - `adaptive.dynamic-task-spawning`: dynamic DAG task expansion with max-depth and max-task guardrails.
 - `adaptive.model-pool-orchestration`: bounded thinker, worker, and verifier provider orchestration.
 - `adaptive.workbench-artifacts`: static mission/task/gate/artifact workbench snapshots and HTML rendering.
 - `adaptive.rich-artifact-types`: typed artifact records for plans, reports, workbench HTML, patch plans, and benchmark reports.
 
-Future adaptive extensions may still add external provider marketplaces, richer interactive UI behavior, and persistent evidence graphs.
+Future adaptive extensions may still add external provider marketplaces, richer interactive UI behavior, persistent evidence graphs, and deeper research algorithms. Browser automation remains a complementary observation source rather than the center of Wormhole's runtime.

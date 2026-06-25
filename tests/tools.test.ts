@@ -491,7 +491,16 @@ describe("Wormhole MCP tool handlers", () => {
         graphNodeCount: 100,
         evidenceCount: 4,
         openQuestions: 0,
-        action: { workerCount: 2, verifierCount: 1, maxDepth: 3, modelProfile: "balanced" },
+        action: {
+          workerCount: 2,
+          verifierCount: 1,
+          maxDepth: 3,
+          modelProfile: "balanced",
+          splitStrategy: "parallel" as const,
+          contextBudget: "large" as const,
+          evidenceMode: "strict" as const,
+          stopRule: "verify" as const,
+        },
         outcome: {
           testsPassed: true,
           evidenceCount: 4,
@@ -499,6 +508,7 @@ describe("Wormhole MCP tool handlers", () => {
           durationMs: 1_000,
           tokenEstimate: 2_000,
           userCorrectionCount: 0,
+          reasoningScore: 0.9,
         },
       };
       const recorded = tools.orchestrationTraceRecord(trace);
@@ -511,7 +521,17 @@ describe("Wormhole MCP tool handlers", () => {
           policyId: "candidate",
           qTable: {
             "feature|graph:medium|evidence:medium|risk:low": {
-              "workers=2|verifiers=1|depth=3|model=balanced": 1,
+              "workers=2|verifiers=1|depth=3|model=balanced|split=parallel|context=large|evidence=strict|stop=verify": 1,
+            },
+          },
+        },
+      });
+      const baselineComparison = tools.orchestrationPolicyCompareBaselines({
+        policyJson: {
+          policyId: "candidate",
+          qTable: {
+            "feature|graph:medium|evidence:medium|risk:low": {
+              "workers=2|verifiers=1|depth=3|model=balanced|split=parallel|context=large|evidence=strict|stop=verify": 1,
             },
           },
         },
@@ -524,6 +544,38 @@ describe("Wormhole MCP tool handlers", () => {
         requiredStrengths: ["coding"],
         modelProfileIds: ["small-local"],
       });
+      const reasoningRecord = tools.reasoningTraceRecord({
+        traceId: "reason-1",
+        strategy: "critique-revise",
+        taskKind: "feature",
+        planSummary: "Plan with recorded evidence.",
+        critiqueSummary: "Critique missing verification.",
+        revisionSummary: "Add verification steps.",
+        verifierSummary: "Verifier checks evidence coverage.",
+        evidenceReferenced: 4,
+        evidenceAvailable: 5,
+        openQuestionsResolved: 2,
+        openQuestionsRemaining: 0,
+        outcome: "succeeded",
+        userCorrections: 0,
+      });
+      tools.reasoningTraceRecord({
+        traceId: "reason-2",
+        strategy: "critique-revise",
+        taskKind: "feature",
+        planSummary: "Plan with repo evidence.",
+        critiqueSummary: "Critique missing tests.",
+        revisionSummary: "Add tests.",
+        verifierSummary: "Verifier checks tests.",
+        evidenceReferenced: 3,
+        evidenceAvailable: 4,
+        openQuestionsResolved: 1,
+        openQuestionsRemaining: 0,
+        outcome: "partial",
+        userCorrections: 0,
+      });
+      const reasoningDataset = tools.reasoningDatasetExport();
+      const reasoningEvaluation = tools.reasoningStrategyEvaluate();
 
       expect(mediaDeps.job).toBe("media_dependency_report");
       expect(image.kind).toBe("image");
@@ -535,9 +587,16 @@ describe("Wormhole MCP tool handlers", () => {
       expect(recorded.traceId).toBe("trace-1");
       expect(dataset).toContain("trace-1");
       expect(evaluation.safetyViolations).toEqual([]);
+      expect(baselineComparison.best.policyId).toBe("candidate");
       expect(tools.orchestrationPolicyGet()?.policyId).toBe("candidate");
       expect(policyConductor.trace.reasonCodes).toContain("policy:candidate");
       expect(policyConductor.scaffoldId).toBe("plan-execute-verify");
+      expect(reasoningRecord.score.total).toBeGreaterThan(0.8);
+      expect(reasoningDataset).toContain("reason-1");
+      expect(reasoningEvaluation[0]).toMatchObject({
+        strategy: "critique-revise",
+        recommended: true,
+      });
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
