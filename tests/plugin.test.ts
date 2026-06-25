@@ -38,6 +38,8 @@ describe("repo-local Codex plugin metadata", () => {
     expect(plugin.interface.longDescription).toContain("one-shot project onboarding");
     expect(plugin.interface.longDescription).toContain("native architecture maps");
     expect(plugin.interface.longDescription).toContain("blast-radius analysis");
+    expect(plugin.interface.longDescription).toContain("agent-facing routing");
+    expect(plugin.interface.longDescription).toContain("next-tool recommendations");
     expect(plugin.interface.longDescription).toContain("optimization adapters");
     expect(serialized).not.toContain("TODO");
     expect(mcp.mcpServers.wormhole.command).toBe("node");
@@ -96,6 +98,10 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("entrypoint_flow_discover");
     expect(manifest.tools.map((tool) => tool.name)).toContain("blast_radius_analyze");
     expect(manifest.tools.map((tool) => tool.name)).toContain("context_pack_generate");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("project_intelligence_snapshot");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("next_best_tool");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("mission_route");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("agent_context_prepare");
     expect(manifest.tools.map((tool) => tool.name)).toContain("durable_repo_index_refresh");
     expect(manifest.tools.map((tool) => tool.name)).toContain("durable_semantic_search");
     expect(manifest.tools.map((tool) => tool.name)).toContain("test_impact_analyze_v2");
@@ -137,6 +143,9 @@ describe("Claude Desktop extension metadata", () => {
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "architecture_map",
+    );
+    expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
+      "next_best_tool",
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "optimized_command_run",

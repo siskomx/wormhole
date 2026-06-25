@@ -10,6 +10,7 @@ export * from "./evidence-cache.js";
 export * from "./reconciliation.js";
 export * from "./scheduler.js";
 export * from "./adaptive-routing.js";
+export * from "./agent-routing.js";
 export * from "./codex-adapter.js";
 export * from "./benchmark-runner.js";
 export * from "./connector-registry.js";

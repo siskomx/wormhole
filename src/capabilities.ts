@@ -296,6 +296,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Graph-first codebase query workflow that lets agents ask the repo index before broad grep or file-reading passes.",
       },
       {
+        id: "adaptive.agent-facing-routing",
+        area: "adaptive",
+        status: "implemented",
+        description: "Curated agent-facing routing tools that produce project-intelligence snapshots, next-tool recommendations, mission routes, and prepared context packs.",
+      },
+      {
         id: "adaptive.model-pool",
         area: "adaptive",
         status: "implemented",

@@ -65,6 +65,7 @@ Implemented `adaptive` capabilities include:
 - `adaptive.routing-model-selection`: fast/balanced/deep mode selection and model choice from provider manifests.
 - `adaptive.connector-registry`: capability-based connector discovery and selection.
 - `adaptive.graph-first-codebase-query`: query-first codebase discovery workflow that asks the repo graph before broad grep or raw file-reading passes.
+- `adaptive.agent-facing-routing`: curated project snapshots, next-tool recommendations, mission routes, and prepared context packs that keep agents off the full tool surface unless needed.
 - `adaptive.model-profile-learning`: native model-profile registration, deterministic selection, outcome recording, and replayable route trace export.
 - `adaptive.optional-python-sidecar`: optional Python worker for deterministic graph metrics, graph communities, media extraction, model-profile trace summaries, and offline policy jobs, bounded by TypeScript-owned MCP schemas, timeouts, and evidence hashes.
 - `adaptive.deterministic-conductor`: Fugu-near deterministic planner, worker, and verifier scaffolds with replayable conductor traces.

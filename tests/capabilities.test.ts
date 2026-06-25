@@ -133,6 +133,7 @@ describe("capability manifest", () => {
         "adaptive.routing-model-selection",
         "adaptive.connector-registry",
         "adaptive.graph-first-codebase-query",
+        "adaptive.agent-facing-routing",
         "adaptive.model-profile-learning",
         "adaptive.optional-python-sidecar",
         "adaptive.deterministic-conductor",

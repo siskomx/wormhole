@@ -162,6 +162,19 @@ The tools are:
 
 External tools can still sync observations into future versions of this model, but Wormhole's native tools remain the default source of project intelligence. Imported observations should carry provenance, confidence, source tool identity, and repo fingerprint metadata before they influence gates or context packs.
 
+## Agent-Facing Routing
+
+Wormhole now exposes a curated routing layer above the broad MCP tool surface. These tools are for agents that need to know what to call next without choosing manually from every low-level capability.
+
+The tools are:
+
+- `project_intelligence_snapshot`: returns a compact orientation snapshot, route recommendation, and default tool sequence.
+- `next_best_tool`: recommends the next Wormhole tool call from completed tools, task objective, and changed files.
+- `mission_route`: creates an ordered route through orientation, impact, context, verification, and gate stages.
+- `agent_context_prepare`: prepares a route, snapshot, context pack, immediate next calls, and agent instructions for the task.
+
+The routing layer is advisory. It does not bypass evidence recording, verification, action policy, or gate requirements; it narrows the default path so agents start from the most useful Wormhole tools before falling back to lower-level graph, diagnostic, discovery, or adapter tools.
+
 ## External Agent Adapters
 
 External AI agents and model providers are registered as bounded Wormhole workers through `agent_register`.

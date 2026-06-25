@@ -34,6 +34,10 @@ describe("Wormhole MCP server", () => {
         "entrypoint_flow_discover",
         "blast_radius_analyze",
         "context_pack_generate",
+        "project_intelligence_snapshot",
+        "next_best_tool",
+        "mission_route",
+        "agent_context_prepare",
       ]),
     );
   });

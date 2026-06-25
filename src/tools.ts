@@ -131,6 +131,12 @@ import {
 } from "./connector-registry.js";
 import { createArtifactRecord, type ArtifactRecordInput } from "./artifacts.js";
 import {
+  createProjectIntelligenceSnapshot,
+  prepareAgentContext,
+  recommendMissionRoute,
+  recommendNextBestTool,
+} from "./agent-routing.js";
+import {
   createWorkbenchSnapshot,
   renderWorkbenchHtml,
   type WorkbenchSnapshotInput,
@@ -1046,6 +1052,26 @@ export function createToolHandlers(
     }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return generateProjectContextPack({ ...input, repoRoot });
+    },
+
+    projectIntelligenceSnapshot(input: Parameters<typeof createProjectIntelligenceSnapshot>[0]) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return createProjectIntelligenceSnapshot({ ...input, repoRoot });
+    },
+
+    nextBestTool(input: Parameters<typeof recommendNextBestTool>[0]) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return recommendNextBestTool({ ...input, repoRoot });
+    },
+
+    missionRoute(input: Parameters<typeof recommendMissionRoute>[0]) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return recommendMissionRoute({ ...input, repoRoot });
+    },
+
+    agentContextPrepare(input: Parameters<typeof prepareAgentContext>[0]) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return prepareAgentContext({ ...input, repoRoot });
     },
 
     durableRepoIndexRefresh(input: RepoIndexBuildOptions) {

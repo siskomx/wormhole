@@ -1515,6 +1515,74 @@ export function createWormholeMcpServer(
   );
 
   server.registerTool(
+    "project_intelligence_snapshot",
+    {
+      description: "Return a compact native project-intelligence snapshot plus the recommended default tool sequence for an agent.",
+      inputSchema: {
+        repoRoot: z.string(),
+        objective: z.string().optional(),
+        query: z.string().optional(),
+        changedFiles: z.array(z.string()).optional(),
+        diffText: z.string().optional(),
+        completedTools: z.array(z.string()).optional(),
+        maxChars: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.projectIntelligenceSnapshot(input)),
+  );
+
+  server.registerTool(
+    "next_best_tool",
+    {
+      description: "Recommend the next Wormhole tool call from the agent's completed tools, task objective, and changed files.",
+      inputSchema: {
+        repoRoot: z.string(),
+        objective: z.string().optional(),
+        query: z.string().optional(),
+        changedFiles: z.array(z.string()).optional(),
+        diffText: z.string().optional(),
+        completedTools: z.array(z.string()).optional(),
+        maxChars: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.nextBestTool(input)),
+  );
+
+  server.registerTool(
+    "mission_route",
+    {
+      description: "Create an ordered, curated Wormhole route so an agent does not have to choose from the entire tool surface.",
+      inputSchema: {
+        repoRoot: z.string(),
+        objective: z.string().optional(),
+        query: z.string().optional(),
+        changedFiles: z.array(z.string()).optional(),
+        diffText: z.string().optional(),
+        completedTools: z.array(z.string()).optional(),
+        maxChars: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.missionRoute(input)),
+  );
+
+  server.registerTool(
+    "agent_context_prepare",
+    {
+      description: "Prepare a task-scoped context pack, route, snapshot, and immediate next calls for an AI coding agent.",
+      inputSchema: {
+        repoRoot: z.string(),
+        objective: z.string(),
+        query: z.string(),
+        changedFiles: z.array(z.string()).optional(),
+        diffText: z.string().optional(),
+        completedTools: z.array(z.string()).optional(),
+        maxChars: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.agentContextPrepare(input)),
+  );
+
+  server.registerTool(
     "durable_repo_index_refresh",
     {
       description: "Refresh and persist the repo index under .wormhole/indexes.",
