@@ -260,6 +260,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Praxen-inspired native remit creation, capability inventory, behavior verification, remit coverage, drift analysis, and deterministic findings rendering.",
       },
       {
+        id: "orchestration.mission-delta-replanning",
+        area: "orchestration",
+        status: "implemented",
+        description: "Automatic mid-mission re-scope reports from changed files, diagnostics, blast radius, stale evidence, focused tests, context packs, and gate guidance.",
+      },
+      {
         id: "orchestration.graph-artifact-suite",
         area: "orchestration",
         status: "implemented",

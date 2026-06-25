@@ -44,6 +44,7 @@ describe("Wormhole MCP server", () => {
         "remit_coverage_report",
         "agent_drift_analyze",
         "behavior_findings_render",
+        "mission_delta_replan",
       ]),
     );
   });

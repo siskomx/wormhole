@@ -113,6 +113,10 @@ import {
   discoverEntrypointFlows,
   generateProjectContextPack,
 } from "./project-intelligence.js";
+import {
+  createMissionDeltaReplan,
+  type MissionDeltaReplanInput,
+} from "./mission-delta-replan.js";
 import { analyzeTestImpactV2 } from "./test-impact-v2.js";
 import { reconcileArtifacts, type ArtifactProposal } from "./reconciliation.js";
 import { createDagSchedule, type ScheduledTask } from "./scheduler.js";
@@ -1085,6 +1089,29 @@ export function createToolHandlers(
     agentContextPrepare(input: Parameters<typeof prepareAgentContext>[0]) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return prepareAgentContext({ ...input, repoRoot });
+    },
+
+    missionDeltaReplan(
+      input: Omit<MissionDeltaReplanInput, "repoRoot" | "objective"> & {
+        repoRoot?: string;
+        objective?: string;
+      },
+    ) {
+      const mission = input.missionId ? kernel.missionStatus(input.missionId).mission : undefined;
+      const repoRootInput = input.repoRoot ?? mission?.repoRoot;
+      const objective = input.objective ?? mission?.objective;
+      if (!repoRootInput) {
+        throw new Error("mission_delta_replan requires repoRoot or missionId");
+      }
+      if (!objective) {
+        throw new Error("mission_delta_replan requires objective or missionId");
+      }
+      const repoRoot = resolveAllowedRepoRoot(repoRootInput, allowedRepoRoots);
+      return createMissionDeltaReplan({
+        ...input,
+        repoRoot,
+        objective,
+      });
     },
 
     durableRepoIndexRefresh(input: RepoIndexBuildOptions) {

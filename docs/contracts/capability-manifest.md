@@ -53,6 +53,7 @@ Implemented `orchestration` capabilities include:
 - `orchestration.project-intelligence-sequencing`: one-shot project onboarding, process-local LSP sessions, durable repo and semantic indexes, diff-aware test impact, dependency security reports, action admission policy, and optimization adapter execution.
 - `orchestration.native-project-intelligence-spine`: native architecture maps, entrypoint flow discovery, blast-radius analysis, and task-scoped project context packs derived from typed repo observations with provenance.
 - `orchestration.native-agent-behavior-verification`: Praxen-inspired native remit creation, capability inventory, behavior verification, rule coverage, drift analysis, and deterministic findings rendering.
+- `orchestration.mission-delta-replanning`: mid-mission re-scope reports that combine changed files, diagnostics, blast radius, stale evidence, focused tests, refreshed context, and gate guidance.
 - `orchestration.graph-artifact-suite`: Graphify-near graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis.
 - `orchestration.optimized-command-runner`: Headroom/RTK-near no-shell command execution with reversible output optimization, retrieval handles, hashes, and savings stats.
 - `orchestration.external-optimization-adapters`: native, CLI, and HTTP optimization adapter registry with capability selection and bounded CLI execution.

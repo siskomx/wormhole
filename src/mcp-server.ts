@@ -233,6 +233,13 @@ export function createWormholeMcpServer(
     prompts: z.array(agentPromptObservationSchema).optional(),
     logs: z.array(agentLogObservationSchema).optional(),
   });
+  const missionDeltaEvidenceSchema = z.object({
+    evidenceId: z.string(),
+    sourceType: z.enum(["file", "command_output", "user_input", "derived_note"]),
+    sourcePath: z.string().optional(),
+    summary: z.string(),
+    recordedAt: z.string().optional(),
+  });
 
   server.registerTool(
     "mission_start",
@@ -1640,6 +1647,24 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.agentContextPrepare(input)),
+  );
+
+  server.registerTool(
+    "mission_delta_replan",
+    {
+      description: "Re-scope a mission after file diffs or diagnostics by refreshing blast radius, focused tests, stale evidence warnings, context, and gate guidance.",
+      inputSchema: {
+        missionId: z.string().optional(),
+        repoRoot: z.string().optional(),
+        objective: z.string().optional(),
+        changedFiles: z.array(z.string()),
+        diffText: z.string().optional(),
+        diagnostics: z.array(diagnosticRecordSchema).optional(),
+        evidenceRecords: z.array(missionDeltaEvidenceSchema).optional(),
+        maxContextChars: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.missionDeltaReplan(input)),
   );
 
   server.registerTool(

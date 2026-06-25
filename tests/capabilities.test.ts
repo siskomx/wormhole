@@ -127,6 +127,7 @@ describe("capability manifest", () => {
         "orchestration.project-intelligence-sequencing",
         "orchestration.native-project-intelligence-spine",
         "orchestration.native-agent-behavior-verification",
+        "orchestration.mission-delta-replanning",
         "orchestration.graph-artifact-suite",
         "orchestration.optimized-command-runner",
         "orchestration.native-tool-factory",

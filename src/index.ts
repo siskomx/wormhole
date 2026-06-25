@@ -41,3 +41,5 @@ export * from "./optimization-adapter.js";
 export * from "./project-onboard.js";
 export * from "./project-intelligence.js";
 export * from "./test-impact-v2.js";
+export * from "./agent-behavior-verification.js";
+export * from "./mission-delta-replan.js";
