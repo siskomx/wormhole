@@ -132,6 +132,7 @@ describe("capability manifest", () => {
         "orchestration.lsp-feedback-replanning",
         "orchestration.agent-workspace-memory",
         "orchestration.graph-artifact-suite",
+        "orchestration.repo-activity-watch-layer",
         "orchestration.optimized-command-runner",
         "orchestration.native-tool-factory",
         "orchestration.local-runner",
@@ -172,6 +173,10 @@ describe("capability manifest", () => {
       manifest.capabilities.find((capability) => capability.id === "orchestration.native-tool-factory")
         ?.description,
     ).toContain("validated workspace writes");
+    expect(
+      manifest.capabilities.find((capability) => capability.id === "orchestration.repo-activity-watch-layer")
+        ?.description,
+    ).toContain("git diff detection");
     expect(
       manifest.capabilities.find((capability) => capability.id === "adaptive.required-python-runtime")
         ?.description,

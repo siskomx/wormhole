@@ -56,6 +56,13 @@ describe("Wormhole MCP server", () => {
         "agent_workspace_merge",
         "orchestration_policy_live_feedback",
         "mission_delta_replan",
+        "repo_watch_start",
+        "repo_watch_scan",
+        "repo_watch_status",
+        "repo_watch_stop",
+        "repo_change_scan",
+        "repo_activity_record",
+        "repo_graph_refresh_incremental",
       ]),
     );
     expect(registeredToolMetadata.python_sidecar_probe?.description).toContain(

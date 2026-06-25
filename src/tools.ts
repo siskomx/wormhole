@@ -109,6 +109,13 @@ import {
   refreshDurableSemanticIndex,
   searchDurableSemanticIndex,
 } from "./durable-index-store.js";
+import {
+  createRepoActivityStore,
+  type RepoActivityRecordInput,
+  type RepoActivitySnapshot,
+  type RepoChangeScanInput,
+  type RepoWatchStartInput,
+} from "./repo-activity.js";
 import { createLspSessionManager } from "./lsp-session-manager.js";
 import {
   createOptimizationAdapterRegistry,
@@ -238,6 +245,7 @@ type RuntimeToolState = {
   diagnostics?: Partial<DiagnosticStoreSnapshot>;
   optimizationAdapters?: Partial<OptimizationAdapterSnapshot>;
   agentWorkspace?: Partial<AgentWorkspaceSnapshot>;
+  repoActivity?: Partial<RepoActivitySnapshot>;
 };
 
 function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): string {
@@ -357,6 +365,9 @@ export function createToolHandlers(
   const optimizationAdapterRegistry = createOptimizationAdapterRegistry(
     runtimeState.optimizationAdapters,
     (snapshot) => persistRuntimeState("optimizationAdapters", snapshot),
+  );
+  const repoActivityStore = createRepoActivityStore(runtimeState.repoActivity, (snapshot) =>
+    persistRuntimeState("repoActivity", snapshot),
   );
   const lspSessionManager = createLspSessionManager();
   const shellHookPlans = new Map<string, {
@@ -978,6 +989,114 @@ export function createToolHandlers(
       return createGraphArtifacts(getRepoIndex(input.repoRoot), {
         communities: input.communities,
       });
+    },
+
+    repoWatchStart(input: RepoWatchStartInput) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return repoActivityStore.startWatch({ ...input, repoRoot });
+    },
+
+    repoWatchScan(input: { watchId: string }) {
+      const scan = repoActivityStore.scanWatch(input);
+      resolveAllowedRepoRoot(scan.repoRoot, allowedRepoRoots);
+      const session = repoActivityStore.status({ watchId: input.watchId }).sessions[0];
+      const recordedEvidence = [];
+      if (session?.options.autoRecord && session.missionId && scan.changedFiles.length > 0) {
+        recordedEvidence.push(
+          kernel.recordEvidence(session.missionId, {
+            sourceType: "derived_note",
+            retrievalMethod: "repo_watch_scan",
+            summary: `Repo watch detected changed files: ${scan.changedFiles.join(", ")}.`,
+            rawContent: JSON.stringify(
+              {
+                changedFiles: scan.changedFiles,
+                fileChanges: scan.fileChanges,
+                git: scan.git,
+              },
+              null,
+              2,
+            ),
+          }),
+        );
+      }
+      const graphRefresh =
+        session?.options.autoRefreshGraph && scan.changedFiles.length > 0
+          ? refreshDurableRepoIndex({ repoRoot: scan.repoRoot })
+          : undefined;
+      if (graphRefresh) {
+        repoIndexes.delete(createRepoIndexCacheKey({ repoRoot: scan.repoRoot }));
+        repoActivityStore.recordActivity({
+          repoRoot: scan.repoRoot,
+          watchId: input.watchId,
+          missionId: session?.missionId,
+          kind: "graph_refreshed",
+          summary: `Refreshed repo graph after watch changes: ${scan.changedFiles.join(", ")}.`,
+          paths: scan.changedFiles,
+          metadata: {
+            indexPath: graphRefresh.indexPath,
+            fileCount: graphRefresh.summary.fileCount,
+            edgeCount: graphRefresh.summary.edgeCount,
+          },
+        });
+      }
+      return {
+        ...scan,
+        recordedEvidence,
+        ...(graphRefresh ? { graphRefresh } : {}),
+      };
+    },
+
+    repoWatchStatus(input: { repoRoot?: string; watchId?: string } = {}) {
+      const repoRoot = input.repoRoot ? resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots) : undefined;
+      return repoActivityStore.status({ ...input, repoRoot });
+    },
+
+    repoWatchStop(input: { watchId: string }) {
+      return repoActivityStore.stopWatch(input);
+    },
+
+    repoChangeScan(input: RepoChangeScanInput) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return repoActivityStore.scanChanges({ ...input, repoRoot });
+    },
+
+    repoActivityRecord(input: RepoActivityRecordInput) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return repoActivityStore.recordActivity({ ...input, repoRoot });
+    },
+
+    repoGraphRefreshIncremental(input: {
+      repoRoot: string;
+      changedFiles: string[];
+      diffText?: string;
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const changedFiles = uniqueSorted(input.changedFiles.map((file) => repoRelativePath(repoRoot, file)));
+      const index = refreshDurableRepoIndex({ repoRoot });
+      repoIndexes.delete(createRepoIndexCacheKey({ repoRoot }));
+      const testImpact = analyzeTestImpactV2({
+        repoRoot,
+        changedFiles,
+        diffText: input.diffText,
+      });
+      const activity = repoActivityStore.recordActivity({
+        repoRoot,
+        kind: "graph_refreshed",
+        summary: `Refreshed repo graph for changed files: ${changedFiles.join(", ")}.`,
+        paths: changedFiles,
+        metadata: {
+          indexPath: index.indexPath,
+          fileCount: index.summary.fileCount,
+          edgeCount: index.summary.edgeCount,
+        },
+      });
+      return {
+        repoRoot,
+        changedFiles,
+        index,
+        testImpact,
+        activity,
+      };
     },
 
     projectContractDetect(input: { repoRoot: string }): ProjectContract {

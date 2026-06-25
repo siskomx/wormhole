@@ -46,6 +46,8 @@ describe("repo-local Codex plugin metadata", () => {
     expect(plugin.interface.longDescription).toContain("next-tool recommendations");
     expect(plugin.interface.longDescription).toContain("optimization adapters");
     expect(plugin.interface.longDescription).toContain("required Python runtime");
+    expect(plugin.interface.longDescription).toContain("repo watch sessions");
+    expect(plugin.interface.longDescription).toContain("git diff detection");
     expect(plugin.interface.longDescription).not.toContain("optional Python graph");
     expect(serialized).not.toContain("TODO");
     expect(mcp.mcpServers.wormhole.command).toBe("node");
@@ -80,6 +82,9 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_dispatch");
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_dispatch_execute");
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_workspace_create");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("repo_watch_start");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("repo_watch_scan");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("repo_graph_refresh_incremental");
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_workspace_merge");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_plan_local");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_run_local");

@@ -222,6 +222,7 @@ Wormhole's tool factory is implemented as a bounded native tool-spec pipeline: H
 Wormhole implements these runtime surfaces as first-class native capabilities:
 
 - Repo graph artifacts: `repo_index_*`, `repo_graph_export`, `python_graph_metrics`, and `python_graph_communities`.
+- Repo activity watch layer: `repo_watch_*`, `repo_change_scan`, `repo_activity_record`, and `repo_graph_refresh_incremental`.
 - Project ground truth: `project_contract_detect`, `diagnostics_*`, `impact_analyze`, `test_plan_select`, `verification_run`, `secret_scan`, `operation_risk_review`, `semantic_*`, and `lsp_*`.
 - Project-intelligence sequencing: `project_onboard`, durable index tools, LSP session tools, `test_impact_analyze_v2`, `dependency_security_report`, `action_policy_review`, and `optimization_adapter_*`.
 - Coordination feedback loop: `ctx_pack_budget_review`, `ctx_pack_refresh`, `lsp_feedback_replan`, `agent_workspace_*`, and `orchestration_policy_live_feedback`.
@@ -233,6 +234,8 @@ Wormhole implements these runtime surfaces as first-class native capabilities:
 TypeScript remains authoritative for MCP schemas, state projection, gates, evidence, routing policy, and plugin packaging. Python is required from startup and receives one JSON request at a time for graph metrics, graph communities, media extraction, trace summaries, and offline policy jobs. Python results are treated as derived analysis and do not decide whether a gate opens.
 
 The native runtime suite includes advanced capability tracks for media ingestion, shell hooks, discovery-driven tool generation, and learned orchestration policy. These tracks are constrained by the same evidence, path, and approval boundaries as the rest of Wormhole.
+
+Repo activity watching is opt-in per session. A watch session stores a baseline snapshot, detects added/modified/deleted files on scan, captures git status and diff text when the repo has `.git`, records factual activity events, can record mission evidence for observed changes, and can refresh the durable repo graph after changes. The layer records what changed or what command/verification was explicitly reported; it does not infer agent intent from file diffs alone.
 
 ```mermaid
 flowchart LR

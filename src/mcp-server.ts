@@ -264,6 +264,21 @@ export function createWormholeMcpServer(
     evidenceIds: z.array(z.string()).optional(),
     artifactIds: z.array(z.string()).optional(),
   });
+  const repoWatchOptionsSchema = {
+    include: z.array(z.string()).optional(),
+    exclude: z.array(z.string()).optional(),
+    autoRecord: z.boolean().optional(),
+    autoRefreshGraph: z.boolean().optional(),
+  };
+  const repoActivityKindSchema = z.enum([
+    "watch_started",
+    "file_changed",
+    "git_diff_detected",
+    "command_run",
+    "verification",
+    "graph_refreshed",
+    "note",
+  ]);
 
   server.registerTool(
     "mission_start",
@@ -1348,6 +1363,95 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.repoGraphExport(input)),
+  );
+
+  server.registerTool(
+    "repo_watch_start",
+    {
+      description: "Start an opt-in repo watch session with a baseline file snapshot.",
+      inputSchema: {
+        repoRoot: z.string(),
+        missionId: z.string().optional(),
+        ...repoWatchOptionsSchema,
+      },
+    },
+    async (input) => jsonResult(tools.repoWatchStart(input)),
+  );
+
+  server.registerTool(
+    "repo_watch_scan",
+    {
+      description: "Scan a repo watch session for file changes, git diffs, activity events, evidence recording, and graph refresh.",
+      inputSchema: {
+        watchId: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.repoWatchScan(input)),
+  );
+
+  server.registerTool(
+    "repo_watch_status",
+    {
+      description: "Return active repo watch sessions and recorded repo activity events.",
+      inputSchema: {
+        repoRoot: z.string().optional(),
+        watchId: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.repoWatchStatus(input)),
+  );
+
+  server.registerTool(
+    "repo_watch_stop",
+    {
+      description: "Stop an active repo watch session.",
+      inputSchema: {
+        watchId: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.repoWatchStop(input)),
+  );
+
+  server.registerTool(
+    "repo_change_scan",
+    {
+      description: "Run a one-shot repo change scan with git diff detection.",
+      inputSchema: {
+        repoRoot: z.string(),
+        ...repoWatchOptionsSchema,
+      },
+    },
+    async (input) => jsonResult(tools.repoChangeScan(input)),
+  );
+
+  server.registerTool(
+    "repo_activity_record",
+    {
+      description: "Record a structured repo activity event such as a command, verification, or note.",
+      inputSchema: {
+        repoRoot: z.string(),
+        kind: repoActivityKindSchema,
+        summary: z.string(),
+        paths: z.array(z.string()).optional(),
+        missionId: z.string().optional(),
+        watchId: z.string().optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.repoActivityRecord(input)),
+  );
+
+  server.registerTool(
+    "repo_graph_refresh_incremental",
+    {
+      description: "Refresh the durable repo graph after changed files and return impact-aware graph context.",
+      inputSchema: {
+        repoRoot: z.string(),
+        changedFiles: z.array(z.string()),
+        diffText: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.repoGraphRefreshIncremental(input)),
   );
 
   server.registerTool(

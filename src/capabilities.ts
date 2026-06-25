@@ -290,6 +290,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Native graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis for repo graphs.",
       },
       {
+        id: "orchestration.repo-activity-watch-layer",
+        area: "orchestration",
+        status: "implemented",
+        description: "Opt-in repo watch sessions with file change scans, git diff detection, structured activity recording, mission evidence capture, and durable repo graph refresh.",
+      },
+      {
         id: "orchestration.optimized-command-runner",
         area: "orchestration",
         status: "implemented",
