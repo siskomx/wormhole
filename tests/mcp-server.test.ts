@@ -8,6 +8,9 @@ describe("Wormhole MCP server", () => {
     const registeredTools = Object.keys(
       (server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools,
     );
+    const registeredToolMetadata = (server as unknown as {
+      _registeredTools: Record<string, { description?: string }>;
+    })._registeredTools;
 
     expect(server.isConnected()).toBe(false);
     expect(registeredTools).toEqual(
@@ -54,6 +57,12 @@ describe("Wormhole MCP server", () => {
         "orchestration_policy_live_feedback",
         "mission_delta_replan",
       ]),
+    );
+    expect(registeredToolMetadata.python_sidecar_probe?.description).toContain(
+      "required Python runtime",
+    );
+    expect(registeredToolMetadata.orchestration_policy_train?.description).toContain(
+      "required Python runtime",
     );
   });
 });

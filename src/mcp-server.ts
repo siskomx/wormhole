@@ -1068,7 +1068,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "python_sidecar_probe",
     {
-      description: "Probe the optional Python sidecar runtime and report availability.",
+      description: "Probe the required Python runtime and report startup readiness.",
       inputSchema: {},
     },
     async () => jsonResult(await tools.pythonSidecarProbe()),
@@ -1093,7 +1093,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "python_graph_metrics",
     {
-      description: "Run optional Python graph metrics over caller-supplied Wormhole graph nodes and edges.",
+      description: "Run required-runtime Python graph metrics over caller-supplied Wormhole graph nodes and edges.",
       inputSchema: pythonGraphPayloadSchema,
     },
     async (input) => jsonResult(await tools.pythonGraphMetrics(input)),
@@ -1102,7 +1102,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "python_graph_communities",
     {
-      description: "Run optional Python community analysis over caller-supplied Wormhole graph nodes and edges.",
+      description: "Run required-runtime Python community analysis over caller-supplied Wormhole graph nodes and edges.",
       inputSchema: pythonGraphPayloadSchema,
     },
     async (input) => jsonResult(await tools.pythonGraphCommunities(input)),
@@ -1111,7 +1111,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "python_trace_summary",
     {
-      description: "Run optional Python analysis over model-profile route traces and outcomes.",
+      description: "Run required-runtime Python analysis over model-profile route traces and outcomes.",
       inputSchema: {
         traces: z.array(
           z.object({
@@ -1142,7 +1142,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "media_dependency_report",
     {
-      description: "Report optional Python media extraction dependency availability.",
+      description: "Report Python media package availability for PDF, image, and OCR extraction.",
       inputSchema: {},
     },
     async () => jsonResult(await tools.mediaDependencyReport()),
@@ -2227,7 +2227,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "orchestration_policy_train",
     {
-      description: "Train a deterministic offline orchestration policy through the optional Python sidecar.",
+      description: "Train a deterministic offline orchestration policy through the required Python runtime.",
       inputSchema: {
         traceJsonl: z.string().max(1_000_000),
         learningRate: z.number().min(0).max(1).optional(),

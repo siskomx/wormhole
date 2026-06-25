@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type PythonSidecarJobName =
   | "probe"
@@ -40,6 +41,28 @@ export type PythonSidecarConfig = {
   pythonPathRoot?: string;
 };
 
+export type PythonRuntimeStatus = {
+  required: true;
+  ok: boolean;
+  command: string;
+  args: string[];
+  cwd: string;
+  pythonPathRoot: string;
+  timeoutMs: number;
+  setupHint: string;
+  runtime?: string;
+  packageName?: string;
+  sidecarVersion?: string;
+  pythonVersion?: string;
+  error?: string;
+  timedOut?: boolean;
+  exitCode?: number | null;
+  stdout?: string;
+  stderr?: string;
+  durationMs?: number;
+  evidenceHash?: string;
+};
+
 export type PythonSidecar = {
   run(input: PythonSidecarJobRequest): Promise<PythonSidecarJobResult>;
 };
@@ -57,6 +80,43 @@ const allowedJobs = new Set<PythonSidecarJobName>([
   "policy_compare_baselines",
 ]);
 const MAX_CAPTURED_OUTPUT_CHARS = 2_000_000;
+const DEFAULT_TIMEOUT_MS = 10_000;
+const DEFAULT_REQUIRED_RUNTIME_TIMEOUT_MS = 5_000;
+const PYTHON_RUNTIME_SETUP_HINT =
+  "Install Python 3, keep the repo-local python/wormhole_sidecar package available, or set WORMHOLE_PYTHON and WORMHOLE_PYTHONPATH.";
+
+type ResolvedPythonSidecarConfig = {
+  command: string;
+  args: string[];
+  timeoutMs: number;
+  cwd: string;
+  pythonPathRoot: string;
+};
+
+type ProbePayload = {
+  runtime?: unknown;
+  package?: unknown;
+  version?: unknown;
+  pythonVersion?: unknown;
+};
+
+export class PythonRuntimeRequiredError extends Error {
+  readonly status: PythonRuntimeStatus;
+
+  constructor(status: PythonRuntimeStatus) {
+    super(
+      [
+        "Python runtime is required for Wormhole startup, but the sidecar probe failed.",
+        status.error,
+        status.setupHint,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+    this.name = "PythonRuntimeRequiredError";
+    this.status = status;
+  }
+}
 
 function sha256(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
@@ -70,29 +130,92 @@ function defaultArgs(): string[] {
   return ["-m", "wormhole_sidecar.runner"];
 }
 
-function buildPythonPath(config: PythonSidecarConfig): string | undefined {
-  const root = config.pythonPathRoot ?? process.env.WORMHOLE_PYTHONPATH ?? path.resolve(process.cwd(), "python");
-  const existing = process.env.PYTHONPATH;
-  if (existing) {
-    return `${root}${path.delimiter}${existing}`;
-  }
-  return root;
+function defaultPythonPathRoot(): string {
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const parentDir = path.dirname(moduleDir);
+  const repoRoot = path.basename(parentDir) === "dist" ? path.dirname(parentDir) : parentDir;
+  return path.join(repoRoot, "python");
 }
 
-function buildEnv(config: PythonSidecarConfig): NodeJS.ProcessEnv {
+function resolvePythonPathRoot(config: PythonSidecarConfig): string {
+  return config.pythonPathRoot ?? process.env.WORMHOLE_PYTHONPATH ?? defaultPythonPathRoot();
+}
+
+function resolvePythonSidecarConfig(config: PythonSidecarConfig = {}): ResolvedPythonSidecarConfig {
+  return {
+    command: config.command ?? defaultCommand(),
+    args: config.args ?? defaultArgs(),
+    timeoutMs: config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    cwd: config.cwd ?? process.cwd(),
+    pythonPathRoot: resolvePythonPathRoot(config),
+  };
+}
+
+function buildPythonPath(pythonPathRoot: string): string | undefined {
+  const existing = process.env.PYTHONPATH;
+  if (existing) {
+    return `${pythonPathRoot}${path.delimiter}${existing}`;
+  }
+  return pythonPathRoot;
+}
+
+function buildEnv(resolved: ResolvedPythonSidecarConfig): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
-  const pythonPath = buildPythonPath(config);
+  const pythonPath = buildPythonPath(resolved.pythonPathRoot);
   if (pythonPath) {
     env.PYTHONPATH = pythonPath;
   }
   return env;
 }
 
+function isProbePayload(value: unknown): value is ProbePayload {
+  return typeof value === "object" && value !== null;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function runtimeStatusFromProbe(
+  result: PythonSidecarJobResult,
+  resolved: ResolvedPythonSidecarConfig,
+): PythonRuntimeStatus {
+  const payload = isProbePayload(result.result) ? result.result : {};
+  const packageName = stringValue(payload.package);
+  const runtime = stringValue(payload.runtime);
+  const probeLooksValid = runtime === "python" && packageName === "wormhole_sidecar";
+  const failureReason = (result.error ?? result.stderr.trim()) || "unknown error";
+  const error = result.ok
+    ? probeLooksValid
+      ? undefined
+      : "Python sidecar probe did not report the wormhole_sidecar package."
+    : `Python runtime probe failed: ${failureReason}`;
+
+  return {
+    required: true,
+    ok: result.ok && probeLooksValid,
+    command: resolved.command,
+    args: resolved.args,
+    cwd: resolved.cwd,
+    pythonPathRoot: resolved.pythonPathRoot,
+    timeoutMs: resolved.timeoutMs,
+    setupHint: PYTHON_RUNTIME_SETUP_HINT,
+    runtime,
+    packageName,
+    sidecarVersion: stringValue(payload.version),
+    pythonVersion: stringValue(payload.pythonVersion),
+    error,
+    timedOut: result.timedOut,
+    exitCode: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    durationMs: result.durationMs,
+    evidenceHash: result.evidenceHash,
+  };
+}
+
 export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSidecar {
-  const command = config.command ?? defaultCommand();
-  const baseArgs = config.args ?? defaultArgs();
-  const timeoutMs = config.timeoutMs ?? 10_000;
-  const cwd = config.cwd ?? process.cwd();
+  const resolved = resolvePythonSidecarConfig(config);
 
   return {
     async run(input: PythonSidecarJobRequest): Promise<PythonSidecarJobResult> {
@@ -104,10 +227,10 @@ export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSid
       const requestJson = JSON.stringify(input);
 
       return await new Promise((resolve) => {
-        const child = spawn(command, [...baseArgs, requestJson], {
-          cwd,
+        const child = spawn(resolved.command, [...resolved.args, requestJson], {
+          cwd: resolved.cwd,
           shell: false,
-          env: buildEnv(config),
+          env: buildEnv(resolved),
         });
 
         let stdout = "";
@@ -136,7 +259,7 @@ export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSid
             resolve({
               ok: false,
               job: input.job,
-              error: `Python sidecar job ${input.job} timed out after ${timeoutMs}ms`,
+              error: `Python sidecar job ${input.job} timed out after ${resolved.timeoutMs}ms`,
               timedOut,
               exitCode,
               stdout,
@@ -199,7 +322,7 @@ export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSid
         const timer = setTimeout(() => {
           timedOut = true;
           child.kill("SIGTERM");
-        }, timeoutMs);
+        }, resolved.timeoutMs);
 
         child.stdout.setEncoding("utf8");
         child.stderr.setEncoding("utf8");
@@ -223,4 +346,26 @@ export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSid
       });
     },
   };
+}
+
+export async function probePythonRuntime(
+  config: PythonSidecarConfig = {},
+): Promise<PythonRuntimeStatus> {
+  const resolved = resolvePythonSidecarConfig({
+    ...config,
+    timeoutMs: config.timeoutMs ?? DEFAULT_REQUIRED_RUNTIME_TIMEOUT_MS,
+  });
+  const sidecar = createPythonSidecar(resolved);
+  const result = await sidecar.run({ job: "probe", payload: {} });
+  return runtimeStatusFromProbe(result, resolved);
+}
+
+export async function requirePythonRuntime(
+  config: PythonSidecarConfig = {},
+): Promise<PythonRuntimeStatus> {
+  const status = await probePythonRuntime(config);
+  if (!status.ok) {
+    throw new PythonRuntimeRequiredError(status);
+  }
+  return status;
 }

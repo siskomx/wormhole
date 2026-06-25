@@ -230,7 +230,7 @@ Wormhole implements these runtime surfaces as first-class native capabilities:
 - Deterministic conductor: `model_profile_*`, `conductor_plan`, and `conductor_replay`.
 - Durable behavior policy: `behavior_mode_set`, `behavior_mode_get`, `behavior_apply`, and `behavior_minimality_review`.
 
-TypeScript remains authoritative for MCP schemas, state projection, gates, evidence, routing policy, and plugin packaging. Python is optional and receives one JSON request at a time for graph metrics, graph communities, media extraction, trace summaries, and offline policy jobs. Python results are treated as derived analysis and do not decide whether a gate opens.
+TypeScript remains authoritative for MCP schemas, state projection, gates, evidence, routing policy, and plugin packaging. Python is required from startup and receives one JSON request at a time for graph metrics, graph communities, media extraction, trace summaries, and offline policy jobs. Python results are treated as derived analysis and do not decide whether a gate opens.
 
 The native runtime suite includes advanced capability tracks for media ingestion, shell hooks, discovery-driven tool generation, and learned orchestration policy. These tracks are constrained by the same evidence, path, and approval boundaries as the rest of Wormhole.
 
@@ -247,7 +247,7 @@ flowchart LR
 
 ## Advanced Native Tracks
 
-Media ingestion exposes `media_dependency_report`, `media_ingest_pdf`, and `media_ingest_image`. TypeScript validates repo roots and file size limits before Python sees a path. Python media modules use optional `pypdf`, `Pillow`, and OCR support when available; missing dependencies become structured warnings unless OCR is explicitly required.
+Media ingestion exposes `media_dependency_report`, `media_ingest_pdf`, and `media_ingest_image`. TypeScript validates repo roots and file size limits before Python sees a path. The Python runtime is required; media packages such as `pypdf`, `Pillow`, and OCR support are reported independently, with missing package or system dependencies becoming structured warnings unless OCR is explicitly required.
 
 Shell hooks expose `shell_hook_discover`, `shell_hook_plan`, `shell_hook_install`, `shell_hook_uninstall`, and `shell_hook_verify`. Plans are dry-run-first and return a plan token tied to file hashes. Installs use marker blocks, backups, and idempotent replacement, and reject stale plans. Cmd AutoRun support is guarded behind explicit registry permission.
 

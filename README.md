@@ -48,15 +48,23 @@ Wormhole implements these runtime surfaces as first-class native capabilities:
 - Agent dispatch runtime: `agent_dispatch_execute` runs configured local CLI or HTTP agents with bounded execution and evidence hashes.
 - Advanced native capabilities: `media_*`, `shell_hook_*`, `discovery_*`, `orchestration_policy_*`, and `reasoning_*`.
 
-These features are native Wormhole capabilities. Runtime state is local JSON and not a replacement for the mission event log; repo index caches and shell-hook apply tokens remain process-local by design. Media extraction uses repo-confined realpath checks, byte hashing, and optional Python dependencies; shell hooks are opt-in, marker-based, planned with a token, and backed up before writes; discovery redacts secrets before tool generation and denies private-network crawling unless explicitly enabled; browser capture is complementary input rather than Wormhole's core runtime; learned policy remains offline-trained, baseline-compared, stored-evaluation-gated, and safety-clamped; reasoning research traces score plan, critique, revision, and verifier strategies.
+These features are native Wormhole capabilities. Runtime state is local JSON and not a replacement for the mission event log; repo index caches and shell-hook apply tokens remain process-local by design. Media extraction uses repo-confined realpath checks, byte hashing, required Python execution, and package-level dependency reports; shell hooks are opt-in, marker-based, planned with a token, and backed up before writes; discovery redacts secrets before tool generation and denies private-network crawling unless explicitly enabled; browser capture is complementary input rather than Wormhole's core runtime; learned policy remains offline-trained, baseline-compared, stored-evaluation-gated, and safety-clamped; reasoning research traces score plan, critique, revision, and verifier strategies.
 
-## Optional Python Sidecar
+## Python Runtime
 
-Wormhole's core MCP server is TypeScript and does not require Python. When Python 3 is available, Wormhole can run optional sidecar jobs for deterministic graph metrics, graph community analysis, media extraction, model-profile trace summaries, and offline policy training/evaluation through `python_sidecar_probe`, `python_graph_metrics`, `python_graph_communities`, `media_dependency_report`, `media_ingest_pdf`, `media_ingest_image`, `python_trace_summary`, `orchestration_policy_train`, and `orchestration_policy_evaluate`.
+Wormhole uses TypeScript as the MCP control plane and requires Python 3 from startup for deterministic graph metrics, graph community analysis, media extraction, model-profile trace summaries, and offline policy training/evaluation. The CLI probes the repo-local `python/wormhole_sidecar` package before accepting MCP clients; startup fails with a setup hint when Python cannot be launched or the package cannot be imported.
 
-Set `WORMHOLE_PYTHON` when the host should use a specific interpreter. Set `WORMHOLE_PYTHONPATH` only when the sidecar package is outside the repo-local `python` directory.
+Use `python_sidecar_probe`, `python_graph_metrics`, `python_graph_communities`, `media_dependency_report`, `media_ingest_pdf`, `media_ingest_image`, `python_trace_summary`, `orchestration_policy_train`, and `orchestration_policy_evaluate` for the Python-backed runtime surface.
 
-Optional richer media extraction packages are listed in `python/requirements-media.txt`. Without them, media tools return structured dependency warnings rather than making Python required.
+Set `WORMHOLE_PYTHON` when the host should use a specific interpreter. Set `WORMHOLE_PYTHONPATH` only when the sidecar package is outside the repo-local `python` directory. Set `WORMHOLE_PYTHON_STARTUP_TIMEOUT_MS` to tune the startup probe timeout.
+
+Install the Python package dependencies during first setup:
+
+```bash
+python -m pip install -r python/requirements.txt
+```
+
+Some media capabilities still depend on package or system availability. Missing `pypdf`, `Pillow`, `pytesseract`, or the native `tesseract` binary are reported by `media_dependency_report` and produce structured warnings unless OCR is explicitly required.
 
 ## Acknowledgements
 

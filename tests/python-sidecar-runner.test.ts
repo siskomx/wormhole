@@ -32,13 +32,15 @@ function findPython(): PythonCommand | undefined {
   return undefined;
 }
 
+function requirePython(): PythonCommand {
+  const python = findPython();
+  expect(python, "Python is required for the Wormhole runtime").toBeDefined();
+  return python as PythonCommand;
+}
+
 describe("checked-in Python sidecar runner", () => {
   it("probes availability when Python is installed", async () => {
-    const python = findPython();
-    if (!python) {
-      expect(python).toBeUndefined();
-      return;
-    }
+    const python = requirePython();
 
     const sidecar = createPythonSidecar({ command: python.command, args: python.args, timeoutMs: 2_000 });
     const result = await sidecar.run({ job: "probe", payload: {} });
@@ -48,11 +50,7 @@ describe("checked-in Python sidecar runner", () => {
   });
 
   it("computes graph metrics deterministically", async () => {
-    const python = findPython();
-    if (!python) {
-      expect(python).toBeUndefined();
-      return;
-    }
+    const python = requirePython();
 
     const sidecar = createPythonSidecar({ command: python.command, args: python.args, timeoutMs: 2_000 });
     const result = await sidecar.run({
@@ -84,11 +82,7 @@ describe("checked-in Python sidecar runner", () => {
   });
 
   it("summarizes model-profile traces", async () => {
-    const python = findPython();
-    if (!python) {
-      expect(python).toBeUndefined();
-      return;
-    }
+    const python = requirePython();
 
     const sidecar = createPythonSidecar({ command: python.command, args: python.args, timeoutMs: 2_000 });
     const result = await sidecar.run({

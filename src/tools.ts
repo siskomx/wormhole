@@ -45,7 +45,7 @@ import {
 } from "./optimization.js";
 import { createOptimizedCommandRunner, type OptimizedCommandInput } from "./optimized-command-runner.js";
 import { createOptimizationStats, type OptimizationStatsSnapshot } from "./optimization-stats.js";
-import { createPythonSidecar } from "./python-sidecar.js";
+import { createPythonSidecar, probePythonRuntime } from "./python-sidecar.js";
 import { createMediaIngestion, type MediaIngestInput } from "./media-ingestion.js";
 import { createEvidenceCache } from "./evidence-cache.js";
 import {
@@ -492,7 +492,7 @@ export function createToolHandlers(
     },
 
     pythonSidecarProbe() {
-      return pythonSidecar.run({ job: "probe", payload: {} });
+      return probePythonRuntime();
     },
 
     pythonGraphMetrics(input: {

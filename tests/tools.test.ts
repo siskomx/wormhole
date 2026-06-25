@@ -380,7 +380,9 @@ describe("Wormhole MCP tool handlers", () => {
       expect(report.markdown).toContain("Native Repo Graph Report");
       expect(graphArtifacts.graphJson).toContain("src/db.ts");
       expect(graphArtifacts.reportMarkdown).toContain("community-1");
-      expect(pythonProbe.job).toBe("probe");
+      expect(pythonProbe.required).toBe(true);
+      expect(pythonProbe.ok).toBe(true);
+      expect(pythonProbe.packageName).toBe("wormhole_sidecar");
       expect(pythonMetrics.job).toBe("graph_metrics");
       expect(optimizedCommand.optimizedStdout).toContain("optimized command output");
       expect(optimizationStats.runCount).toBeGreaterThanOrEqual(1);

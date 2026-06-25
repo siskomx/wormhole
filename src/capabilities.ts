@@ -123,7 +123,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         target: "python-sidecar",
         status: "implemented",
         transport: "connector-contract",
-        description: "Optional local Python sidecar for deterministic graph metrics, graph communities, and model-profile trace analysis.",
+        description: "Required local Python runtime for deterministic graph metrics, graph communities, media extraction, model-profile trace analysis, and offline policy jobs.",
       },
       {
         target: "hermes-agent",
@@ -344,10 +344,10 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Native model-profile registration, deterministic selection, outcome recording, and replayable route trace export.",
       },
       {
-        id: "adaptive.optional-python-sidecar",
+        id: "adaptive.required-python-runtime",
         area: "adaptive",
         status: "implemented",
-        description: "Optional Python sidecar for deterministic graph metrics, graph communities, media extraction, trace summaries, and offline policy jobs while TypeScript remains the authoritative MCP runtime.",
+        description: "A required Python runtime from startup for deterministic graph metrics, graph communities, media extraction, trace summaries, and offline policy jobs while TypeScript remains the authoritative MCP control plane.",
       },
       {
         id: "adaptive.deterministic-conductor",
@@ -365,7 +365,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "adaptive.native-media-ingestion",
         area: "adaptive",
         status: "implemented",
-        description: "Repo-confined PDF and image ingestion with byte hashes, optional Python extraction, evidence-ready records, dependency reporting, and OCR safety gates.",
+        description: "Repo-confined PDF and image ingestion with byte hashes, required Python extraction, evidence-ready records, Python package dependency reporting, and OCR safety gates.",
       },
       {
         id: "adaptive.shell-hook-manager",

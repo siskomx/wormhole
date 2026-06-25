@@ -45,6 +45,8 @@ describe("repo-local Codex plugin metadata", () => {
     expect(plugin.interface.longDescription).toContain("agent-facing routing");
     expect(plugin.interface.longDescription).toContain("next-tool recommendations");
     expect(plugin.interface.longDescription).toContain("optimization adapters");
+    expect(plugin.interface.longDescription).toContain("required Python runtime");
+    expect(plugin.interface.longDescription).not.toContain("optional Python graph");
     expect(serialized).not.toContain("TODO");
     expect(mcp.mcpServers.wormhole.command).toBe("node");
     expect(mcp.mcpServers.wormhole.args).toEqual(["../../dist/src/cli.js"]);
@@ -62,8 +64,9 @@ describe("Claude Desktop extension metadata", () => {
         entry_point: string;
         mcp_config: { command: string; args: string[] };
       };
-      tools: Array<{ name: string }>;
+      tools: Array<{ name: string; description: string }>;
       prompts: Array<{ name: string; text: string }>;
+      compatibility: { runtimes: Record<string, string> };
     }>(path.resolve("plugins/wormhole-claude-desktop/manifest.json"));
     const serialized = JSON.stringify(manifest);
 
@@ -147,6 +150,15 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_register_agent");
     expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_run");
     expect(manifest.tools.map((tool) => tool.name)).toContain("model_profile_select");
+    expect(
+      manifest.tools.find((tool) => tool.name === "python_sidecar_probe")?.description,
+    ).toContain("required Python runtime");
+    expect(
+      manifest.tools.find((tool) => tool.name === "media_dependency_report")?.description,
+    ).toContain("Python media package");
+    expect(manifest.compatibility.runtimes.python).toBe(">=3.0.0");
+    expect(serialized).not.toContain("optional Python sidecar");
+    expect(serialized).not.toContain("optional media extraction");
     expect(manifest.prompts.map((prompt) => prompt.name)).toContain("wormhole_orchestrate");
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "repo_index_query",

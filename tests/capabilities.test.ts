@@ -140,7 +140,7 @@ describe("capability manifest", () => {
         "adaptive.graph-first-codebase-query",
         "adaptive.agent-facing-routing",
         "adaptive.model-profile-learning",
-        "adaptive.optional-python-sidecar",
+        "adaptive.required-python-runtime",
         "adaptive.deterministic-conductor",
         "adaptive.durable-behavior-policy",
         "adaptive.native-media-ingestion",
@@ -172,5 +172,12 @@ describe("capability manifest", () => {
       manifest.capabilities.find((capability) => capability.id === "orchestration.native-tool-factory")
         ?.description,
     ).toContain("validated workspace writes");
+    expect(
+      manifest.capabilities.find((capability) => capability.id === "adaptive.required-python-runtime")
+        ?.description,
+    ).toContain("required Python runtime");
+    expect(manifest.capabilities.map((capability) => capability.id)).not.toContain(
+      "adaptive.optional-python-sidecar",
+    );
   });
 });

@@ -4,7 +4,7 @@
   "display_name": "Wormhole",
   "version": "0.1.0",
   "description": "Evidence-gated planning and orchestration state for AI coding agents.",
-  "long_description": "Wormhole exposes a local MCP server for evidence records, open-question gates, native context packs, context-pack budget review, reversible optimization, optimized command execution, local orchestration runs, orchestration task state, graph-first repo indexing and graph artifacts, project contract detection, structured diagnostics, impact-aware verification planning, safety scanning, deterministic semantic fallback search, safe LSP probes, LSP feedback replanning, one-shot project onboarding, native architecture maps, entrypoint flow discovery, blast-radius analysis, task-scoped project context packs, agent-facing routing, next-tool recommendations, mission routes, prepared agent context, durable repo/semantic indexes, process-local LSP sessions, dependency security reports, action admission policy, optimization adapters, native media ingestion, shell hook management, discovery-driven tool generation, learned orchestration policy gates, safe live policy feedback, policy baseline comparison, reasoning strategy research, printed-tool execution, native tool generation, deterministic conductor scaffolds, durable behavior policy, external agent dispatch, shared agent workspace memory, model-profile traces, typed artifacts, and workbench rendering.",
+  "long_description": "Wormhole exposes a local MCP server for evidence records, open-question gates, native context packs, context-pack budget review, reversible optimization, optimized command execution, local orchestration runs, orchestration task state, graph-first repo indexing and graph artifacts, project contract detection, structured diagnostics, impact-aware verification planning, safety scanning, deterministic semantic fallback search, safe LSP probes, LSP feedback replanning, one-shot project onboarding, native architecture maps, entrypoint flow discovery, blast-radius analysis, task-scoped project context packs, agent-facing routing, next-tool recommendations, mission routes, prepared agent context, durable repo/semantic indexes, process-local LSP sessions, dependency security reports, action admission policy, optimization adapters, required Python runtime, native media ingestion, shell hook management, discovery-driven tool generation, learned orchestration policy gates, safe live policy feedback, policy baseline comparison, reasoning strategy research, printed-tool execution, native tool generation, deterministic conductor scaffolds, durable behavior policy, external agent dispatch, shared agent workspace memory, model-profile traces, typed artifacts, and workbench rendering.",
   "author": {
     "name": "Wormhole Maintainers",
     "url": "https://github.com/siskomx/wormhole"
@@ -108,11 +108,11 @@
     { "name": "optimization_adapter_list", "description": "List optimization adapters." },
     { "name": "optimization_adapter_select", "description": "Select an optimization adapter by capability." },
     { "name": "optimization_adapter_run", "description": "Run an optimization adapter." },
-    { "name": "python_sidecar_probe", "description": "Probe the optional Python sidecar runtime." },
+    { "name": "python_sidecar_probe", "description": "Probe the required Python runtime." },
     { "name": "python_graph_metrics", "description": "Run Python graph metrics over graph nodes and edges." },
     { "name": "python_graph_communities", "description": "Run Python graph community analysis." },
     { "name": "python_trace_summary", "description": "Summarize model-profile traces through the Python sidecar." },
-    { "name": "media_dependency_report", "description": "Report optional media extraction dependency availability." },
+    { "name": "media_dependency_report", "description": "Report Python media package availability." },
     { "name": "media_ingest_pdf", "description": "Ingest a repo-local PDF into an evidence-ready media record." },
     { "name": "media_ingest_image", "description": "Ingest a repo-local image into an evidence-ready media record." },
     { "name": "shell_hook_discover", "description": "Discover supported shell hook targets." },
@@ -163,7 +163,8 @@
     "claude_desktop": ">=1.0.0",
     "platforms": ["darwin", "win32", "linux"],
     "runtimes": {
-      "node": ">=20.0.0"
+      "node": ">=20.0.0",
+      "python": ">=3.0.0"
     }
   }
 }

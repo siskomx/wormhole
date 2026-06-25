@@ -2,7 +2,12 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createPythonSidecar, type PythonSidecarJobRequest } from "../src/python-sidecar.js";
+import {
+  createPythonSidecar,
+  probePythonRuntime,
+  requirePythonRuntime,
+  type PythonSidecarJobRequest,
+} from "../src/python-sidecar.js";
 
 function writeFakeSidecar(scriptPath: string, body: string) {
   writeFileSync(scriptPath, body, { encoding: "utf8" });
@@ -127,5 +132,66 @@ describe("Python sidecar bridge", () => {
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
     }
+  });
+
+  it("requires a working Python runtime during startup probes", async () => {
+    const tempRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-python-required-"));
+    const scriptPath = path.join(tempRoot, "required-sidecar.mjs");
+    writeFakeSidecar(
+      scriptPath,
+      [
+        "const input = JSON.parse(process.argv[2]);",
+        "process.stdout.write(JSON.stringify({",
+        "  ok: true,",
+        "  job: input.job,",
+        "  result: { runtime: 'python', package: 'wormhole_sidecar', version: '0.1.0', pythonVersion: '3.12.0' }",
+        "}));",
+      ].join("\n"),
+    );
+
+    try {
+      const status = await requirePythonRuntime({
+        command: process.execPath,
+        args: [scriptPath],
+        timeoutMs: 2_000,
+      });
+
+      expect(status).toMatchObject({
+        required: true,
+        ok: true,
+        command: process.execPath,
+        args: [scriptPath],
+        runtime: "python",
+        packageName: "wormhole_sidecar",
+        sidecarVersion: "0.1.0",
+        pythonVersion: "3.12.0",
+      });
+      expect(status.evidenceHash).toMatch(/^sha256:/);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("returns setup-focused required runtime failures", async () => {
+    const status = await probePythonRuntime({
+      command: "wormhole-python-missing-for-test",
+      args: [],
+      timeoutMs: 100,
+    });
+
+    expect(status).toMatchObject({
+      required: true,
+      ok: false,
+      command: "wormhole-python-missing-for-test",
+    });
+    expect(status.error).toMatch(/python/i);
+    expect(status.setupHint).toContain("WORMHOLE_PYTHON");
+    await expect(
+      requirePythonRuntime({
+        command: "wormhole-python-missing-for-test",
+        args: [],
+        timeoutMs: 100,
+      }),
+    ).rejects.toThrow(/Python runtime is required/);
   });
 });

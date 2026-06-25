@@ -20,7 +20,7 @@ function findPython(): PythonCommand | undefined {
         ];
 
   for (const candidate of candidates) {
-    const result = spawnSync(candidate.command, ["--version"], {
+    const result = spawnSync(candidate.command, [...(candidate.args ?? []).filter((arg) => arg !== "-m" && arg !== "wormhole_sidecar.runner"), "--version"], {
       encoding: "utf8",
       shell: false,
     });
@@ -32,13 +32,15 @@ function findPython(): PythonCommand | undefined {
   return undefined;
 }
 
+function requirePython(): PythonCommand {
+  const python = findPython();
+  expect(python, "Python is required for the Wormhole runtime").toBeDefined();
+  return python as PythonCommand;
+}
+
 describe("Python graph communities", () => {
   it("detects deterministic graph communities", async () => {
-    const python = findPython();
-    if (!python) {
-      expect(python).toBeUndefined();
-      return;
-    }
+    const python = requirePython();
 
     const sidecar = createPythonSidecar({ command: python.command, args: python.args, timeoutMs: 2_000 });
     const result = await sidecar.run({

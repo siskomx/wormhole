@@ -26,11 +26,14 @@ function findPython(): PythonCommand | undefined {
   return undefined;
 }
 
-function runPolicyScript(script: string, payload: unknown): unknown {
+function requirePython(): PythonCommand {
   const python = findPython();
-  if (!python) {
-    return undefined;
-  }
+  expect(python, "Python is required for the Wormhole runtime").toBeDefined();
+  return python as PythonCommand;
+}
+
+function runPolicyScript(script: string, payload: unknown): unknown {
+  const python = requirePython();
 
   const repoRoot = process.cwd();
   const pythonPath = path.join(repoRoot, "python");
@@ -122,11 +125,6 @@ describe("Python policy trainer", () => {
     const first = runPolicyScript(script, payload);
     const second = runPolicyScript(script, payload);
 
-    if (!first || !second) {
-      expect(first).toBeUndefined();
-      return;
-    }
-
     expect(first).toEqual(second);
     expect(first).toMatchObject({
       trainingSamples: 2,
@@ -165,11 +163,6 @@ describe("Python policy trainer", () => {
       },
     });
 
-    if (!result) {
-      expect(result).toBeUndefined();
-      return;
-    }
-
     expect(result).toMatchObject({
       replayPassRate: 0,
       trainingSamples: 2,
@@ -196,11 +189,6 @@ describe("Python policy trainer", () => {
         },
       },
     });
-
-    if (!result) {
-      expect(result).toBeUndefined();
-      return;
-    }
 
     expect((result as { candidate: { replayPassRate: number } }).candidate.replayPassRate).toBe(1);
     expect((result as { baselines: Array<{ policyId: string }> }).baselines.map((baseline) => baseline.policyId)).toEqual([

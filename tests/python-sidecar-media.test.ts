@@ -28,6 +28,12 @@ function findPython(): PythonCommand | undefined {
   return undefined;
 }
 
+function requirePython(): PythonCommand {
+  const python = findPython();
+  expect(python, "Python is required for the Wormhole runtime").toBeDefined();
+  return python as PythonCommand;
+}
+
 function runPythonJson(python: PythonCommand, code: string): unknown {
   const result = spawnSync(python.command, [...(python.args ?? []), "-c", code], {
     cwd: path.resolve("."),
@@ -45,11 +51,7 @@ function runPythonJson(python: PythonCommand, code: string): unknown {
 
 describe("Python media sidecar modules", () => {
   it("reports optional media dependency availability without crashing", () => {
-    const python = findPython();
-    if (!python) {
-      expect(python).toBeUndefined();
-      return;
-    }
+    const python = requirePython();
 
     const result = runPythonJson(
       python,
@@ -67,11 +69,7 @@ describe("Python media sidecar modules", () => {
   });
 
   it("returns structured PDF extraction or a dependency warning", () => {
-    const python = findPython();
-    if (!python) {
-      expect(python).toBeUndefined();
-      return;
-    }
+    const python = requirePython();
 
     const root = mkdtempSync(path.join(os.tmpdir(), "wormhole-pdf-"));
     const pdf = path.join(root, "tiny.pdf");
@@ -99,11 +97,7 @@ describe("Python media sidecar modules", () => {
   });
 
   it("returns structured image inspection or a dependency warning", () => {
-    const python = findPython();
-    if (!python) {
-      expect(python).toBeUndefined();
-      return;
-    }
+    const python = requirePython();
 
     const root = mkdtempSync(path.join(os.tmpdir(), "wormhole-image-"));
     const image = path.join(root, "tiny.png");

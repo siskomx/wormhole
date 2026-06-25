@@ -26,7 +26,7 @@ The manifest is intentionally client-neutral. Codex, Claude Code, and future con
 - `codex`: Codex plugin manifest and MCP config
 - `printing-press`: Printing Press generated CLIs and MCP servers through the CLI adapter contract
 - `graphify`: native graph-first repo index tools or an external Graphify-compatible graph connector
-- `python-sidecar`: optional local Python runtime through a narrow JSON job contract
+- `python-sidecar`: required local Python runtime through a narrow JSON job contract
 - `hermes-agent`: Hermes Agent through the external agent adapter contract
 - `inflection-pi`: Inflection Pi through the provider API adapter contract
 
@@ -72,10 +72,10 @@ Implemented `adaptive` capabilities include:
 - `adaptive.graph-first-codebase-query`: query-first codebase discovery workflow that asks the repo graph before broad grep or raw file-reading passes.
 - `adaptive.agent-facing-routing`: curated project snapshots, next-tool recommendations, mission routes, and prepared context packs that keep agents off the full tool surface unless needed.
 - `adaptive.model-profile-learning`: native model-profile registration, deterministic selection, outcome recording, and replayable route trace export.
-- `adaptive.optional-python-sidecar`: optional Python worker for deterministic graph metrics, graph communities, media extraction, model-profile trace summaries, and offline policy jobs, bounded by TypeScript-owned MCP schemas, timeouts, and evidence hashes.
+- `adaptive.required-python-runtime`: required Python runtime for deterministic graph metrics, graph communities, media extraction, model-profile trace summaries, and offline policy jobs, bounded by TypeScript-owned MCP schemas, startup probes, timeouts, and evidence hashes.
 - `adaptive.deterministic-conductor`: deterministic planner, worker, and verifier scaffolds with replayable conductor traces.
 - `adaptive.durable-behavior-policy`: durable brevity and minimality modes with dense output and minimality review primitives.
-- `adaptive.native-media-ingestion`: repo-confined PDF/image ingestion with byte hashes, optional Python extraction, dependency reports, OCR safety gates, and evidence-ready records.
+- `adaptive.native-media-ingestion`: repo-confined PDF/image ingestion with byte hashes, required Python extraction, package dependency reports, OCR safety gates, and evidence-ready records.
 - `adaptive.shell-hook-manager`: dry-run-first shell hook discovery, plan-token-gated marker-based install, backup, verification, and uninstall for common terminals.
 - `adaptive.discovery-tool-generation`: HAR/OpenAPI import, bounded HTTP crawl with private-network guardrails, optional browser capture, endpoint normalization, secret redaction, and API tool-spec generation.
 - `adaptive.learned-orchestration-policy`: offline orchestration trace datasets, deterministic policy training/evaluation, stored evaluation IDs, replay thresholds, activation gates, and action clamps.
