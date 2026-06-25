@@ -38,6 +38,12 @@ describe("Wormhole MCP server", () => {
         "next_best_tool",
         "mission_route",
         "agent_context_prepare",
+        "agent_remit_create",
+        "agent_capability_inventory",
+        "agent_behavior_verify",
+        "remit_coverage_report",
+        "agent_drift_analyze",
+        "behavior_findings_render",
       ]),
     );
   });

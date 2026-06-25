@@ -173,6 +173,66 @@ export function createWormholeMcpServer(
     args: z.array(z.string()).optional(),
     endpoint: z.string().optional(),
   });
+  const agentKnownGoodBaselineSchema = z.object({
+    typicalToolInventory: z.array(z.string()).optional(),
+    typicalChannelsUsed: z.array(z.string()).optional(),
+    typicalOutboundDestinations: z.array(z.string()).optional(),
+    typicalFilePathsAccessed: z.array(z.string()).optional(),
+  });
+  const agentRemitSchema = z.object({
+    workerName: z.string(),
+    mission: z.string(),
+    owner: z.string().optional(),
+    version: z.string().optional(),
+    updatedBy: z.string().optional(),
+    allowedCapabilities: z.array(z.string()).optional(),
+    restrictedCapabilities: z.array(z.string()).optional(),
+    forbiddenCapabilities: z.array(z.string()).optional(),
+    approvedChannels: z.array(z.string()).optional(),
+    authorizedCounterparties: z.array(z.string()).optional(),
+    allowedDataSources: z.array(z.string()).optional(),
+    allowedOutboundDestinations: z.array(z.string()).optional(),
+    approvalRequiredActions: z.array(z.string()).optional(),
+    neverAllowedActions: z.array(z.string()).optional(),
+    escalationRules: z
+      .object({
+        halt: z.array(z.string()).optional(),
+        alert: z.array(z.string()).optional(),
+        logOnly: z.array(z.string()).optional(),
+      })
+      .optional(),
+    knownGoodBaseline: agentKnownGoodBaselineSchema.optional(),
+  });
+  const agentActionObservationSchema = z.object({
+    action: z.string(),
+    approvalObserved: z.boolean().optional(),
+    source: z.string().optional(),
+    line: z.number().optional(),
+    summary: z.string().optional(),
+  });
+  const agentPromptObservationSchema = z.object({
+    path: z.string(),
+    sessionLoaded: z.boolean().optional(),
+    writable: z.boolean().optional(),
+    grantsCapabilities: z.array(z.string()).optional(),
+  });
+  const agentLogObservationSchema = z.object({
+    path: z.string(),
+    kind: z.string(),
+  });
+  const agentCapabilityInventorySchema = z.object({
+    agentId: z.string(),
+    repoRoot: z.string().optional(),
+    capabilities: z.array(z.string()).optional(),
+    channels: z.array(z.string()).optional(),
+    counterparties: z.array(z.string()).optional(),
+    dataSources: z.array(z.string()).optional(),
+    outboundDestinations: z.array(z.string()).optional(),
+    mcpServers: z.array(z.string()).optional(),
+    actions: z.array(agentActionObservationSchema).optional(),
+    prompts: z.array(agentPromptObservationSchema).optional(),
+    logs: z.array(agentLogObservationSchema).optional(),
+  });
 
   server.registerTool(
     "mission_start",
@@ -1667,6 +1727,70 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.actionPolicyReview(input)),
+  );
+
+  server.registerTool(
+    "agent_remit_create",
+    {
+      description: "Create a native Wormhole agent remit: declared mission, capabilities, channels, data boundaries, approvals, and known-good baseline.",
+      inputSchema: agentRemitSchema.shape,
+    },
+    async (input) => jsonResult(tools.agentRemitCreate(input)),
+  );
+
+  server.registerTool(
+    "agent_capability_inventory",
+    {
+      description: "Normalize an observed agent capability inventory from tools, channels, actions, prompts, logs, MCP servers, and outbound destinations.",
+      inputSchema: agentCapabilityInventorySchema.shape,
+    },
+    async (input) => jsonResult(tools.agentCapabilityInventory(input)),
+  );
+
+  server.registerTool(
+    "agent_behavior_verify",
+    {
+      description: "Compare an agent remit against observed capability and behavior inventory, producing coverage, findings, positives, and risk summary.",
+      inputSchema: {
+        remit: z.any(),
+        inventory: z.any(),
+      },
+    },
+    async (input) => jsonResult(tools.agentBehaviorVerify(input)),
+  );
+
+  server.registerTool(
+    "remit_coverage_report",
+    {
+      description: "Render rule-by-rule remit coverage from an agent behavior verification report.",
+      inputSchema: {
+        report: z.any(),
+      },
+    },
+    async (input) => jsonResult(tools.remitCoverageReport(input)),
+  );
+
+  server.registerTool(
+    "agent_drift_analyze",
+    {
+      description: "Compare current observed agent inventory against the remit known-good baseline.",
+      inputSchema: {
+        remit: z.any(),
+        currentInventory: z.any(),
+      },
+    },
+    async (input) => jsonResult(tools.agentDriftAnalyze(input)),
+  );
+
+  server.registerTool(
+    "behavior_findings_render",
+    {
+      description: "Render a deterministic Markdown report from an agent behavior verification report.",
+      inputSchema: {
+        report: z.any(),
+      },
+    },
+    async (input) => jsonResult(tools.behaviorFindingsRender(input)),
   );
 
   server.registerTool(

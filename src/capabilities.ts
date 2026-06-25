@@ -254,6 +254,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Native architecture maps, entrypoint flow discovery, blast-radius analysis, and task-scoped project context packs built from typed repo observations with provenance.",
       },
       {
+        id: "orchestration.native-agent-behavior-verification",
+        area: "orchestration",
+        status: "implemented",
+        description: "Praxen-inspired native remit creation, capability inventory, behavior verification, remit coverage, drift analysis, and deterministic findings rendering.",
+      },
+      {
         id: "orchestration.graph-artifact-suite",
         area: "orchestration",
         status: "implemented",

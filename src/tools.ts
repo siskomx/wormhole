@@ -137,6 +137,19 @@ import {
   recommendNextBestTool,
 } from "./agent-routing.js";
 import {
+  analyzeAgentDrift,
+  createAgentRemit,
+  createRemitCoverageReport,
+  inventoryAgentCapabilities,
+  renderBehaviorFindings,
+  verifyAgentBehavior,
+  type AgentBehaviorVerificationReport,
+  type AgentCapabilityInventory,
+  type AgentCapabilityInventoryInput,
+  type AgentRemit,
+  type AgentRemitInput,
+} from "./agent-behavior-verification.js";
+import {
   createWorkbenchSnapshot,
   renderWorkbenchHtml,
   type WorkbenchSnapshotInput,
@@ -1106,6 +1119,31 @@ export function createToolHandlers(
 
     actionPolicyReview(input: { operations: ActionPolicyOperation[] }) {
       return reviewActionPolicy(input);
+    },
+
+    agentRemitCreate(input: AgentRemitInput) {
+      return createAgentRemit(input);
+    },
+
+    agentCapabilityInventory(input: AgentCapabilityInventoryInput) {
+      const repoRoot = input.repoRoot ? resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots) : undefined;
+      return inventoryAgentCapabilities({ ...input, repoRoot });
+    },
+
+    agentBehaviorVerify(input: { remit: AgentRemit; inventory: AgentCapabilityInventory }) {
+      return verifyAgentBehavior(input);
+    },
+
+    remitCoverageReport(input: { report: AgentBehaviorVerificationReport }) {
+      return createRemitCoverageReport(input.report);
+    },
+
+    agentDriftAnalyze(input: { remit: AgentRemit; currentInventory: AgentCapabilityInventory }) {
+      return analyzeAgentDrift(input);
+    },
+
+    behaviorFindingsRender(input: { report: AgentBehaviorVerificationReport }) {
+      return { markdown: renderBehaviorFindings(input.report) };
     },
 
     lspSessionStart(input: Parameters<typeof lspSessionManager.start>[0]) {
