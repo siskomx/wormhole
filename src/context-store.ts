@@ -47,11 +47,17 @@ export type ContextPack = {
   };
 };
 
+export type ContextStoreSnapshot = {
+  records: ContextRecord[];
+  packs: ContextPack[];
+};
+
 export type ContextStore = {
   record(input: ContextRecordInput): ContextRecord;
   query(input: ContextQueryInput): ContextQueryResult;
   createPack(input: ContextPackInput): ContextPack;
   renderPack(input: { packId: string }): string;
+  snapshot(): ContextStoreSnapshot;
 };
 
 function sha256(value: string): string {
@@ -103,9 +109,42 @@ function renderPack(objective: string, records: ContextRecord[]): string {
   ].join("\n");
 }
 
-export function createContextStore(): ContextStore {
-  const records = new Map<string, ContextRecord>();
-  const packs = new Map<string, ContextPack>();
+function cloneRecord(record: ContextRecord): ContextRecord {
+  return {
+    ...record,
+    tags: record.tags ? [...record.tags] : undefined,
+  };
+}
+
+function clonePack(pack: ContextPack): ContextPack {
+  return {
+    ...pack,
+    contextIds: [...pack.contextIds],
+    stats: { ...pack.stats },
+  };
+}
+
+export function createContextStore(
+  snapshot: Partial<ContextStoreSnapshot> = {},
+  onChange?: (snapshot: ContextStoreSnapshot) => void,
+): ContextStore {
+  const records = new Map<string, ContextRecord>(
+    (snapshot.records ?? []).map((record) => [record.contextId, cloneRecord(record)]),
+  );
+  const packs = new Map<string, ContextPack>(
+    (snapshot.packs ?? []).map((pack) => [pack.packId, clonePack(pack)]),
+  );
+
+  function snapshotState(): ContextStoreSnapshot {
+    return {
+      records: [...records.values()].map(cloneRecord),
+      packs: [...packs.values()].map(clonePack),
+    };
+  }
+
+  function emitChange(): void {
+    onChange?.(snapshotState());
+  }
 
   function rankedRecords(input: ContextQueryInput): Array<ContextRecord & { score: number; excerpt: string }> {
     const limit = input.limit ?? 10;
@@ -136,7 +175,8 @@ export function createContextStore(): ContextStore {
         charCount: input.text.length,
       };
       records.set(record.contextId, record);
-      return { ...record, tags: record.tags ? [...record.tags] : undefined };
+      emitChange();
+      return cloneRecord(record);
     },
 
     query(input: ContextQueryInput): ContextQueryResult {
@@ -185,7 +225,8 @@ export function createContextStore(): ContextStore {
         },
       };
       packs.set(packId, pack);
-      return { ...pack, contextIds: [...pack.contextIds], stats: { ...pack.stats } };
+      emitChange();
+      return clonePack(pack);
     },
 
     renderPack(input: { packId: string }): string {
@@ -195,5 +236,7 @@ export function createContextStore(): ContextStore {
       }
       return pack.rendered;
     },
+
+    snapshot: snapshotState,
   };
 }

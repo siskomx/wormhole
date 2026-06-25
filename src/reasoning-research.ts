@@ -41,6 +41,11 @@ export type ReasoningResearchStore = {
   record(trace: ReasoningTrace): ScoredReasoningTrace;
   exportJsonl(): string;
   evaluateStrategies(): ReasoningStrategySummary[];
+  snapshot(): ReasoningResearchSnapshot;
+};
+
+export type ReasoningResearchSnapshot = {
+  traces: ScoredReasoningTrace[];
 };
 
 function bounded(value: number): number {
@@ -121,8 +126,23 @@ export function scoreReasoningTrace(trace: ReasoningTrace): ReasoningScore {
   };
 }
 
-export function createReasoningResearchStore(): ReasoningResearchStore {
-  const traces: ScoredReasoningTrace[] = [];
+export function createReasoningResearchStore(
+  snapshot: Partial<ReasoningResearchSnapshot> = {},
+  onChange?: (snapshot: ReasoningResearchSnapshot) => void,
+): ReasoningResearchStore {
+  const traces: ScoredReasoningTrace[] = (snapshot.traces ?? []).map((trace) => ({
+    ...trace,
+    score: { ...trace.score },
+  }));
+
+  function snapshotState(): ReasoningResearchSnapshot {
+    return {
+      traces: traces.map((trace) => ({
+        ...trace,
+        score: { ...trace.score },
+      })),
+    };
+  }
 
   return {
     record(trace) {
@@ -131,6 +151,7 @@ export function createReasoningResearchStore(): ReasoningResearchStore {
         score: scoreReasoningTrace(trace),
       };
       traces.push(scored);
+      onChange?.(snapshotState());
       return { ...scored, score: { ...scored.score } };
     },
 
@@ -168,5 +189,7 @@ export function createReasoningResearchStore(): ReasoningResearchStore {
 
       return summaries;
     },
+
+    snapshot: snapshotState,
   };
 }

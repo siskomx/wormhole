@@ -145,4 +145,21 @@ describe("capability manifest", () => {
       ]),
     );
   });
+
+  it("describes the stronger runtime-backed agent tooling contracts", () => {
+    const manifest = createDefaultCapabilityManifest();
+
+    expect(
+      manifest.capabilities.find((capability) => capability.id === "orchestration.native-context-packs")
+        ?.description,
+    ).toMatch(/durable/i);
+    expect(
+      manifest.capabilities.find((capability) => capability.id === "orchestration.external-agent-adapters")
+        ?.description,
+    ).toContain("CLI/HTTP execution");
+    expect(
+      manifest.capabilities.find((capability) => capability.id === "orchestration.native-tool-factory")
+        ?.description,
+    ).toContain("validated workspace writes");
+  });
 });

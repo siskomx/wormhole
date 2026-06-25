@@ -24,6 +24,8 @@ describe("repo-local Codex plugin metadata", () => {
     expect(plugin.interface.defaultPrompt).toHaveLength(3);
     expect(plugin.interface.longDescription).toContain("optimized command execution");
     expect(plugin.interface.longDescription).toContain("native tool generation");
+    expect(plugin.interface.longDescription).toContain("validated writable tool scaffolds");
+    expect(plugin.interface.longDescription).toContain("executable external agent dispatch");
     expect(plugin.interface.longDescription).toContain("durable brevity/minimality policy");
     expect(plugin.interface.longDescription).toContain("native media ingestion");
     expect(plugin.interface.longDescription).toContain("shell hook management");
@@ -60,6 +62,7 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.server.mcp_config.command).toBe("node");
     expect(manifest.server.mcp_config.args).toEqual(["${__dirname}/server/index.js"]);
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_dispatch");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("agent_dispatch_execute");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_plan_local");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_run_local");
     expect(manifest.tools.map((tool) => tool.name)).toContain("ctx_pack_create");
@@ -75,6 +78,8 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("optimized_command_run");
     expect(manifest.tools.map((tool) => tool.name)).toContain("optimization_stats");
     expect(manifest.tools.map((tool) => tool.name)).toContain("tool_factory_generate");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("tool_factory_validate");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("tool_factory_write");
     expect(manifest.tools.map((tool) => tool.name)).toContain("conductor_plan");
     expect(manifest.tools.map((tool) => tool.name)).toContain("conductor_replay");
     expect(manifest.tools.map((tool) => tool.name)).toContain("behavior_mode_set");

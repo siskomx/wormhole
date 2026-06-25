@@ -60,6 +60,12 @@ export type PolicyBaselineComparison = {
   best: PolicyEvaluation;
 };
 
+export type PolicyStoreSnapshot = {
+  traces: OrchestrationTrace[];
+  evaluations: PolicyEvaluation[];
+  active?: ActivePolicy;
+};
+
 const SAFE_MODELS = new Set(["fast", "balanced", "deep", "ultra", "small-local", "deep-reviewer"]);
 const SAFE_SPLIT_STRATEGIES = new Set(["single", "parallel", "sequential"]);
 const SAFE_CONTEXT_BUDGETS = new Set(["small", "medium", "large"]);
@@ -240,17 +246,64 @@ function hashPolicy(input: unknown): string {
   return `policy:${createHash("sha256").update(JSON.stringify(input)).digest("hex").slice(0, 16)}`;
 }
 
-export function createPolicyStore(): {
+export function createPolicyStore(
+  snapshot: Partial<PolicyStoreSnapshot> = {},
+  onChange?: (snapshot: PolicyStoreSnapshot) => void,
+): {
   record(trace: OrchestrationTrace): void;
   exportJsonl(): string;
   evaluate(policyJson: unknown): PolicyEvaluation;
   comparePolicyToBaselines(policyJson: unknown): PolicyBaselineComparison;
   activate(input: PolicyActivationInput): ActivePolicy;
   getActive(): ActivePolicy | undefined;
+  snapshot(): PolicyStoreSnapshot;
 } {
-  const traces: OrchestrationTrace[] = [];
-  const evaluations = new Map<string, PolicyEvaluation>();
-  let active: ActivePolicy | undefined;
+  const traces: OrchestrationTrace[] = (snapshot.traces ?? []).map((trace) => ({
+    ...trace,
+    action: { ...trace.action },
+    outcome: { ...trace.outcome },
+  }));
+  const evaluations = new Map<string, PolicyEvaluation>(
+    (snapshot.evaluations ?? []).map((evaluation) => [
+      evaluation.evaluationId,
+      {
+        ...evaluation,
+        safetyViolations: [...evaluation.safetyViolations],
+        recommendedAction: evaluation.recommendedAction ? { ...evaluation.recommendedAction } : undefined,
+      },
+    ]),
+  );
+  let active: ActivePolicy | undefined = snapshot.active
+    ? {
+        ...snapshot.active,
+        recommendedAction: snapshot.active.recommendedAction ? { ...snapshot.active.recommendedAction } : undefined,
+      }
+    : undefined;
+
+  function snapshotState(): PolicyStoreSnapshot {
+    return {
+      traces: traces.map((trace) => ({
+        ...trace,
+        action: { ...trace.action },
+        outcome: { ...trace.outcome },
+      })),
+      evaluations: [...evaluations.values()].map((evaluation) => ({
+        ...evaluation,
+        safetyViolations: [...evaluation.safetyViolations],
+        recommendedAction: evaluation.recommendedAction ? { ...evaluation.recommendedAction } : undefined,
+      })),
+      active: active
+        ? {
+            ...active,
+            recommendedAction: active.recommendedAction ? { ...active.recommendedAction } : undefined,
+          }
+        : undefined,
+    };
+  }
+
+  function notifyChange(): void {
+    onChange?.(snapshotState());
+  }
 
   function evaluateCandidate(policyJson: unknown): PolicyEvaluation {
     const candidate = typeof policyJson === "object" && policyJson !== null ? policyJson as {
@@ -305,6 +358,7 @@ export function createPolicyStore(): {
   return {
     record(trace) {
       traces.push({ ...trace, action: clampPolicyAction(trace.action) });
+      notifyChange();
     },
 
     exportJsonl() {
@@ -314,6 +368,7 @@ export function createPolicyStore(): {
     evaluate(policyJson) {
       const evaluation = evaluateCandidate(policyJson);
       evaluations.set(evaluation.evaluationId, evaluation);
+      notifyChange();
       return evaluation;
     },
 
@@ -379,11 +434,14 @@ export function createPolicyStore(): {
         sampleCount: evaluation.sampleCount,
         recommendedAction: evaluation.recommendedAction,
       };
+      notifyChange();
       return { ...active };
     },
 
     getActive() {
       return active ? { ...active } : undefined;
     },
+
+    snapshot: snapshotState,
   };
 }

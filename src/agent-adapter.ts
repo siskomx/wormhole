@@ -22,6 +22,13 @@ export type AgentDescriptor = {
   authentication: AgentAuthentication;
   maxConcurrentTasks: number;
   supportsInterrupt: boolean;
+  runtime?: {
+    command?: string;
+    args?: string[];
+    endpoint?: string;
+    method?: "POST" | "PUT" | "PATCH";
+    timeoutMs?: number;
+  };
 };
 
 export type AgentDispatchInput = {
@@ -58,6 +65,12 @@ export type AgentRegistry = {
   status(runId: string): AgentRunRecord;
   complete(runId: string, result: AgentRunResult): AgentRunRecord;
   interrupt(runId: string, reason: string): AgentRunRecord;
+  snapshot(): AgentRegistrySnapshot;
+};
+
+export type AgentRegistrySnapshot = {
+  agents: AgentDescriptor[];
+  runs: AgentRunRecord[];
 };
 
 function activeRunCount(agentId: string, runs: AgentRunRecord[]): number {
@@ -104,9 +117,27 @@ function cloneRun(run: AgentRunRecord): AgentRunRecord {
   };
 }
 
-export function createAgentRegistry(): AgentRegistry {
-  const agents = new Map<string, AgentDescriptor>();
-  const runs = new Map<string, AgentRunRecord>();
+export function createAgentRegistry(
+  snapshot: Partial<AgentRegistrySnapshot> = {},
+  onChange?: (snapshot: AgentRegistrySnapshot) => void,
+): AgentRegistry {
+  const agents = new Map<string, AgentDescriptor>(
+    (snapshot.agents ?? []).map((agent) => [agent.agentId, { ...agent, capabilities: [...agent.capabilities] }]),
+  );
+  const runs = new Map<string, AgentRunRecord>(
+    (snapshot.runs ?? []).map((run) => [run.runId, cloneRun(run)]),
+  );
+
+  function snapshotState(): AgentRegistrySnapshot {
+    return {
+      agents: [...agents.values()].map((agent) => ({ ...agent, capabilities: [...agent.capabilities] })),
+      runs: [...runs.values()].map(cloneRun),
+    };
+  }
+
+  function notifyChange(): void {
+    onChange?.(snapshotState());
+  }
 
   function getRun(runId: string): AgentRunRecord {
     const run = runs.get(runId);
@@ -129,6 +160,7 @@ export function createAgentRegistry(): AgentRegistry {
         capabilities: [...agent.capabilities],
       };
       agents.set(agent.agentId, registered);
+      notifyChange();
       return { ...registered, capabilities: [...registered.capabilities] };
     },
 
@@ -159,6 +191,7 @@ export function createAgentRegistry(): AgentRegistry {
         updatedAt: now,
       };
       runs.set(run.runId, run);
+      notifyChange();
       return cloneRun(run);
     },
 
@@ -178,6 +211,7 @@ export function createAgentRegistry(): AgentRegistry {
         artifactIds: result.artifactIds ? [...result.artifactIds] : undefined,
       };
       run.updatedAt = new Date().toISOString();
+      notifyChange();
       return cloneRun(run);
     },
 
@@ -193,7 +227,10 @@ export function createAgentRegistry(): AgentRegistry {
       run.status = "interrupted";
       run.interruptReason = reason;
       run.updatedAt = new Date().toISOString();
+      notifyChange();
       return cloneRun(run);
     },
+
+    snapshot: snapshotState,
   };
 }

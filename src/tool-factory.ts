@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 
 export type ToolFactoryInputField = {
   name: string;
@@ -19,6 +21,16 @@ export type ToolFactoryInput = {
 export type ToolScaffold = {
   toolId: string;
   files: Record<string, string>;
+};
+
+export type ToolScaffoldWriteResult = {
+  targetDir: string;
+  files: string[];
+};
+
+export type ToolScaffoldValidation = {
+  valid: boolean;
+  errors: string[];
 };
 
 function sha256(value: string): string {
@@ -218,5 +230,74 @@ export function generateToolScaffold(input: ToolFactoryInput): ToolScaffold {
       ].join("\n\n"),
       "tests/cli.test.ts": testSource(input),
     },
+  };
+}
+
+export function validateToolScaffold(scaffold: ToolScaffold): ToolScaffoldValidation {
+  const errors: string[] = [];
+  const requiredFiles = [
+    "README.md",
+    "manifest.json",
+    "package.json",
+    "src/cli.ts",
+    "src/mcp-server.ts",
+    "tests/cli.test.ts",
+  ];
+
+  for (const file of requiredFiles) {
+    if (!Object.prototype.hasOwnProperty.call(scaffold.files, file)) {
+      errors.push(`Missing generated file: ${file}`);
+    }
+  }
+
+  try {
+    const manifest = JSON.parse(scaffold.files["manifest.json"] ?? "{}") as { toolId?: string };
+    if (manifest.toolId !== scaffold.toolId) {
+      errors.push("manifest.json toolId must match scaffold toolId");
+    }
+  } catch {
+    errors.push("manifest.json must be valid JSON");
+  }
+
+  try {
+    JSON.parse(scaffold.files["package.json"] ?? "{}");
+  } catch {
+    errors.push("package.json must be valid JSON");
+  }
+
+  if (!scaffold.files["src/mcp-server.ts"]?.includes("server.registerTool(")) {
+    errors.push("src/mcp-server.ts must register an MCP tool");
+  }
+
+  if (!scaffold.files["src/cli.ts"]?.includes("export function main")) {
+    errors.push("src/cli.ts must export main");
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+export function writeToolScaffold(
+  scaffold: ToolScaffold,
+  input: { targetDir: string },
+): ToolScaffoldWriteResult {
+  const targetDir = path.resolve(input.targetDir);
+  const written: string[] = [];
+  for (const [relativePath, content] of Object.entries(scaffold.files)) {
+    const outputPath = path.resolve(targetDir, relativePath);
+    const relative = path.relative(targetDir, outputPath);
+    if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new Error(`Generated file path is outside target directory: ${relativePath}`);
+    }
+    mkdirSync(path.dirname(outputPath), { recursive: true });
+    writeFileSync(outputPath, content, "utf8");
+    written.push(outputPath);
+  }
+  written.sort((left, right) => left.localeCompare(right));
+  return {
+    targetDir,
+    files: written,
   };
 }

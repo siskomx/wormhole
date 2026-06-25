@@ -10,7 +10,7 @@ export type RepoIndexSymbolKind =
   | "constant"
   | "section";
 
-export type RepoIndexEdgeKind = "defines" | "imports" | "links" | "references";
+export type RepoIndexEdgeKind = "defines" | "imports" | "links" | "references" | "calls";
 export type RepoIndexEdgeProvenance = "extracted" | "inferred" | "ambiguous";
 
 export type RepoIndexSymbol = {
@@ -176,6 +176,7 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   ".mdx": "markdown",
   ".mjs": "javascript",
   ".ps1": "powershell",
+  ".py": "python",
   ".sh": "shell",
   ".sql": "sql",
   ".ts": "typescript",
@@ -257,6 +258,7 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
     });
   }
   edges.push(...extractReferenceEdges(files, symbols, edges));
+  edges.push(...extractCallEdges(files, symbols, edges));
 
   return {
     repoRoot,
@@ -613,6 +615,12 @@ function extractSymbols(
     addRegexMatches(content, /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g, "constant", add);
   }
 
+  if (language === "python") {
+    addRegexMatches(content, /^(?:async\s+)?def\s+([A-Za-z_][\w]*)\s*\(/gm, "function", add);
+    addRegexMatches(content, /^class\s+([A-Za-z_][\w]*)\b/gm, "class", add);
+    addRegexMatches(content, /^([A-Z][A-Z0-9_]*)\s*=/gm, "constant", add);
+  }
+
   return symbols;
 }
 
@@ -663,6 +671,12 @@ function extractEdgeDrafts(
     }
   }
 
+  if (language === "python") {
+    for (const match of content.matchAll(/^\s*from\s+(\.+[A-Za-z0-9_.]*)\s+import\s+/gm)) {
+      add("imports", normalizePythonRelativeSpecifier(match[1] ?? ""), match.index ?? 0);
+    }
+  }
+
   if (language === "markdown") {
     for (const match of content.matchAll(/\[[^\]]+\]\(([^)#?]+)(?:[)#?][^)]*)?\)/g)) {
       add("links", match[1] ?? "", match.index ?? 0);
@@ -707,6 +721,61 @@ function extractReferenceEdges(
     }
   }
 
+  return edges;
+}
+
+function extractCallEdges(
+  files: RepoIndexFile[],
+  symbols: RepoIndexSymbol[],
+  existingEdges: RepoIndexEdge[],
+): RepoIndexEdge[] {
+  const existingKeys = new Set(
+    existingEdges.map((edge) => `${edge.from}\0${edge.to}\0${edge.kind}`),
+  );
+  const symbolsByPath = new Map<string, RepoIndexSymbol[]>();
+  for (const symbol of symbols) {
+    symbolsByPath.set(symbol.path, [...(symbolsByPath.get(symbol.path) ?? []), symbol]);
+  }
+
+  const edges: RepoIndexEdge[] = [];
+  for (const file of files) {
+    const fileSymbols = (symbolsByPath.get(file.path) ?? []).sort((left, right) => left.line - right.line);
+    if (fileSymbols.length === 0) {
+      continue;
+    }
+    const lines = file.content.split("\n");
+    for (let index = 0; index < fileSymbols.length; index += 1) {
+      const caller = fileSymbols[index]!;
+      if (caller.kind !== "function") {
+        continue;
+      }
+      const next = fileSymbols[index + 1];
+      const body = lines.slice(caller.line - 1, next ? next.line - 1 : lines.length).join("\n");
+      for (const callee of symbols) {
+        if (callee.id === caller.id || callee.kind !== "function" || callee.name.length < 3) {
+          continue;
+        }
+        const regex = new RegExp(`\\b${escapeRegex(callee.name)}\\s*\\(`);
+        if (!regex.test(body)) {
+          continue;
+        }
+        const key = `${caller.id}\0${callee.id}\0calls`;
+        if (existingKeys.has(key)) {
+          continue;
+        }
+        existingKeys.add(key);
+        edges.push({
+          from: caller.id,
+          to: callee.id,
+          kind: "calls",
+          provenance: "inferred",
+          confidence: callee.path === file.path ? 0.85 : 0.75,
+          label: callee.name,
+          line: caller.line,
+        });
+      }
+    }
+  }
   return edges;
 }
 
@@ -824,7 +893,8 @@ function createAdjacency(index: RepoIndex): Map<string, string[]> {
       edge.kind === "defines" ||
       edge.kind === "imports" ||
       edge.kind === "links" ||
-      edge.kind === "references"
+      edge.kind === "references" ||
+      edge.kind === "calls"
     ) {
       add(edge.to, edge.from);
     }
@@ -913,6 +983,15 @@ function isSupportedTextPath(relativePath: string): boolean {
 function languageForPath(relativePath: string): string {
   const extension = path.extname(relativePath).toLowerCase();
   return LANGUAGE_BY_EXTENSION[extension] ?? "unknown";
+}
+
+function normalizePythonRelativeSpecifier(specifier: string): string {
+  const dots = specifier.match(/^\.+/)?.[0] ?? "";
+  const rest = specifier.slice(dots.length).replace(/\./g, "/");
+  if (dots.length <= 1) {
+    return `./${rest}`;
+  }
+  return `${"../".repeat(dots.length - 1)}${rest}`;
 }
 
 function cleanCodeSymbolName(name: string): string {

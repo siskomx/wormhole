@@ -1,7 +1,12 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createDefaultKernel, resolveDefaultEventLogPath } from "../src/runtime.js";
+import {
+  createDefaultKernel,
+  createDefaultToolHandlerOptions,
+  resolveDefaultEventLogPath,
+  resolveDefaultRuntimeStatePath,
+} from "../src/runtime.js";
 
 describe("runtime defaults", () => {
   it("stores the default event log under .wormhole in the working directory", () => {
@@ -10,6 +15,12 @@ describe("runtime defaults", () => {
     expect(resolveDefaultEventLogPath(cwd)).toBe(
       path.join(cwd, ".wormhole", "events.jsonl"),
     );
+    expect(resolveDefaultRuntimeStatePath(cwd)).toBe(
+      path.join(cwd, ".wormhole", "runtime-state.json"),
+    );
+    expect(createDefaultToolHandlerOptions(cwd)).toEqual({
+      runtimeStatePath: path.join(cwd, ".wormhole", "runtime-state.json"),
+    });
   });
 
   it("loads projected state from the default event log on restart", () => {

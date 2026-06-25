@@ -61,10 +61,13 @@ function preserveBacktickLiterals(summaryText: string, originalText: string): st
   return `${summaryText}\n${suffix}`.trim();
 }
 
-export function createBehaviorPolicyStore(): BehaviorPolicyStore {
+export function createBehaviorPolicyStore(
+  initialMode?: Partial<BehaviorMode>,
+  onChange?: (mode: BehaviorMode) => void,
+): BehaviorPolicyStore {
   let mode: BehaviorMode = {
-    brevity: "normal",
-    minimality: "review",
+    brevity: initialMode?.brevity ?? "normal",
+    minimality: initialMode?.minimality ?? "review",
   };
 
   return {
@@ -73,6 +76,7 @@ export function createBehaviorPolicyStore(): BehaviorPolicyStore {
         brevity: input.brevity ?? mode.brevity,
         minimality: input.minimality ?? mode.minimality,
       };
+      onChange?.(cloneMode(mode));
       return cloneMode(mode);
     },
 

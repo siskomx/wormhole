@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { WormholeKernel } from "./kernel.js";
-import { createToolHandlers } from "./tools.js";
+import { createToolHandlers, type ToolHandlerOptions } from "./tools.js";
 
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
@@ -13,12 +13,15 @@ function jsonResult(value: unknown): ToolResult {
   };
 }
 
-export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
+export function createWormholeMcpServer(
+  kernel: WormholeKernel,
+  options: ToolHandlerOptions = {},
+): McpServer {
   const server = new McpServer({
     name: "wormhole",
     version: "0.1.0",
   });
-  const tools = createToolHandlers(kernel);
+  const tools = createToolHandlers(kernel, options);
   const taskStatusSchema = z.enum([
     "registered",
     "running",
@@ -46,6 +49,15 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
     authentication: z.enum(["on_install", "on_use", "none"]),
     maxConcurrentTasks: z.number(),
     supportsInterrupt: z.boolean(),
+    runtime: z
+      .object({
+        command: z.string().optional(),
+        args: z.array(z.string()).optional(),
+        endpoint: z.string().optional(),
+        method: z.enum(["POST", "PUT", "PATCH"]).optional(),
+        timeoutMs: z.number().optional(),
+      })
+      .optional(),
   };
   const printingPressCliSchema = {
     cliId: z.string(),
@@ -688,6 +700,22 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
   );
 
   server.registerTool(
+    "agent_dispatch_execute",
+    {
+      description: "Dispatch a Wormhole task to a CLI or HTTP external agent and execute its transport.",
+      inputSchema: {
+        missionId: z.string(),
+        taskId: z.string(),
+        objective: z.string(),
+        requiredCapabilities: z.array(z.string()),
+        preferredTargets: z.array(z.string()).optional(),
+        payload: z.unknown().optional(),
+      },
+    },
+    async (input) => jsonResult(await tools.agentDispatchExecute(input)),
+  );
+
+  server.registerTool(
     "agent_status",
     {
       description: "Return the current status for a dispatched external agent run.",
@@ -1172,6 +1200,32 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
       inputSchema: toolFactoryInputSchema,
     },
     async (input) => jsonResult(tools.toolFactoryGenerate(input)),
+  );
+
+  const toolScaffoldSchema = {
+    toolId: z.string(),
+    files: z.record(z.string(), z.string()),
+  };
+
+  server.registerTool(
+    "tool_factory_validate",
+    {
+      description: "Validate a generated CLI/MCP scaffold before writing or running it.",
+      inputSchema: toolScaffoldSchema,
+    },
+    async (input) => jsonResult(tools.toolFactoryValidate(input)),
+  );
+
+  server.registerTool(
+    "tool_factory_write",
+    {
+      description: "Write a generated CLI/MCP scaffold to a safe target directory.",
+      inputSchema: {
+        scaffold: z.object(toolScaffoldSchema),
+        targetDir: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.toolFactoryWrite(input)),
   );
 
   const conductorInputSchema = {

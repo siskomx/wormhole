@@ -23,8 +23,8 @@ export type OptimizationStats = {
   snapshot(): OptimizationStatsSnapshot;
 };
 
-export function createOptimizationStats(): OptimizationStats {
-  const snapshot: OptimizationStatsSnapshot = {
+function defaultSnapshot(): OptimizationStatsSnapshot {
+  return {
     runCount: 0,
     originalCharCount: 0,
     optimizedCharCount: 0,
@@ -32,6 +32,28 @@ export function createOptimizationStats(): OptimizationStats {
     estimatedTokensAfter: 0,
     estimatedTokensSaved: 0,
     byKind: {},
+  };
+}
+
+function cloneSnapshot(snapshot: OptimizationStatsSnapshot): OptimizationStatsSnapshot {
+  return {
+    ...snapshot,
+    byKind: Object.fromEntries(
+      Object.entries(snapshot.byKind).map(([kind, value]) => [kind, { ...value }]),
+    ),
+  };
+}
+
+export function createOptimizationStats(
+  initialSnapshot?: Partial<OptimizationStatsSnapshot>,
+  onChange?: (snapshot: OptimizationStatsSnapshot) => void,
+): OptimizationStats {
+  const snapshot: OptimizationStatsSnapshot = {
+    ...defaultSnapshot(),
+    ...initialSnapshot,
+    byKind: Object.fromEntries(
+      Object.entries(initialSnapshot?.byKind ?? {}).map(([kind, value]) => [kind, { ...value }]),
+    ),
   };
 
   return {
@@ -49,14 +71,10 @@ export function createOptimizationStats(): OptimizationStats {
       current.runCount += 1;
       current.estimatedTokensSaved += saved;
       snapshot.byKind[input.kind] = current;
+      onChange?.(cloneSnapshot(snapshot));
     },
     snapshot() {
-      return {
-        ...snapshot,
-        byKind: Object.fromEntries(
-          Object.entries(snapshot.byKind).map(([kind, value]) => [kind, { ...value }]),
-        ),
-      };
+      return cloneSnapshot(snapshot);
     },
   };
 }

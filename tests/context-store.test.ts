@@ -56,4 +56,26 @@ describe("native context store", () => {
     expect(pack.stats.includedCount).toBeGreaterThan(0);
     expect(rendered).toBe(pack.rendered);
   });
+
+  it("restores records and packs from a snapshot", () => {
+    const first = createContextStore();
+    const record = first.record({
+      source: "src/tools.ts",
+      sourceType: "file",
+      text: "Runtime state wires context packs into persisted handler state.",
+      tags: ["runtime"],
+    });
+    const pack = first.createPack({
+      objective: "Persist runtime context",
+      query: "runtime context",
+      maxChars: 240,
+    });
+
+    const second = createContextStore(first.snapshot());
+
+    expect(second.query({ query: "runtime context", limit: 1 }).results[0]?.contextId).toBe(
+      record.contextId,
+    );
+    expect(second.renderPack({ packId: pack.packId })).toBe(pack.rendered);
+  });
 });

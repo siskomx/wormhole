@@ -214,6 +214,59 @@ describe("repo index", () => {
     }
   });
 
+  it("indexes Python symbols, relative imports, and call edges", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-index-python-"));
+    mkdirSync(path.join(repoRoot, "pkg"), { recursive: true });
+    writeFileSync(
+      path.join(repoRoot, "pkg", "app.py"),
+      [
+        "from .helpers import load_data",
+        "",
+        "class Worker:",
+        "    pass",
+        "",
+        "def run_job():",
+        "    return load_data()",
+      ].join("\n"),
+    );
+    writeFileSync(
+      path.join(repoRoot, "pkg", "helpers.py"),
+      [
+        "def load_data():",
+        "    return 'data'",
+      ].join("\n"),
+    );
+
+    try {
+      const index = buildRepoIndex({ repoRoot });
+
+      expect(index.files.map((file) => [file.path, file.language])).toContainEqual([
+        "pkg/app.py",
+        "python",
+      ]);
+      expect(index.symbols.map((symbol) => symbol.name)).toEqual(
+        expect.arrayContaining(["Worker", "run_job", "load_data"]),
+      );
+      expect(index.edges).toContainEqual(
+        expect.objectContaining({
+          from: "pkg/app.py",
+          to: "pkg/helpers.py",
+          kind: "imports",
+        }),
+      );
+      expect(index.edges).toContainEqual(
+        expect.objectContaining({
+          from: expect.stringContaining("pkg/app.py#run_job"),
+          to: expect.stringContaining("pkg/helpers.py#load_data"),
+          kind: "calls",
+          label: "load_data",
+        }),
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("generates a graph report from the native index", () => {
     const repoRoot = createFixtureRepo();
 

@@ -173,7 +173,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "orchestration.native-context-packs",
         area: "orchestration",
         status: "implemented",
-        description: "Native source-backed context records, ranked context queries, and budgeted context pack rendering with provenance.",
+        description: "Durable native source-backed context records, ranked context queries, and budgeted context pack rendering with provenance.",
       },
       {
         id: "orchestration.reversible-optimization-pipeline",
@@ -215,7 +215,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "orchestration.external-agent-adapters",
         area: "orchestration",
         status: "implemented",
-        description: "Generic external agent registration, dispatch, status, interrupt, and completion contracts for Hermes, Pi, and other workers.",
+        description: "Generic external agent registration, dispatch, CLI/HTTP execution, status, interrupt, and completion contracts for Hermes, Pi, and other workers.",
       },
       {
         id: "orchestration.printing-press-cli-adapters",
@@ -251,7 +251,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "orchestration.native-tool-factory",
         area: "orchestration",
         status: "implemented",
-        description: "Printing-Press-near deterministic generation of CLI/MCP scaffold files from constrained tool specs.",
+        description: "Printing-Press-near deterministic generation, validation, and validated workspace writes of CLI/MCP scaffold files from constrained tool specs.",
       },
       {
         id: "orchestration.local-runner",

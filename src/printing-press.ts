@@ -68,6 +68,11 @@ export type PrintingPressRegistry = {
   toAgentDescriptor(cliId: string): AgentDescriptor;
   verify(input: { cliId: string }): PrintingPressVerification;
   run(input: PrintingPressRunInput): Promise<PrintingPressRunResult>;
+  snapshot(): PrintingPressRegistrySnapshot;
+};
+
+export type PrintingPressRegistrySnapshot = {
+  clis: PrintingPressCliDescriptor[];
 };
 
 function cloneCli(cli: PrintingPressCliDescriptor): PrintingPressCliDescriptor {
@@ -112,8 +117,19 @@ function buildCommand(cli: PrintingPressCliDescriptor, extraArgs: string[] = [])
   return [cli.command, ...(cli.args ?? []), ...extraArgs].join(" ");
 }
 
-export function createPrintingPressRegistry(): PrintingPressRegistry {
-  const clis = new Map<string, PrintingPressCliDescriptor>();
+export function createPrintingPressRegistry(
+  snapshot: Partial<PrintingPressRegistrySnapshot> = {},
+  onChange?: (snapshot: PrintingPressRegistrySnapshot) => void,
+): PrintingPressRegistry {
+  const clis = new Map<string, PrintingPressCliDescriptor>(
+    (snapshot.clis ?? []).map((cli) => [cli.cliId, cloneCli(cli)]),
+  );
+
+  function snapshotState(): PrintingPressRegistrySnapshot {
+    return {
+      clis: [...clis.values()].map(cloneCli),
+    };
+  }
 
   function getCli(cliId: string): PrintingPressCliDescriptor {
     const cli = clis.get(cliId);
@@ -133,6 +149,7 @@ export function createPrintingPressRegistry(): PrintingPressRegistry {
       }
       const registered = cloneCli(cli);
       clis.set(cli.cliId, registered);
+      onChange?.(snapshotState());
       return cloneCli(registered);
     },
 
@@ -288,5 +305,7 @@ export function createPrintingPressRegistry(): PrintingPressRegistry {
         child.stdin.end();
       });
     },
+
+    snapshot: snapshotState,
   };
 }

@@ -68,6 +68,13 @@ export type ModelProfileRegistry = {
   select(input: ModelProfileSelectInput): ModelProfileSelection;
   recordOutcome(input: ModelProfileOutcomeInput): ModelProfileOutcome;
   exportTraces(): string;
+  snapshot(): ModelProfileRegistrySnapshot;
+};
+
+export type ModelProfileRegistrySnapshot = {
+  profiles: ModelProfile[];
+  statsByProfile: Array<[string, ModelProfileStats]>;
+  traces: ModelProfileTrace[];
 };
 
 function sha256(value: string): string {
@@ -129,10 +136,52 @@ function scoreProfile(
   return { score, reasonCodes };
 }
 
-export function createModelProfileRegistry(): ModelProfileRegistry {
-  const profiles = new Map<string, ModelProfile>();
-  const statsByProfile = new Map<string, ModelProfileStats>();
-  const traces = new Map<string, ModelProfileTrace>();
+export function createModelProfileRegistry(
+  snapshot: Partial<ModelProfileRegistrySnapshot> = {},
+  onChange?: (snapshot: ModelProfileRegistrySnapshot) => void,
+): ModelProfileRegistry {
+  const profiles = new Map<string, ModelProfile>(
+    (snapshot.profiles ?? []).map((profile) => [profile.profileId, cloneProfile(profile)]),
+  );
+  const statsByProfile = new Map<string, ModelProfileStats>(
+    (snapshot.statsByProfile ?? []).map(([profileId, stats]) => [profileId, { ...stats }]),
+  );
+  const traces = new Map<string, ModelProfileTrace>(
+    (snapshot.traces ?? []).map((trace) => [
+      trace.traceId,
+      {
+        ...trace,
+        input: {
+          ...trace.input,
+          requiredStrengths: [...trace.input.requiredStrengths],
+          deniedProviders: trace.input.deniedProviders ? [...trace.input.deniedProviders] : undefined,
+        },
+        reasonCodes: [...trace.reasonCodes],
+        outcome: trace.outcome ? { ...trace.outcome } : undefined,
+      },
+    ]),
+  );
+
+  function snapshotState(): ModelProfileRegistrySnapshot {
+    return {
+      profiles: [...profiles.values()].map(cloneProfile),
+      statsByProfile: [...statsByProfile.entries()].map(([profileId, stats]) => [profileId, { ...stats }]),
+      traces: [...traces.values()].map((trace) => ({
+        ...trace,
+        input: {
+          ...trace.input,
+          requiredStrengths: [...trace.input.requiredStrengths],
+          deniedProviders: trace.input.deniedProviders ? [...trace.input.deniedProviders] : undefined,
+        },
+        reasonCodes: [...trace.reasonCodes],
+        outcome: trace.outcome ? { ...trace.outcome } : undefined,
+      })),
+    };
+  }
+
+  function notifyChange(): void {
+    onChange?.(snapshotState());
+  }
 
   return {
     register(profile: ModelProfile): ModelProfile {
@@ -145,6 +194,7 @@ export function createModelProfileRegistry(): ModelProfileRegistry {
       const registered = cloneProfile(profile);
       profiles.set(profile.profileId, registered);
       statsByProfile.set(profile.profileId, statsByProfile.get(profile.profileId) ?? emptyStats());
+      notifyChange();
       return cloneProfile(registered);
     },
 
@@ -196,6 +246,7 @@ export function createModelProfileRegistry(): ModelProfileRegistry {
         reasonCodes: [...selected.reasonCodes],
         createdAt: new Date().toISOString(),
       });
+      notifyChange();
       return {
         traceId,
         profile: cloneProfile(selected.profile),
@@ -225,6 +276,7 @@ export function createModelProfileRegistry(): ModelProfileRegistry {
         averageLatencyMs: nextAverageLatencyMs,
       };
       statsByProfile.set(trace.selectedProfileId, updated);
+      notifyChange();
       return {
         ...input,
         profileStats: { ...updated },
@@ -234,5 +286,7 @@ export function createModelProfileRegistry(): ModelProfileRegistry {
     exportTraces(): string {
       return JSON.stringify([...traces.values()], null, 2);
     },
+
+    snapshot: snapshotState,
   };
 }

@@ -8,7 +8,13 @@ import {
   type ConductorInput,
   type ConductorTrace,
 } from "./conductor.js";
-import { createContextStore, type ContextRecordInput, type ContextPackInput, type ContextQueryInput } from "./context-store.js";
+import {
+  createContextStore,
+  type ContextRecordInput,
+  type ContextPackInput,
+  type ContextQueryInput,
+  type ContextStoreSnapshot,
+} from "./context-store.js";
 import { createGraphArtifacts, type GraphCommunity } from "./graph-artifacts.js";
 import type {
   EvidenceInput,
@@ -26,9 +32,10 @@ import {
   optimizeText,
   type OptimizationKind,
   type OptimizationRequestKind,
+  type OptimizationStoreSnapshot,
 } from "./optimization.js";
 import { createOptimizedCommandRunner, type OptimizedCommandInput } from "./optimized-command-runner.js";
-import { createOptimizationStats } from "./optimization-stats.js";
+import { createOptimizationStats, type OptimizationStatsSnapshot } from "./optimization-stats.js";
 import { createPythonSidecar } from "./python-sidecar.js";
 import { createMediaIngestion, type MediaIngestInput } from "./media-ingestion.js";
 import { createEvidenceCache } from "./evidence-cache.js";
@@ -43,10 +50,12 @@ import {
   createPolicyStore,
   type OrchestrationTrace,
   type PolicyActivationInput,
+  type PolicyStoreSnapshot,
 } from "./orchestration-learning.js";
 import {
   createReasoningResearchStore,
   type ReasoningTrace,
+  type ReasoningResearchSnapshot,
 } from "./reasoning-research.js";
 import { reconcileArtifacts, type ArtifactProposal } from "./reconciliation.js";
 import { createDagSchedule, type ScheduledTask } from "./scheduler.js";
@@ -73,15 +82,25 @@ import {
   createAgentRegistry,
   type AgentDescriptor,
   type AgentDispatchInput,
+  type AgentRegistrySnapshot,
   type AgentRunResult,
 } from "./agent-adapter.js";
+import { executeAgentTransport } from "./agent-transport.js";
 import {
   createPrintingPressRegistry,
   type PrintingPressCliDescriptor,
+  type PrintingPressRegistrySnapshot,
   type PrintingPressRunInput,
   type PrintingPressSelection,
 } from "./printing-press.js";
-import { generateToolScaffold, type ToolFactoryInput } from "./tool-factory.js";
+import { createJsonRuntimeStateStore } from "./runtime-state.js";
+import {
+  generateToolScaffold,
+  validateToolScaffold,
+  writeToolScaffold,
+  type ToolFactoryInput,
+  type ToolScaffold,
+} from "./tool-factory.js";
 import {
   buildRepoIndex,
   createRepoIndexCacheKey,
@@ -101,6 +120,7 @@ import {
   createModelProfileRegistry,
   type ModelProfile,
   type ModelProfileOutcomeInput,
+  type ModelProfileRegistrySnapshot,
   type ModelProfileSelectInput,
 } from "./model-profile.js";
 import {
@@ -113,6 +133,19 @@ import {
 export type ToolHandlerOptions = {
   allowedRepoRoots?: string[];
   maxCachedRepoIndexes?: number;
+  runtimeStatePath?: string;
+};
+
+type RuntimeToolState = {
+  agents?: Partial<AgentRegistrySnapshot>;
+  printingPress?: Partial<PrintingPressRegistrySnapshot>;
+  context?: Partial<ContextStoreSnapshot>;
+  optimization?: Partial<OptimizationStoreSnapshot>;
+  optimizationStats?: Partial<OptimizationStatsSnapshot>;
+  modelProfiles?: Partial<ModelProfileRegistrySnapshot>;
+  behavior?: Partial<BehaviorMode>;
+  policy?: Partial<PolicyStoreSnapshot>;
+  reasoning?: Partial<ReasoningResearchSnapshot>;
 };
 
 function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): string {
@@ -164,17 +197,50 @@ export function createToolHandlers(
   kernel: WormholeKernel,
   options: ToolHandlerOptions = {},
 ) {
-  const agentRegistry = createAgentRegistry();
-  const printingPressRegistry = createPrintingPressRegistry();
-  const contextStore = createContextStore();
-  const optimizationStore = createOptimizationStore();
-  const optimizationStatsStore = createOptimizationStats();
+  const runtimeStateStore = options.runtimeStatePath
+    ? createJsonRuntimeStateStore<RuntimeToolState>({
+        statePath: options.runtimeStatePath,
+        defaultState: {},
+      })
+    : undefined;
+  const runtimeState = runtimeStateStore?.read() ?? {};
+  function persistRuntimeState<K extends keyof RuntimeToolState>(key: K, value: RuntimeToolState[K]): void {
+    if (!runtimeStateStore) {
+      return;
+    }
+    runtimeState[key] = value;
+    runtimeStateStore.write(runtimeState);
+  }
+
+  const agentRegistry = createAgentRegistry(runtimeState.agents, (snapshot) =>
+    persistRuntimeState("agents", snapshot),
+  );
+  const printingPressRegistry = createPrintingPressRegistry(runtimeState.printingPress, (snapshot) =>
+    persistRuntimeState("printingPress", snapshot),
+  );
+  const contextStore = createContextStore(runtimeState.context, (snapshot) =>
+    persistRuntimeState("context", snapshot),
+  );
+  const optimizationStore = createOptimizationStore(runtimeState.optimization, (snapshot) =>
+    persistRuntimeState("optimization", snapshot),
+  );
+  const optimizationStatsStore = createOptimizationStats(runtimeState.optimizationStats, (snapshot) =>
+    persistRuntimeState("optimizationStats", snapshot),
+  );
   const optimizedCommandRunner = createOptimizedCommandRunner({ stats: optimizationStatsStore });
-  const modelProfileRegistry = createModelProfileRegistry();
+  const modelProfileRegistry = createModelProfileRegistry(runtimeState.modelProfiles, (snapshot) =>
+    persistRuntimeState("modelProfiles", snapshot),
+  );
   const pythonSidecar = createPythonSidecar();
-  const behaviorPolicy = createBehaviorPolicyStore();
-  const policyStore = createPolicyStore();
-  const reasoningStore = createReasoningResearchStore();
+  const behaviorPolicy = createBehaviorPolicyStore(runtimeState.behavior, (snapshot) =>
+    persistRuntimeState("behavior", snapshot),
+  );
+  const policyStore = createPolicyStore(runtimeState.policy, (snapshot) =>
+    persistRuntimeState("policy", snapshot),
+  );
+  const reasoningStore = createReasoningResearchStore(runtimeState.reasoning, (snapshot) =>
+    persistRuntimeState("reasoning", snapshot),
+  );
   const shellHookPlans = new Map<string, {
     operations: ShellHookOperation[];
     homeDir: string;
@@ -691,6 +757,28 @@ export function createToolHandlers(
       return agentRegistry.dispatch(input);
     },
 
+    async agentDispatchExecute(input: AgentDispatchInput) {
+      const run = agentRegistry.dispatch(input);
+      const agent = agentRegistry.list().find((candidate) => candidate.agentId === run.assignedAgentId);
+      if (!agent) {
+        throw new Error(`Agent not found for run: ${run.assignedAgentId}`);
+      }
+      let result: AgentRunResult;
+      try {
+        result = await executeAgentTransport(agent, run);
+      } catch (error) {
+        result = {
+          status: "failed",
+          summary: `Agent transport failed: ${error instanceof Error ? error.message : String(error)}`,
+          output: {
+            transport: agent.transport,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        };
+      }
+      return agentRegistry.complete(run.runId, result);
+    },
+
     agentStatus(input: { runId: string }) {
       return agentRegistry.status(input.runId);
     },
@@ -764,6 +852,15 @@ export function createToolHandlers(
 
     toolFactoryGenerate(input: ToolFactoryInput) {
       return generateToolScaffold(input);
+    },
+
+    toolFactoryValidate(input: ToolScaffold) {
+      return validateToolScaffold(input);
+    },
+
+    toolFactoryWrite(input: { scaffold: ToolScaffold; targetDir: string }) {
+      resolveAllowedRepoRoot(input.targetDir, allowedRepoRoots);
+      return writeToolScaffold(input.scaffold, { targetDir: input.targetDir });
     },
 
     conductorPlan(input: ConductorInput) {

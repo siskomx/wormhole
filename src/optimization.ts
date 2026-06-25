@@ -47,6 +47,11 @@ export type OptimizationStore = {
     sourceId?: string;
   }): OptimizationResult & { retrievalId: string };
   retrieve(input: { retrievalId: string }): OptimizationStoredRecord;
+  snapshot(): OptimizationStoreSnapshot;
+};
+
+export type OptimizationStoreSnapshot = {
+  records: OptimizationStoredRecord[];
 };
 
 export type ContextItem = {
@@ -302,8 +307,28 @@ export function optimizeText(input: {
   }
 }
 
-export function createOptimizationStore(): OptimizationStore {
-  const records = new Map<string, OptimizationStoredRecord>();
+export function createOptimizationStore(
+  snapshot: Partial<OptimizationStoreSnapshot> = {},
+  onChange?: (snapshot: OptimizationStoreSnapshot) => void,
+): OptimizationStore {
+  const records = new Map<string, OptimizationStoredRecord>(
+    (snapshot.records ?? []).map((record) => [
+      record.retrievalId,
+      {
+        ...record,
+        result: { ...record.result },
+      },
+    ]),
+  );
+
+  function snapshotState(): OptimizationStoreSnapshot {
+    return {
+      records: [...records.values()].map((record) => ({
+        ...record,
+        result: { ...record.result },
+      })),
+    };
+  }
 
   return {
     apply(input: {
@@ -324,6 +349,7 @@ export function createOptimizationStore(): OptimizationStore {
         optimizedContent: optimized.content,
         result: resultWithHandle,
       });
+      onChange?.(snapshotState());
       return resultWithHandle;
     },
 
@@ -337,5 +363,7 @@ export function createOptimizationStore(): OptimizationStore {
         result: { ...record.result },
       };
     },
+
+    snapshot: snapshotState,
   };
 }
