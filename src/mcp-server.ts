@@ -840,5 +840,214 @@ export function createWormholeMcpServer(kernel: WormholeKernel): McpServer {
     async () => jsonResult(tools.modelProfileExportTraces()),
   );
 
+  server.registerTool(
+    "python_sidecar_probe",
+    {
+      description: "Probe the optional Python sidecar runtime and report availability.",
+      inputSchema: {},
+    },
+    async () => jsonResult(await tools.pythonSidecarProbe()),
+  );
+
+  const pythonGraphPayloadSchema = {
+    nodes: z.array(
+      z.object({
+        id: z.string(),
+        kind: z.string().optional(),
+      }),
+    ),
+    edges: z.array(
+      z.object({
+        from: z.string(),
+        to: z.string(),
+        kind: z.string().optional(),
+      }),
+    ),
+  };
+
+  server.registerTool(
+    "python_graph_metrics",
+    {
+      description: "Run optional Python graph metrics over caller-supplied Wormhole graph nodes and edges.",
+      inputSchema: pythonGraphPayloadSchema,
+    },
+    async (input) => jsonResult(await tools.pythonGraphMetrics(input)),
+  );
+
+  server.registerTool(
+    "python_graph_communities",
+    {
+      description: "Run optional Python community analysis over caller-supplied Wormhole graph nodes and edges.",
+      inputSchema: pythonGraphPayloadSchema,
+    },
+    async (input) => jsonResult(await tools.pythonGraphCommunities(input)),
+  );
+
+  server.registerTool(
+    "python_trace_summary",
+    {
+      description: "Run optional Python analysis over model-profile route traces and outcomes.",
+      inputSchema: {
+        traces: z.array(
+          z.object({
+            profileId: z.string().optional(),
+            profile: z
+              .object({
+                profileId: z.string().optional(),
+              })
+              .optional(),
+            status: z.string().optional(),
+            latencyMs: z.number().optional(),
+            outputQuality: z.number().optional(),
+          }),
+        ),
+      },
+    },
+    async (input) => jsonResult(await tools.pythonTraceSummary(input)),
+  );
+
+  server.registerTool(
+    "repo_graph_export",
+    {
+      description: "Export the native repo graph as graph.json, GRAPH_REPORT.md, and graph.html content.",
+      inputSchema: {
+        repoRoot: z.string(),
+        communities: z
+          .array(
+            z.object({
+              id: z.string(),
+              members: z.array(z.string()),
+            }),
+          )
+          .optional(),
+      },
+    },
+    async (input) => jsonResult(tools.repoGraphExport(input)),
+  );
+
+  server.registerTool(
+    "optimized_command_run",
+    {
+      description: "Run a command through Wormhole's no-shell optimized command runner with reversible output compaction.",
+      inputSchema: {
+        command: z.string(),
+        args: z.array(z.string()).optional(),
+        cwd: z.string().optional(),
+        timeoutMs: z.number().optional(),
+        stdin: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(await tools.optimizedCommandRun(input)),
+  );
+
+  server.registerTool(
+    "optimization_stats",
+    {
+      description: "Return aggregate Wormhole optimization and command-output savings stats.",
+      inputSchema: {},
+    },
+    async () => jsonResult(tools.optimizationStats()),
+  );
+
+  const toolFactoryInputSchema = {
+    toolId: z.string(),
+    displayName: z.string(),
+    description: z.string(),
+    commandName: z.string(),
+    capabilities: z.array(z.string()),
+    inputs: z.array(
+      z.object({
+        name: z.string(),
+        type: z.enum(["string", "number", "boolean"]),
+        required: z.boolean(),
+        description: z.string().optional(),
+      }),
+    ),
+  };
+
+  server.registerTool(
+    "tool_factory_generate",
+    {
+      description: "Generate deterministic CLI/MCP scaffold files from a constrained tool specification.",
+      inputSchema: toolFactoryInputSchema,
+    },
+    async (input) => jsonResult(tools.toolFactoryGenerate(input)),
+  );
+
+  const conductorInputSchema = {
+    objective: z.string(),
+    risk: z.enum(["low", "medium", "high"]),
+    complexity: z.enum(["low", "medium", "high"]),
+    requiredStrengths: z.array(z.string()),
+    modelProfileIds: z.array(z.string()),
+  };
+
+  server.registerTool(
+    "conductor_plan",
+    {
+      description: "Create a deterministic Fugu-near planner/worker/verifier conductor scaffold.",
+      inputSchema: conductorInputSchema,
+    },
+    async (input) => jsonResult(tools.conductorPlan(input)),
+  );
+
+  server.registerTool(
+    "conductor_replay",
+    {
+      description: "Replay a deterministic conductor plan from a prior trace.",
+      inputSchema: {
+        traceId: z.string(),
+        input: z.object(conductorInputSchema),
+        scaffoldId: z.enum(["single-pass", "plan-execute-verify", "iterative-repair"]),
+        reasonCodes: z.array(z.string()),
+      },
+    },
+    async (input) => jsonResult(tools.conductorReplay(input)),
+  );
+
+  server.registerTool(
+    "behavior_mode_set",
+    {
+      description: "Set durable Wormhole brevity and minimality policy modes.",
+      inputSchema: {
+        brevity: z.enum(["normal", "dense", "ultra"]).optional(),
+        minimality: z.enum(["off", "review", "strict"]).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.behaviorModeSet(input)),
+  );
+
+  server.registerTool(
+    "behavior_mode_get",
+    {
+      description: "Return current Wormhole brevity and minimality policy modes.",
+      inputSchema: {},
+    },
+    async () => jsonResult(tools.behaviorModeGet()),
+  );
+
+  server.registerTool(
+    "behavior_apply",
+    {
+      description: "Apply the current Wormhole brevity policy to text while preserving literals.",
+      inputSchema: {
+        text: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.behaviorApply(input)),
+  );
+
+  server.registerTool(
+    "behavior_minimality_review",
+    {
+      description: "Review a plan with the current Wormhole minimality policy.",
+      inputSchema: {
+        objective: z.string(),
+        planSteps: z.array(z.string()),
+      },
+    },
+    async (input) => jsonResult(tools.behaviorMinimalityReview(input)),
+  );
+
   return server;
 }

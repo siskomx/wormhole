@@ -1,5 +1,13 @@
 import path from "node:path";
+import { createBehaviorPolicyStore, type BehaviorMode } from "./behavior-policy.js";
+import {
+  createConductorPlan,
+  replayConductorPlan,
+  type ConductorInput,
+  type ConductorTrace,
+} from "./conductor.js";
 import { createContextStore, type ContextRecordInput, type ContextPackInput, type ContextQueryInput } from "./context-store.js";
+import { createGraphArtifacts, type GraphCommunity } from "./graph-artifacts.js";
 import type {
   EvidenceInput,
   PlanInput,
@@ -17,6 +25,9 @@ import {
   type OptimizationKind,
   type OptimizationRequestKind,
 } from "./optimization.js";
+import { createOptimizedCommandRunner, type OptimizedCommandInput } from "./optimized-command-runner.js";
+import { createOptimizationStats } from "./optimization-stats.js";
+import { createPythonSidecar } from "./python-sidecar.js";
 import { createEvidenceCache } from "./evidence-cache.js";
 import { reconcileArtifacts, type ArtifactProposal } from "./reconciliation.js";
 import { createDagSchedule, type ScheduledTask } from "./scheduler.js";
@@ -50,6 +61,7 @@ import {
   type PrintingPressRunInput,
   type PrintingPressSelection,
 } from "./printing-press.js";
+import { generateToolScaffold, type ToolFactoryInput } from "./tool-factory.js";
 import {
   buildRepoIndex,
   createRepoIndexCacheKey,
@@ -132,7 +144,11 @@ export function createToolHandlers(
   const printingPressRegistry = createPrintingPressRegistry();
   const contextStore = createContextStore();
   const optimizationStore = createOptimizationStore();
+  const optimizationStatsStore = createOptimizationStats();
+  const optimizedCommandRunner = createOptimizedCommandRunner({ stats: optimizationStatsStore });
   const modelProfileRegistry = createModelProfileRegistry();
+  const pythonSidecar = createPythonSidecar();
+  const behaviorPolicy = createBehaviorPolicyStore();
   const repoIndexes = new Map<string, RepoIndex>();
   const allowedRepoRoots = parseAllowedRepoRoots(options);
   const maxCachedRepoIndexes = options.maxCachedRepoIndexes ?? 8;
@@ -226,6 +242,14 @@ export function createToolHandlers(
       return optimizationStore.retrieve(input);
     },
 
+    optimizedCommandRun(input: OptimizedCommandInput) {
+      return optimizedCommandRunner.run(input);
+    },
+
+    optimizationStats() {
+      return optimizationStatsStore.snapshot();
+    },
+
     ctxRecord(input: ContextRecordInput) {
       return contextStore.record(input);
     },
@@ -240,6 +264,36 @@ export function createToolHandlers(
 
     ctxPackRender(input: { packId: string }) {
       return contextStore.renderPack(input);
+    },
+
+    pythonSidecarProbe() {
+      return pythonSidecar.run({ job: "probe", payload: {} });
+    },
+
+    pythonGraphMetrics(input: {
+      nodes: Array<{ id: string; kind?: string }>;
+      edges: Array<{ from: string; to: string; kind?: string }>;
+    }) {
+      return pythonSidecar.run({ job: "graph_metrics", payload: input });
+    },
+
+    pythonGraphCommunities(input: {
+      nodes: Array<{ id: string; kind?: string }>;
+      edges: Array<{ from: string; to: string; kind?: string }>;
+    }) {
+      return pythonSidecar.run({ job: "graph_communities", payload: input });
+    },
+
+    pythonTraceSummary(input: {
+      traces: Array<{
+        profileId?: string;
+        profile?: { profileId?: string };
+        status?: string;
+        latencyMs?: number;
+        outputQuality?: number;
+      }>;
+    }) {
+      return pythonSidecar.run({ job: "trace_summary", payload: input });
     },
 
     cacheEvidence(input: {
@@ -396,6 +450,40 @@ export function createToolHandlers(
 
     repoIndexReport(input: { repoRoot: string }) {
       return getRepoGraphReport(getRepoIndex(input.repoRoot));
+    },
+
+    repoGraphExport(input: { repoRoot: string; communities?: GraphCommunity[] }) {
+      return createGraphArtifacts(getRepoIndex(input.repoRoot), {
+        communities: input.communities,
+      });
+    },
+
+    toolFactoryGenerate(input: ToolFactoryInput) {
+      return generateToolScaffold(input);
+    },
+
+    conductorPlan(input: ConductorInput) {
+      return createConductorPlan(input);
+    },
+
+    conductorReplay(input: ConductorTrace) {
+      return replayConductorPlan(input);
+    },
+
+    behaviorModeSet(input: Partial<BehaviorMode>) {
+      return behaviorPolicy.setMode(input);
+    },
+
+    behaviorModeGet() {
+      return behaviorPolicy.getMode();
+    },
+
+    behaviorApply(input: { text: string }) {
+      return behaviorPolicy.apply(input);
+    },
+
+    behaviorMinimalityReview(input: { objective: string; planSteps: string[] }) {
+      return behaviorPolicy.reviewMinimality(input);
     },
 
     modelProfileRegister(input: ModelProfile) {

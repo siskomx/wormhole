@@ -26,6 +26,7 @@ The manifest is intentionally client-neutral. Codex, Claude Code, and future con
 - `codex`: Codex plugin manifest and MCP config
 - `printing-press`: Printing Press generated CLIs and MCP servers through the CLI adapter contract
 - `graphify`: native graph-first repo index tools or an external Graphify-compatible graph connector
+- `python-sidecar`: optional local Python runtime through a narrow JSON job contract
 - `hermes-agent`: Hermes Agent through the external agent adapter contract
 - `inflection-pi`: Inflection Pi through the provider API adapter contract
 
@@ -48,6 +49,9 @@ Implemented `orchestration` capabilities include:
 - `orchestration.printing-press-cli-adapters`: Printing Press generated CLI registration, capability selection, structural verification, native execution, evidence capture, and conversion into Wormhole external agent workers.
 - `orchestration.printed-tool-runtime`: native printed-tool run records with stdout, stderr, exit code, timeout handling, and immutable evidence hashes.
 - `orchestration.repo-index-graph`: deterministic repo-local file, symbol, import, link, reference, provenance, confidence, query, explain, report, and dependency-path index.
+- `orchestration.graph-artifact-suite`: Graphify-near graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis.
+- `orchestration.optimized-command-runner`: Headroom/RTK-near no-shell command execution with reversible output optimization, retrieval handles, hashes, and savings stats.
+- `orchestration.native-tool-factory`: Printing-Press-near deterministic generation of CLI/MCP scaffold files from constrained tool specs.
 - `orchestration.local-runner`: adapter-free local orchestration planning and deterministic execution over DAG waves, depth limits, task budgets, and spawned local tasks.
 
 The repo-index MCP tools are workspace-confined by the runtime. The default allowed root is the server working directory; hosts can configure additional allowed roots with `WORMHOLE_ALLOWED_REPO_ROOTS`.
@@ -58,6 +62,9 @@ Implemented `adaptive` capabilities include:
 - `adaptive.connector-registry`: capability-based connector discovery and selection.
 - `adaptive.graph-first-codebase-query`: query-first codebase discovery workflow that asks the repo graph before broad grep or raw file-reading passes.
 - `adaptive.model-profile-learning`: native model-profile registration, deterministic selection, outcome recording, and replayable route trace export.
+- `adaptive.optional-python-sidecar`: optional Python stdlib worker for deterministic graph metrics, graph communities, and model-profile trace summaries, bounded by TypeScript-owned MCP schemas, timeouts, and evidence hashes.
+- `adaptive.deterministic-conductor`: Fugu-near deterministic planner, worker, and verifier scaffolds with replayable conductor traces.
+- `adaptive.durable-behavior-policy`: Caveman/Ponytail-near durable brevity and minimality modes with dense output and minimality review primitives.
 - `adaptive.dynamic-task-spawning`: dynamic DAG task expansion with max-depth and max-task guardrails.
 - `adaptive.model-pool-orchestration`: bounded thinker, worker, and verifier provider orchestration.
 - `adaptive.workbench-artifacts`: static mission/task/gate/artifact workbench snapshots and HTML rendering.

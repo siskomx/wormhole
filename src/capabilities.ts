@@ -9,6 +9,7 @@ export type ConnectorTarget =
   | "codex"
   | "printing-press"
   | "graphify"
+  | "python-sidecar"
   | "hermes-agent"
   | "inflection-pi";
 
@@ -117,6 +118,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         status: "implemented",
         transport: "graph-index",
         description: "Graphify-style repo graph workflows can be represented through Wormhole's native repo index tools or an external graph connector.",
+      },
+      {
+        target: "python-sidecar",
+        status: "implemented",
+        transport: "connector-contract",
+        description: "Optional local Python sidecar for deterministic graph metrics, graph communities, and model-profile trace analysis.",
       },
       {
         target: "hermes-agent",
@@ -229,6 +236,24 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Deterministic repo-local index with file, symbol, import, link, reference, provenance, confidence, query, explain, report, and dependency-path tools.",
       },
       {
+        id: "orchestration.graph-artifact-suite",
+        area: "orchestration",
+        status: "implemented",
+        description: "Graphify-near graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis for native repo graphs.",
+      },
+      {
+        id: "orchestration.optimized-command-runner",
+        area: "orchestration",
+        status: "implemented",
+        description: "Headroom/RTK-near no-shell command execution with reversible output optimization, retrieval handles, hashes, and savings stats.",
+      },
+      {
+        id: "orchestration.native-tool-factory",
+        area: "orchestration",
+        status: "implemented",
+        description: "Printing-Press-near deterministic generation of CLI/MCP scaffold files from constrained tool specs.",
+      },
+      {
         id: "orchestration.local-runner",
         area: "orchestration",
         status: "implemented",
@@ -263,6 +288,24 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         area: "adaptive",
         status: "implemented",
         description: "Native model-profile registration, deterministic selection, outcome recording, and replayable route trace export.",
+      },
+      {
+        id: "adaptive.optional-python-sidecar",
+        area: "adaptive",
+        status: "implemented",
+        description: "Optional Python stdlib sidecar for deterministic graph metrics, graph communities, and model-profile trace summaries while TypeScript remains the authoritative MCP runtime.",
+      },
+      {
+        id: "adaptive.deterministic-conductor",
+        area: "adaptive",
+        status: "implemented",
+        description: "Fugu-near deterministic planner, worker, and verifier scaffolds with replayable conductor traces.",
+      },
+      {
+        id: "adaptive.durable-behavior-policy",
+        area: "adaptive",
+        status: "implemented",
+        description: "Caveman/Ponytail-near durable brevity and minimality modes with dense output and minimality review primitives.",
       },
       {
         id: "adaptive.connector-marketplace",

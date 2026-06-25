@@ -19,6 +19,24 @@ The repository also includes implemented orchestration and adaptive foundations:
 - Codex plugin scaffold: `plugins/wormhole`
 - Capability manifest: `src/capabilities.ts`
 
+## Near-Equivalent Runtime Suite
+
+Wormhole implements native runtime equivalents for the practical parts of several systems that influenced its design:
+
+- Graphify-near: `repo_index_*`, `repo_graph_export`, Python graph metrics, and graph communities.
+- Headroom/RTK-near: `optimization_apply`, `optimization_retrieve`, `optimized_command_run`, and `optimization_stats`.
+- Printing Press-near: `printing_press_*` runtime tools and `tool_factory_generate`.
+- Fugu-near: `model_profile_*`, `conductor_plan`, and `conductor_replay`.
+- Caveman/Ponytail-near: `behavior_mode_set`, `behavior_mode_get`, `behavior_apply`, and `behavior_minimality_review`.
+
+These features are native Wormhole capabilities. They do not vendor the external projects and do not claim full product parity for multimodal extraction, shell hooks, website crawling, or learned RL orchestration.
+
+## Optional Python Sidecar
+
+Wormhole's core MCP server is TypeScript and does not require Python. When Python 3 is available, Wormhole can run optional sidecar jobs for deterministic graph metrics, graph community analysis, and model-profile trace summaries through `python_sidecar_probe`, `python_graph_metrics`, `python_graph_communities`, and `python_trace_summary`.
+
+Set `WORMHOLE_PYTHON` when the host should use a specific interpreter. Set `WORMHOLE_PYTHONPATH` only when the sidecar package is outside the repo-local `python` directory.
+
 ## Acknowledgements
 
 Several open-source projects and research systems influenced Wormhole's native orchestration work:

@@ -297,6 +297,45 @@ describe("Wormhole MCP tool handlers", () => {
       });
       tools.repoIndexBuild({ repoRoot });
       const report = tools.repoIndexReport({ repoRoot });
+      const graphArtifacts = tools.repoGraphExport({
+        repoRoot,
+        communities: [{ id: "community-1", members: ["src/db.ts"] }],
+      });
+      const pythonProbe = await tools.pythonSidecarProbe();
+      const pythonMetrics = await tools.pythonGraphMetrics({
+        nodes: [{ id: "src/db.ts" }],
+        edges: [],
+      });
+      const optimizedCommand = await tools.optimizedCommandRun({
+        command: process.execPath,
+        args: ["-e", "console.log('optimized command output')"],
+        timeoutMs: 2_000,
+      });
+      const optimizationStats = tools.optimizationStats();
+      const generatedTool = tools.toolFactoryGenerate({
+        toolId: "demo-tool",
+        displayName: "Demo Tool",
+        description: "Demo generated tool.",
+        commandName: "demo-tool",
+        capabilities: ["demo"],
+        inputs: [{ name: "query", type: "string", required: true }],
+      });
+      const conductor = tools.conductorPlan({
+        objective: "Review native runtime",
+        risk: "high",
+        complexity: "medium",
+        requiredStrengths: ["review"],
+        modelProfileIds: ["small-local", "deep-reviewer"],
+      });
+      const replayed = tools.conductorReplay(conductor.trace);
+      const behaviorMode = tools.behaviorModeSet({ brevity: "dense", minimality: "strict" });
+      const behavior = tools.behaviorApply({
+        text: "Run `npm test`. Keep `src/tools.ts`.",
+      });
+      const minimality = tools.behaviorMinimalityReview({
+        objective: "Add a small report",
+        planSteps: ["Deploy kubernetes"],
+      });
       tools.printingPressRegister({
         cliId: "pp-node",
         displayName: "Node Printed Tool",
@@ -339,6 +378,18 @@ describe("Wormhole MCP tool handlers", () => {
       expect(pack.rendered).toContain("connectDatabase");
       expect(retrieved.originalContent).toContain("database failed");
       expect(report.markdown).toContain("Native Repo Graph Report");
+      expect(graphArtifacts.graphJson).toContain("src/db.ts");
+      expect(graphArtifacts.reportMarkdown).toContain("community-1");
+      expect(pythonProbe.job).toBe("probe");
+      expect(pythonMetrics.job).toBe("graph_metrics");
+      expect(optimizedCommand.optimizedStdout).toContain("optimized command output");
+      expect(optimizationStats.runCount).toBeGreaterThanOrEqual(1);
+      expect(generatedTool.toolId).toBe("demo-tool");
+      expect(conductor.scaffoldId).toBe("plan-execute-verify");
+      expect(replayed.trace.traceId).toBe(conductor.trace.traceId);
+      expect(behaviorMode).toEqual({ brevity: "dense", minimality: "strict" });
+      expect(behavior.text).toContain("`npm test`");
+      expect(minimality.findings.map((finding) => finding.phrase)).toContain("kubernetes");
       expect(verification.status).toBe("passed");
       expect(run.stdout).toContain("native printed tool");
       expect(route.profile.profileId).toBe("small-local");

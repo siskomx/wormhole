@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createInMemoryKernel } from "../src/kernel.js";
 
-describe("Wormhole v1 kernel", () => {
+describe("Wormhole kernel", () => {
   it("opens the gate after a mission records evidence with no blocking questions", () => {
     const kernel = createInMemoryKernel();
 

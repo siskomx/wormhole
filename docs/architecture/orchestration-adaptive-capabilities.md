@@ -151,6 +151,20 @@ Wormhole can select a printed CLI with `printing_press_select`, verify it with `
 
 Printing Press factory parity is not claimed in this runtime layer. Generating a new CLI/MCP server from an API, website, OpenAPI spec, HAR capture, or managed research pipeline remains future work or delegated to Printing Press itself.
 
+## Near-Equivalent Runtime Suite
+
+Wormhole implements native near-equivalent runtime capabilities for the practical parts of the systems that influenced it:
+
+- Graphify-near: `repo_index_*`, `repo_graph_export`, `python_graph_metrics`, and `python_graph_communities`.
+- Headroom/RTK-near: `optimization_apply`, `optimization_retrieve`, `optimized_command_run`, and `optimization_stats`.
+- Printing Press-near: `printing_press_*` runtime tools and `tool_factory_generate`.
+- Fugu-near: `model_profile_*`, `conductor_plan`, and `conductor_replay`.
+- Caveman/Ponytail-near: `behavior_mode_set`, `behavior_mode_get`, `behavior_apply`, and `behavior_minimality_review`.
+
+TypeScript remains authoritative for MCP schemas, state projection, gates, evidence, routing policy, and plugin packaging. Python is optional and receives one JSON request at a time for graph metrics, graph communities, and trace summaries. Python results are treated as derived analysis and do not decide whether a gate opens.
+
+The near-equivalent suite does not claim full product parity for multimodal extraction, shell hooks, website crawling, or learned RL orchestration. Those remain future extensions or external adapters.
+
 ## Connector Model
 
 Wormhole should work through a generic MCP server first.

@@ -11,7 +11,7 @@ describe("repo-local Codex plugin metadata", () => {
     const plugin = readJson<{
       name: string;
       mcpServers: string;
-      interface: { displayName: string; defaultPrompt: string[] };
+      interface: { displayName: string; longDescription: string; defaultPrompt: string[] };
     }>(path.resolve("plugins/wormhole/.codex-plugin/plugin.json"));
     const mcp = readJson<{ mcpServers: { wormhole: { command: string; args: string[] } } }>(
       path.resolve("plugins/wormhole/.mcp.json"),
@@ -22,6 +22,9 @@ describe("repo-local Codex plugin metadata", () => {
     expect(plugin.mcpServers).toBe("./.mcp.json");
     expect(plugin.interface.displayName).toBe("Wormhole");
     expect(plugin.interface.defaultPrompt).toHaveLength(3);
+    expect(plugin.interface.longDescription).toContain("optimized command execution");
+    expect(plugin.interface.longDescription).toContain("native tool generation");
+    expect(plugin.interface.longDescription).toContain("durable brevity/minimality policy");
     expect(serialized).not.toContain("TODO");
     expect(mcp.mcpServers.wormhole.command).toBe("node");
     expect(mcp.mcpServers.wormhole.args).toEqual(["../../dist/src/cli.js"]);
@@ -59,6 +62,20 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("repo_index_query");
     expect(manifest.tools.map((tool) => tool.name)).toContain("repo_index_explain");
     expect(manifest.tools.map((tool) => tool.name)).toContain("repo_index_report");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("repo_graph_export");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("python_sidecar_probe");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("python_graph_metrics");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("python_graph_communities");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("python_trace_summary");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("optimized_command_run");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("optimization_stats");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("tool_factory_generate");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("conductor_plan");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("conductor_replay");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("behavior_mode_set");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("behavior_mode_get");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("behavior_apply");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("behavior_minimality_review");
     expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_register");
     expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_register_agent");
     expect(manifest.tools.map((tool) => tool.name)).toContain("printing_press_run");
@@ -66,6 +83,9 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.prompts.map((prompt) => prompt.name)).toContain("wormhole_orchestrate");
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "repo_index_query",
+    );
+    expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
+      "optimized_command_run",
     );
     expect(serialized).not.toContain("TODO");
   });
