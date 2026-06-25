@@ -92,6 +92,22 @@ import {
   normalizeLspLocation,
   type LspProtocolLocation,
 } from "./lsp-ground-truth.js";
+import { reviewActionPolicy, type ActionPolicyOperation } from "./action-policy.js";
+import { createDependencySecurityReport } from "./dependency-security.js";
+import {
+  durableIndexStatus,
+  refreshDurableRepoIndex,
+  refreshDurableSemanticIndex,
+  searchDurableSemanticIndex,
+} from "./durable-index-store.js";
+import { createLspSessionManager } from "./lsp-session-manager.js";
+import {
+  createOptimizationAdapterRegistry,
+  type OptimizationAdapterDescriptor,
+  type OptimizationAdapterSnapshot,
+} from "./optimization-adapter.js";
+import { projectOnboard } from "./project-onboard.js";
+import { analyzeTestImpactV2 } from "./test-impact-v2.js";
 import { reconcileArtifacts, type ArtifactProposal } from "./reconciliation.js";
 import { createDagSchedule, type ScheduledTask } from "./scheduler.js";
 import { createShellHookManager, type ShellHookOperation, type ShellKind } from "./shell-hooks.js";
@@ -182,6 +198,7 @@ type RuntimeToolState = {
   policy?: Partial<PolicyStoreSnapshot>;
   reasoning?: Partial<ReasoningResearchSnapshot>;
   diagnostics?: Partial<DiagnosticStoreSnapshot>;
+  optimizationAdapters?: Partial<OptimizationAdapterSnapshot>;
 };
 
 function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): string {
@@ -280,6 +297,11 @@ export function createToolHandlers(
   const diagnosticStore = createDiagnosticStore(runtimeState.diagnostics, (snapshot) =>
     persistRuntimeState("diagnostics", snapshot),
   );
+  const optimizationAdapterRegistry = createOptimizationAdapterRegistry(
+    runtimeState.optimizationAdapters,
+    (snapshot) => persistRuntimeState("optimizationAdapters", snapshot),
+  );
+  const lspSessionManager = createLspSessionManager();
   const shellHookPlans = new Map<string, {
     operations: ShellHookOperation[];
     homeDir: string;
@@ -987,6 +1009,82 @@ export function createToolHandlers(
 
     lspNormalizeLocation(input: LspProtocolLocation) {
       return normalizeLspLocation(input);
+    },
+
+    projectOnboard(input: Parameters<typeof projectOnboard>[0]) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return projectOnboard({ ...input, repoRoot });
+    },
+
+    durableRepoIndexRefresh(input: RepoIndexBuildOptions) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return refreshDurableRepoIndex({ ...input, repoRoot });
+    },
+
+    durableIndexStatus(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return durableIndexStatus({ repoRoot });
+    },
+
+    durableSemanticIndexRefresh(input: { repoRoot: string; records: SemanticRecordInput[] }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return refreshDurableSemanticIndex({ ...input, repoRoot });
+    },
+
+    durableSemanticSearch(input: { repoRoot: string; query: string; limit?: number }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return searchDurableSemanticIndex({ ...input, repoRoot });
+    },
+
+    testImpactAnalyzeV2(input: { repoRoot: string; changedFiles: string[]; diffText?: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return analyzeTestImpactV2({ ...input, repoRoot });
+    },
+
+    dependencySecurityReport(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return createDependencySecurityReport({ repoRoot });
+    },
+
+    actionPolicyReview(input: { operations: ActionPolicyOperation[] }) {
+      return reviewActionPolicy(input);
+    },
+
+    lspSessionStart(input: Parameters<typeof lspSessionManager.start>[0]) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return lspSessionManager.start({ ...input, repoRoot });
+    },
+
+    lspSessionList() {
+      return lspSessionManager.list();
+    },
+
+    lspSessionStatus(input: { sessionId: string }) {
+      return lspSessionManager.status(input);
+    },
+
+    lspSessionRequest(input: Parameters<typeof lspSessionManager.request>[0]) {
+      return lspSessionManager.request(input);
+    },
+
+    lspSessionStop(input: { sessionId: string }) {
+      return lspSessionManager.stop(input);
+    },
+
+    optimizationAdapterRegister(input: OptimizationAdapterDescriptor) {
+      return optimizationAdapterRegistry.register(input);
+    },
+
+    optimizationAdapterList() {
+      return optimizationAdapterRegistry.list();
+    },
+
+    optimizationAdapterSelect(input: { capability: OptimizationKind }) {
+      return optimizationAdapterRegistry.select(input);
+    },
+
+    optimizationAdapterRun(input: Parameters<typeof optimizationAdapterRegistry.run>[0]) {
+      return optimizationAdapterRegistry.run(input);
     },
 
     toolFactoryGenerate(input: ToolFactoryInput) {

@@ -50,8 +50,10 @@ Implemented `orchestration` capabilities include:
 - `orchestration.printed-tool-runtime`: native printed-tool run records with stdout, stderr, exit code, timeout handling, and immutable evidence hashes.
 - `orchestration.repo-index-graph`: deterministic repo-local file, symbol, import, link, reference, provenance, confidence, query, explain, report, and dependency-path index.
 - `orchestration.project-ground-truth-suite`: project contract detection, dependency inventory, structured diagnostics, impact-aware test planning, verification execution, safety scanning, deterministic semantic fallback search, and safe LSP config probes.
+- `orchestration.project-intelligence-sequencing`: one-shot project onboarding, process-local LSP sessions, durable repo and semantic indexes, diff-aware test impact, dependency security reports, action admission policy, and optimization adapter execution.
 - `orchestration.graph-artifact-suite`: Graphify-near graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis.
 - `orchestration.optimized-command-runner`: Headroom/RTK-near no-shell command execution with reversible output optimization, retrieval handles, hashes, and savings stats.
+- `orchestration.external-optimization-adapters`: native, CLI, and HTTP optimization adapter registry with capability selection and bounded CLI execution.
 - `orchestration.native-tool-factory`: Printing-Press-near deterministic generation of CLI/MCP scaffold files from constrained tool specs.
 - `orchestration.local-runner`: adapter-free local orchestration planning and deterministic execution over DAG waves, depth limits, task budgets, and spawned local tasks.
 

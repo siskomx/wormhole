@@ -85,6 +85,13 @@ export function createWormholeMcpServer(
     privacy: z.enum(["local", "external"]),
     contextWindow: z.number(),
   };
+  const optimizationKindSchema = z.enum([
+    "command_output_compaction",
+    "context_compression",
+    "dense_summary",
+    "minimality_review",
+    "json_compaction",
+  ]);
   const diagnosticSeveritySchema = z.enum(["error", "warning", "info", "hint"]);
   const diagnosticRecordSchema = z.object({
     diagnosticId: z.string(),
@@ -132,6 +139,39 @@ export function createWormholeMcpServer(
         character: z.number(),
       }),
     }),
+  });
+  const actionPolicyOperationSchema = z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("command"),
+      command: z.string(),
+      args: z.array(z.string()).optional(),
+    }),
+    z.object({
+      kind: z.literal("file_write"),
+      path: z.string(),
+    }),
+    z.object({
+      kind: z.literal("file_delete"),
+      path: z.string(),
+    }),
+    z.object({
+      kind: z.literal("tool_write"),
+      targetDir: z.string(),
+    }),
+    z.object({
+      kind: z.literal("network"),
+      url: z.string(),
+      method: z.string().optional(),
+    }),
+  ]);
+  const optimizationAdapterSchema = z.object({
+    adapterId: z.string(),
+    transport: z.enum(["native", "cli", "http"]),
+    capabilities: z.array(optimizationKindSchema),
+    installation: z.enum(["installed", "available", "disabled"]),
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    endpoint: z.string().optional(),
   });
 
   server.registerTool(
@@ -1406,6 +1446,212 @@ export function createWormholeMcpServer(
       inputSchema: lspLocationSchema.shape,
     },
     async (input) => jsonResult(tools.lspNormalizeLocation(input)),
+  );
+
+  server.registerTool(
+    "project_onboard",
+    {
+      description: "Run one-shot project onboarding across contract, indexes, LSP probe, safety, impact, verification, dependency, and policy signals.",
+      inputSchema: {
+        repoRoot: z.string(),
+        changedFiles: z.array(z.string()).optional(),
+        diffText: z.string().optional(),
+        semanticRecords: z.array(semanticRecordSchema).optional(),
+        semanticQuery: z.string().optional(),
+        action: z.object({ operations: z.array(actionPolicyOperationSchema) }).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.projectOnboard(input)),
+  );
+
+  server.registerTool(
+    "durable_repo_index_refresh",
+    {
+      description: "Refresh and persist the repo index under .wormhole/indexes.",
+      inputSchema: {
+        repoRoot: z.string(),
+        include: z.array(z.string()).optional(),
+        exclude: z.array(z.string()).optional(),
+        maxFiles: z.number().optional(),
+        maxFileBytes: z.number().optional(),
+        maxTotalBytes: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.durableRepoIndexRefresh(input)),
+  );
+
+  server.registerTool(
+    "durable_index_status",
+    {
+      description: "Return durable repo and semantic index cache status.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.durableIndexStatus(input)),
+  );
+
+  server.registerTool(
+    "durable_semantic_index_refresh",
+    {
+      description: "Refresh and persist a deterministic semantic fallback index.",
+      inputSchema: {
+        repoRoot: z.string(),
+        records: z.array(semanticRecordSchema),
+      },
+    },
+    async (input) => jsonResult(tools.durableSemanticIndexRefresh(input)),
+  );
+
+  server.registerTool(
+    "durable_semantic_search",
+    {
+      description: "Search the persisted deterministic semantic fallback index.",
+      inputSchema: {
+        repoRoot: z.string(),
+        query: z.string(),
+        limit: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.durableSemanticSearch(input)),
+  );
+
+  server.registerTool(
+    "test_impact_analyze_v2",
+    {
+      description: "Analyze diff hunks, changed symbols, and confidence-scored likely tests.",
+      inputSchema: {
+        repoRoot: z.string(),
+        changedFiles: z.array(z.string()),
+        diffText: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.testImpactAnalyzeV2(input)),
+  );
+
+  server.registerTool(
+    "dependency_security_report",
+    {
+      description: "Create a local dependency, lockfile, license, and provider-availability security report.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.dependencySecurityReport(input)),
+  );
+
+  server.registerTool(
+    "action_policy_review",
+    {
+      description: "Review commands, file edits, tool writes, deletes, and network operations for admission risk.",
+      inputSchema: {
+        operations: z.array(actionPolicyOperationSchema),
+      },
+    },
+    async (input) => jsonResult(tools.actionPolicyReview(input)),
+  );
+
+  server.registerTool(
+    "lsp_session_start",
+    {
+      description: "Start a bounded process-local LSP JSON-RPC session.",
+      inputSchema: {
+        repoRoot: z.string(),
+        language: z.string(),
+        command: z.string(),
+        args: z.array(z.string()).optional(),
+        startupTimeoutMs: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(await tools.lspSessionStart(input)),
+  );
+
+  server.registerTool(
+    "lsp_session_list",
+    {
+      description: "List running process-local LSP sessions.",
+      inputSchema: {},
+    },
+    async () => jsonResult(tools.lspSessionList()),
+  );
+
+  server.registerTool(
+    "lsp_session_status",
+    {
+      description: "Return one process-local LSP session status.",
+      inputSchema: {
+        sessionId: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.lspSessionStatus(input)),
+  );
+
+  server.registerTool(
+    "lsp_session_request",
+    {
+      description: "Send one JSON-RPC request to a running LSP session.",
+      inputSchema: {
+        sessionId: z.string(),
+        method: z.string(),
+        params: z.unknown().optional(),
+        timeoutMs: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(await tools.lspSessionRequest(input)),
+  );
+
+  server.registerTool(
+    "lsp_session_stop",
+    {
+      description: "Stop a process-local LSP session.",
+      inputSchema: {
+        sessionId: z.string(),
+      },
+    },
+    async (input) => jsonResult(await tools.lspSessionStop(input)),
+  );
+
+  server.registerTool(
+    "optimization_adapter_register",
+    {
+      description: "Register a native, CLI, or HTTP optimization adapter.",
+      inputSchema: optimizationAdapterSchema.shape,
+    },
+    async (input) => jsonResult(tools.optimizationAdapterRegister(input)),
+  );
+
+  server.registerTool(
+    "optimization_adapter_list",
+    {
+      description: "List registered optimization adapters.",
+      inputSchema: {},
+    },
+    async () => jsonResult(tools.optimizationAdapterList()),
+  );
+
+  server.registerTool(
+    "optimization_adapter_select",
+    {
+      description: "Select an installed optimization adapter by capability.",
+      inputSchema: {
+        capability: optimizationKindSchema,
+      },
+    },
+    async (input) => jsonResult(tools.optimizationAdapterSelect(input)),
+  );
+
+  server.registerTool(
+    "optimization_adapter_run",
+    {
+      description: "Run a registered optimization adapter.",
+      inputSchema: {
+        adapterId: z.string(),
+        kind: z.union([optimizationKindSchema, z.literal("auto")]),
+        content: z.string(),
+        timeoutMs: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(await tools.optimizationAdapterRun(input)),
   );
 
   server.registerTool(

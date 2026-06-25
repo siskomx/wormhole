@@ -184,8 +184,8 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
       {
         id: "orchestration.external-optimization-adapters",
         area: "orchestration",
-        status: "planned",
-        description: "Optional adapters for external optimization systems while keeping Wormhole-native primitives as the baseline.",
+        status: "implemented",
+        description: "Native, CLI, and HTTP optimization adapter registry with capability selection and bounded no-shell CLI execution while keeping Wormhole-native primitives as the baseline.",
       },
       {
         id: "orchestration.content-addressed-evidence-cache",
@@ -240,6 +240,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         area: "orchestration",
         status: "implemented",
         description: "Project contract detection, dependency inventory, structured diagnostics, impact-aware test planning, verification execution, safety scanning, deterministic semantic fallback search, and safe LSP config probes.",
+      },
+      {
+        id: "orchestration.project-intelligence-sequencing",
+        area: "orchestration",
+        status: "implemented",
+        description: "One-shot project onboarding, process-local LSP sessions, durable repo and semantic indexes, diff-aware test impact, dependency security reports, action admission policy, and optimization adapter execution.",
       },
       {
         id: "orchestration.graph-artifact-suite",

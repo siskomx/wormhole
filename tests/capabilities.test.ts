@@ -112,6 +112,7 @@ describe("capability manifest", () => {
     expect(implementedIds).toEqual(
       expect.arrayContaining([
         "orchestration.parallel-sub-orchestrators",
+        "orchestration.external-optimization-adapters",
         "orchestration.native-context-packs",
         "orchestration.reversible-optimization-pipeline",
         "orchestration.content-addressed-evidence-cache",
@@ -123,6 +124,7 @@ describe("capability manifest", () => {
         "orchestration.printed-tool-runtime",
         "orchestration.repo-index-graph",
         "orchestration.project-ground-truth-suite",
+        "orchestration.project-intelligence-sequencing",
         "orchestration.graph-artifact-suite",
         "orchestration.optimized-command-runner",
         "orchestration.native-tool-factory",

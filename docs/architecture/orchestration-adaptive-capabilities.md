@@ -135,6 +135,20 @@ Wormhole includes first-party project-onboarding tools for agents entering a new
 
 These tools are repo-root confined where they read project files. They complement the repo graph; source-backed claims still need evidence records before the gate opens.
 
+## Project Intelligence Sequencing
+
+Project intelligence sequencing composes the ground-truth tools into a higher-level onboarding and admission layer:
+
+- `project_onboard` runs contract detection, durable repo indexing, LSP probe, safety scan, diff/test impact, verification-plan selection, dependency security, action policy, and optional semantic search in one report.
+- `durable_repo_index_refresh`, `durable_index_status`, `durable_semantic_index_refresh`, and `durable_semantic_search` persist index data under `.wormhole/indexes`.
+- `test_impact_analyze_v2` maps unified diff hunks to changed symbols and confidence-scored test recommendations.
+- `dependency_security_report` summarizes package/lockfile metadata, direct and transitive counts, license data, and local-only vulnerability-provider status.
+- `action_policy_review` classifies proposed commands, file writes, deletes, tool writes, and network actions with approval and rollback guidance.
+- `lsp_session_start`, `lsp_session_request`, `lsp_session_status`, `lsp_session_list`, and `lsp_session_stop` provide bounded process-local JSON-RPC session management for installed language servers.
+- `optimization_adapter_register`, `optimization_adapter_select`, `optimization_adapter_list`, and `optimization_adapter_run` implement native, CLI, and HTTP optimization adapter contracts.
+
+These tools still keep TypeScript authoritative for gates, schemas, process bounds, and repo-root confinement. Live LSP behavior depends on installed server binaries; unavailable commands return structured unavailable results.
+
 ## External Agent Adapters
 
 External AI agents and model providers are registered as bounded Wormhole workers through `agent_register`.
@@ -172,6 +186,7 @@ Wormhole implements native near-equivalent runtime capabilities for the practica
 
 - Graphify-near: `repo_index_*`, `repo_graph_export`, `python_graph_metrics`, and `python_graph_communities`.
 - Project-ground-truth-near: `project_contract_detect`, `diagnostics_*`, `impact_analyze`, `test_plan_select`, `verification_run`, `secret_scan`, `operation_risk_review`, `semantic_*`, and `lsp_*`.
+- Project-intelligence sequencing: `project_onboard`, durable index tools, LSP session tools, `test_impact_analyze_v2`, `dependency_security_report`, `action_policy_review`, and `optimization_adapter_*`.
 - Headroom/RTK-near: `optimization_apply`, `optimization_retrieve`, `optimized_command_run`, and `optimization_stats`.
 - Printing Press-near: `printing_press_*` runtime tools and `tool_factory_generate`.
 - Fugu-near: `model_profile_*`, `conductor_plan`, and `conductor_replay`.

@@ -35,6 +35,8 @@ describe("repo-local Codex plugin metadata", () => {
     expect(plugin.interface.longDescription).toContain("project contract detection");
     expect(plugin.interface.longDescription).toContain("impact-aware verification planning");
     expect(plugin.interface.longDescription).toContain("safe LSP probes");
+    expect(plugin.interface.longDescription).toContain("one-shot project onboarding");
+    expect(plugin.interface.longDescription).toContain("optimization adapters");
     expect(serialized).not.toContain("TODO");
     expect(mcp.mcpServers.wormhole.command).toBe("node");
     expect(mcp.mcpServers.wormhole.args).toEqual(["../../dist/src/cli.js"]);
@@ -87,6 +89,16 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("semantic_index_build");
     expect(manifest.tools.map((tool) => tool.name)).toContain("semantic_search");
     expect(manifest.tools.map((tool) => tool.name)).toContain("lsp_probe");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("project_onboard");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("durable_repo_index_refresh");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("durable_semantic_search");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("test_impact_analyze_v2");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("dependency_security_report");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("action_policy_review");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("lsp_session_start");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("lsp_session_request");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("optimization_adapter_register");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("optimization_adapter_run");
     expect(manifest.tools.map((tool) => tool.name)).toContain("python_sidecar_probe");
     expect(manifest.tools.map((tool) => tool.name)).toContain("python_graph_metrics");
     expect(manifest.tools.map((tool) => tool.name)).toContain("python_graph_communities");
