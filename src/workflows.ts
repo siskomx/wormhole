@@ -348,12 +348,12 @@ function phase(
 }
 
 function gatePhase(): WorkflowPhase {
-  return phase("gate", "Record evidence and request the Wormhole gate before final output.", [
-    toolCall("record_evidence", 100, "Record source-backed workflow findings.", {}, [
+  return phase("gate", "Record evidence and request the Wormhole gate before the final response.", [
+    toolCall("record_evidence", 100, "Record source-backed workflow findings before final claims.", {}, [
       "missionId",
       "source evidence fields",
     ]),
-    toolCall("gate_request", 95, "Check whether evidence and open questions permit final output.", {}, [
+    toolCall("gate_request", 95, "Check whether evidence and open questions permit the final response.", {}, [
       "missionId",
     ]),
   ], ["Recorded evidence ids"], ["record_evidence", "gate_request"]);

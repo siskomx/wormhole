@@ -12,4 +12,14 @@ describe("Codex runtime adapter", () => {
     expect(config.defaultPrompts).toHaveLength(3);
     expect(validateCodexAdapterConfig(config).valid).toBe(true);
   });
+
+  it("defaults coding requests to act and verify instead of plan artifacts", () => {
+    const config = createCodexAdapterConfig("C:/Users/Ivan/Documents/GitHub/wormhole");
+    const prompts = config.defaultPrompts.join("\n").toLowerCase();
+
+    expect(prompts).toContain("implement");
+    expect(prompts).toContain("verify");
+    expect(prompts).toContain("only emit");
+    expect(prompts).not.toContain("emit a cited implementation plan");
+  });
 });

@@ -25,9 +25,9 @@ export function createCodexAdapterConfig(repoRoot: string): CodexAdapterConfig {
       args: [path.join(absoluteRoot, "dist", "src", "cli.js")],
     },
     defaultPrompts: [
-      "Plan this repo change with Wormhole evidence gates.",
-      "Run a Wormhole mission for this feature idea.",
-      "Emit a cited implementation plan for this repo.",
+      "Use Wormhole to implement this repo change: choose the workflow, gather evidence, act, verify, then summarize.",
+      "Run the appropriate Wormhole workflow; for coding work continue into implementation and verification instead of stopping at a plan.",
+      "Only emit a cited plan when the user explicitly asks for a plan, spec, design, or planning-only artifact.",
     ],
   };
 }

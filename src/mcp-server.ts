@@ -316,7 +316,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "mission_start",
     {
-      description: "Start an existing-repo planning mission.",
+      description: "Start an evidence-gated coding, review, onboarding, or planning mission.",
       inputSchema: {
         objective: z.string(),
         repoRoot: z.string(),
@@ -476,7 +476,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "gate_request",
     {
-      description: "Evaluate whether the mission can emit its final plan.",
+      description: "Evaluate whether the mission can produce its final response or requested artifact.",
       inputSchema: {
         missionId: z.string(),
       },
@@ -487,7 +487,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "emit_plan",
     {
-      description: "Emit the final evidence-cited Markdown plan after the gate opens.",
+      description: "Emit an evidence-cited Markdown plan only when the requested artifact is a plan, spec, or design.",
       inputSchema: {
         missionId: z.string(),
         recommendedApproach: z.string(),

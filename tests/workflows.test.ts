@@ -41,6 +41,10 @@ describe("golden-path workflows", () => {
     expect(workflow.phases.find((phase) => phase.name === "act")?.gate.requiredBeforeProceeding).toEqual(
       expect.arrayContaining(["action_policy_review", "patch_checkpoint"]),
     );
+    expect(workflow.phases.find((phase) => phase.name === "gate")?.goal).toContain("final response");
+    expect(workflow.phases.find((phase) => phase.name === "gate")?.calls.map((call) => call.toolName)).not.toContain(
+      "emit_plan",
+    );
   });
 
   it("prioritizes repro and focused verification for bug fixes", () => {

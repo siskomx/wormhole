@@ -49,6 +49,11 @@ describe("repo-local Codex plugin metadata", () => {
     expect(plugin.interface.longDescription).toContain("repo watch sessions");
     expect(plugin.interface.longDescription).toContain("git diff detection");
     expect(plugin.interface.longDescription).toContain("patch transactions");
+    expect(plugin.interface.defaultPrompt.join("\n")).toContain(
+      "only call emit_plan when the user explicitly asks for a plan",
+    );
+    expect(plugin.interface.defaultPrompt.join("\n")).not.toContain("Produce a cited Wormhole implementation plan");
+    expect(plugin.interface.defaultPrompt.join("\n")).not.toContain("then emit_plan");
     expect(plugin.interface.longDescription).not.toContain("optional Python graph");
     expect(serialized).not.toContain("TODO");
     expect(mcp.mcpServers.wormhole.command).toBe("node");
@@ -100,6 +105,8 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("tool_exposure_profile");
     expect(manifest.tools.map((tool) => tool.name)).toContain("tool_admission_review");
     expect(manifest.tools.map((tool) => tool.name)).toContain("workflow_start_feature");
+    expect(manifest.prompts[0]?.text).toContain("only call emit_plan when the user explicitly asks for a plan");
+    expect(manifest.prompts[0]?.text).not.toContain("then emit_plan");
     expect(manifest.tools.map((tool) => tool.name)).toContain("workflow_fix_bug");
     expect(manifest.tools.map((tool) => tool.name)).toContain("workflow_review_pr");
     expect(manifest.tools.map((tool) => tool.name)).toContain("workflow_onboard_repo");

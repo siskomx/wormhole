@@ -259,7 +259,7 @@ export function recommendMissionRoute(input: AgentRoutingInput): MissionRouteRec
       },
       {
         name: "gate",
-        purpose: "Record evidence and ask the Wormhole gate before final artifacts.",
+        purpose: "Record evidence and ask the Wormhole gate before the final response.",
         toolCalls: [
           toolCall("record_evidence", 90, "Record source-backed findings before recommendations.", {}, [
             "missionId",
@@ -307,7 +307,7 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
         repoRoot: input.repoRoot,
         changedFiles,
       }),
-      toolCall("gate_request", 80, "Request the Wormhole gate before final artifact emission.", {}, [
+      toolCall("gate_request", 80, "Request the Wormhole gate before the final response.", {}, [
         "missionId",
       ]),
     ],
@@ -317,8 +317,10 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
       "Use tool_catalog_query when the route recommends a plane, phase, pack, risk, or exact tool name.",
       "Prefer the recommended route over browsing the full MCP tool surface.",
       "Refresh graph and context state only through the stateMaintenance owner tools.",
+      "Continue into implementation and verification for coding tasks.",
       "Record source-backed evidence before making implementation claims.",
       "Run focused verification before requesting the gate.",
+      "Call emit_plan only when the user explicitly asks for a plan, spec, design, or planning-only artifact.",
     ].join(" "),
   };
 }
@@ -407,7 +409,7 @@ function createDefaultToolSequence(input: {
     toolCall("verification_run", 65, "Run selected checks and preserve evidence hashes.", {}, [
       "commands from test_plan_select",
     ]),
-    toolCall("gate_request", 50, "Ask the evidence gate before final artifact emission.", {}, [
+    toolCall("gate_request", 50, "Ask the evidence gate before the final response.", {}, [
       "missionId",
     ]),
   ];

@@ -182,6 +182,8 @@ describe("agent-facing routing tools", () => {
       expect(prepared.stateMaintenance.coordinator.toolName).toBe("state_maintenance_run");
       expect(prepared.stateMaintenance.context.ownerTools).toContain("ctx_pack_refresh");
       expect(prepared.agentInstructions).toContain("Start with tool_layer_map before browsing the full MCP surface.");
+      expect(prepared.agentInstructions).toContain("Continue into implementation and verification for coding tasks.");
+      expect(prepared.agentInstructions).toContain("Call emit_plan only when the user explicitly asks for a plan");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
