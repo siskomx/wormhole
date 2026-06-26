@@ -1,10 +1,11 @@
-import { buildRepoIndex } from "./repo-index.js";
+import { buildRepoIndex, type RepoIndex } from "./repo-index.js";
 
 export type ImpactRiskLevel = "low" | "medium" | "high";
 
 export type ImpactAnalysisInput = {
   repoRoot: string;
   changedFiles: string[];
+  index?: RepoIndex;
 };
 
 export type ImpactAnalysisResult = {
@@ -18,7 +19,7 @@ export type ImpactAnalysisResult = {
 export function analyzeImpact(input: ImpactAnalysisInput): ImpactAnalysisResult {
   const changedFiles = [...new Set(input.changedFiles.map(toRepoPath))].sort();
   const changedSet = new Set(changedFiles);
-  const index = buildRepoIndex({ repoRoot: input.repoRoot });
+  const index = input.index ?? buildRepoIndex({ repoRoot: input.repoRoot });
   const impacted = new Set<string>();
   const reasons: string[] = [];
 

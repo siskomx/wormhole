@@ -3,7 +3,10 @@ import path from "node:path";
 import { detectProjectContract, type ProjectContract } from "./project-contract.js";
 import {
   buildRepoIndex,
+  createRepoIndexCacheKey,
+  isRepoIndexFresh,
   type RepoIndex,
+  type RepoIndexBuildOptions,
   type RepoIndexEdge,
   type RepoIndexSymbol,
 } from "./repo-index.js";
@@ -112,7 +115,7 @@ export type ProjectContextPack = {
   };
 };
 
-type ProjectModel = {
+export type ProjectModel = {
   repoRoot: string;
   index: RepoIndex;
   contract: ProjectContract;
@@ -126,8 +129,102 @@ type OwnershipRule = {
   line: number;
 };
 
-export function createArchitectureMap(input: { repoRoot: string }): ArchitectureMap {
-  const model = createProjectModel(input.repoRoot);
+export type ProjectModelCacheStats = {
+  entries: number;
+  hits: number;
+  misses: number;
+  refreshes: number;
+  stale: number;
+};
+
+export type ProjectModelCache = {
+  get(input: {
+    repoRoot: string;
+    indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">;
+  }): ProjectModel;
+  delete(repoRoot: string): void;
+  clear(): void;
+  stats(): ProjectModelCacheStats;
+};
+
+export type ProjectModelCacheOptions = {
+  maxEntries?: number;
+  freshnessTtlMs?: number;
+  indexBuilder?: (options: RepoIndexBuildOptions) => RepoIndex;
+};
+
+export type ProjectModelCacheInput = {
+  projectModelCache?: ProjectModelCache;
+  indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">;
+};
+
+export function createProjectModelCache(options: ProjectModelCacheOptions = {}): ProjectModelCache {
+  const maxEntries = options.maxEntries ?? 8;
+  const freshnessTtlMs = options.freshnessTtlMs ?? 30_000;
+  const indexBuilder = options.indexBuilder ?? buildRepoIndex;
+  const entries = new Map<string, { model: ProjectModel; lastFreshCheckMs: number }>();
+  const stats: Omit<ProjectModelCacheStats, "entries"> = {
+    hits: 0,
+    misses: 0,
+    refreshes: 0,
+    stale: 0,
+  };
+
+  function evictOldest(): void {
+    while (entries.size > maxEntries) {
+      const oldestKey = entries.keys().next().value;
+      if (!oldestKey) {
+        break;
+      }
+      entries.delete(oldestKey);
+    }
+  }
+
+  return {
+    get(input) {
+      const repoRoot = path.resolve(input.repoRoot);
+      const indexOptions = { ...(input.indexOptions ?? {}), repoRoot };
+      const cacheKey = createRepoIndexCacheKey(indexOptions);
+      const now = Date.now();
+      const existing = entries.get(cacheKey);
+      if (existing) {
+        const shouldCheckFreshness =
+          freshnessTtlMs <= 0 || now - existing.lastFreshCheckMs >= freshnessTtlMs;
+        if (!shouldCheckFreshness || isRepoIndexFresh(existing.model.index)) {
+          existing.lastFreshCheckMs = shouldCheckFreshness ? now : existing.lastFreshCheckMs;
+          stats.hits += 1;
+          return existing.model;
+        }
+        stats.stale += 1;
+        entries.delete(cacheKey);
+      }
+
+      stats.misses += 1;
+      stats.refreshes += 1;
+      const model = createProjectModel(repoRoot, input.indexOptions, indexBuilder);
+      entries.set(cacheKey, { model, lastFreshCheckMs: now });
+      evictOldest();
+      return model;
+    },
+    delete(repoRootInput) {
+      const repoRoot = path.resolve(repoRootInput);
+      for (const [key, entry] of entries) {
+        if (entry.model.repoRoot === repoRoot) {
+          entries.delete(key);
+        }
+      }
+    },
+    clear() {
+      entries.clear();
+    },
+    stats() {
+      return { entries: entries.size, ...stats };
+    },
+  };
+}
+
+export function createArchitectureMap(input: { repoRoot: string } & ProjectModelCacheInput): ArchitectureMap {
+  const model = getProjectModel(input);
   return createArchitectureMapFromModel(model);
 }
 
@@ -217,16 +314,16 @@ function createArchitectureMapFromModel(model: ProjectModel): ArchitectureMap {
   };
 }
 
-export function discoverEntrypointFlows(input: { repoRoot: string }): EntrypointFlowDiscovery {
-  return discoverEntrypointFlowsFromModel(createProjectModel(input.repoRoot));
+export function discoverEntrypointFlows(input: { repoRoot: string } & ProjectModelCacheInput): EntrypointFlowDiscovery {
+  return discoverEntrypointFlowsFromModel(getProjectModel(input));
 }
 
 export function analyzeBlastRadius(input: {
   repoRoot: string;
   changedFiles: string[];
   diffText?: string;
-}): BlastRadiusAnalysis {
-  const model = createProjectModel(input.repoRoot);
+} & ProjectModelCacheInput): BlastRadiusAnalysis {
+  const model = getProjectModel(input);
   const changedFiles = uniqueSorted(input.changedFiles.map(toRepoPath));
   const changedSet = new Set(changedFiles);
   const changedNodeIds = new Set<string>(changedFiles);
@@ -234,6 +331,7 @@ export function analyzeBlastRadius(input: {
     repoRoot: model.repoRoot,
     changedFiles,
     diffText: input.diffText,
+    index: model.index,
   });
   for (const symbol of impact.changedSymbols) {
     changedNodeIds.add(symbol.id);
@@ -313,8 +411,8 @@ export function generateProjectContextPack(input: {
   query: string;
   changedFiles?: string[];
   maxChars: number;
-}): ProjectContextPack {
-  const model = createProjectModel(input.repoRoot);
+} & ProjectModelCacheInput): ProjectContextPack {
+  const model = getProjectModel(input);
   const architecture = createArchitectureMapFromModel(model);
   const entrypoints = discoverEntrypointFlowsFromModel(model);
   const blast =
@@ -322,6 +420,8 @@ export function generateProjectContextPack(input: {
       ? analyzeBlastRadius({
           repoRoot: model.repoRoot,
           changedFiles: input.changedFiles,
+          projectModelCache: input.projectModelCache,
+          indexOptions: input.indexOptions,
         })
       : undefined;
   const sources = selectContextSources(model, input.query, input.changedFiles ?? [], blast);
@@ -361,9 +461,23 @@ export function generateProjectContextPack(input: {
   };
 }
 
-function createProjectModel(repoRootInput: string): ProjectModel {
+function getProjectModel(input: { repoRoot: string } & ProjectModelCacheInput): ProjectModel {
+  if (input.projectModelCache) {
+    return input.projectModelCache.get({
+      repoRoot: input.repoRoot,
+      indexOptions: input.indexOptions,
+    });
+  }
+  return createProjectModel(input.repoRoot, input.indexOptions);
+}
+
+function createProjectModel(
+  repoRootInput: string,
+  indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">,
+  indexBuilder: (options: RepoIndexBuildOptions) => RepoIndex = buildRepoIndex,
+): ProjectModel {
   const repoRoot = path.resolve(repoRootInput);
-  const index = buildRepoIndex({ repoRoot });
+  const index = indexBuilder({ ...(indexOptions ?? {}), repoRoot });
   return {
     repoRoot,
     index,

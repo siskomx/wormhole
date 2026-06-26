@@ -113,6 +113,9 @@ import {
 import { createDependencySecurityReport } from "./dependency-security.js";
 import {
   durableIndexStatus,
+  durableIndexManifestStatus,
+  queryDurableShardedRepoIndex,
+  refreshDurableIndexManifest,
   refreshDurableRepoIndex,
   refreshDurableSemanticIndex,
   searchDurableSemanticIndex,
@@ -134,8 +137,10 @@ import { projectOnboard } from "./project-onboard.js";
 import {
   analyzeBlastRadius,
   createArchitectureMap,
+  createProjectModelCache,
   discoverEntrypointFlows,
   generateProjectContextPack,
+  type ProjectModelCache,
 } from "./project-intelligence.js";
 import {
   createMissionDeltaReplan,
@@ -261,6 +266,7 @@ export type ToolHandlerOptions = {
   runtimeStatePath?: string;
   privilegedActionGate?: PrivilegedActionGate;
   privilegedActionPolicy?: PrivilegedActionPolicy;
+  projectModelCache?: ProjectModelCache;
 };
 
 export type StateMaintenanceAction = {
@@ -501,6 +507,9 @@ export function createToolHandlers(
   const repoIndexes = new Map<string, RepoIndex>();
   const allowedRepoRoots = parseAllowedRepoRoots(options);
   const maxCachedRepoIndexes = options.maxCachedRepoIndexes ?? 8;
+  const projectModelCache = options.projectModelCache ?? createProjectModelCache({
+    maxEntries: maxCachedRepoIndexes,
+  });
   const privilegedActionGate =
     options.privilegedActionGate ?? createPrivilegedActionGate(options.privilegedActionPolicy);
 
@@ -530,6 +539,7 @@ export function createToolHandlers(
     const changedFiles = uniqueSorted(input.changedFiles.map((file) => repoRelativePath(repoRoot, file)));
     const index = refreshDurableRepoIndex({ repoRoot });
     repoIndexes.delete(createRepoIndexCacheKey({ repoRoot }));
+    projectModelCache.delete(repoRoot);
     const testImpact = analyzeTestImpactV2({
       repoRoot,
       changedFiles,
@@ -1378,6 +1388,7 @@ export function createToolHandlers(
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       const index = buildRepoIndex({ ...input, repoRoot });
       repoIndexes.set(createRepoIndexCacheKey({ ...input, repoRoot }), index);
+      projectModelCache.delete(repoRoot);
       evictOldestRepoIndex(repoIndexes, maxCachedRepoIndexes);
       return summarizeRepoIndex(index);
     },
@@ -1441,6 +1452,7 @@ export function createToolHandlers(
           : undefined;
       if (graphRefresh) {
         repoIndexes.delete(createRepoIndexCacheKey({ repoRoot: scan.repoRoot }));
+        projectModelCache.delete(scan.repoRoot);
         repoActivityStore.recordActivity({
           repoRoot: scan.repoRoot,
           watchId: input.watchId,
@@ -1584,13 +1596,15 @@ export function createToolHandlers(
 
     impactAnalyze(input: { repoRoot: string; changedFiles: string[] }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      return analyzeImpact({ ...input, repoRoot });
+      const model = projectModelCache.get({ repoRoot });
+      return analyzeImpact({ ...input, repoRoot, index: model.index });
     },
 
     testPlanSelect(input: { repoRoot: string; changedFiles: string[]; tier?: VerificationCommand["tier"] }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      const contract = detectProjectContract({ repoRoot });
-      const impact = analyzeImpact({ repoRoot, changedFiles: input.changedFiles });
+      const model = projectModelCache.get({ repoRoot });
+      const contract = model.contract;
+      const impact = analyzeImpact({ repoRoot, changedFiles: input.changedFiles, index: model.index });
       return createVerificationPlan({ contract, impact, changedFiles: input.changedFiles, tier: input.tier });
     },
 
@@ -1655,17 +1669,17 @@ export function createToolHandlers(
 
     architectureMap(input: { repoRoot: string }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      return createArchitectureMap({ repoRoot });
+      return createArchitectureMap({ repoRoot, projectModelCache });
     },
 
     entrypointFlowDiscover(input: { repoRoot: string }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      return discoverEntrypointFlows({ repoRoot });
+      return discoverEntrypointFlows({ repoRoot, projectModelCache });
     },
 
     blastRadiusAnalyze(input: { repoRoot: string; changedFiles: string[]; diffText?: string }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      return analyzeBlastRadius({ ...input, repoRoot });
+      return analyzeBlastRadius({ ...input, repoRoot, projectModelCache });
     },
 
     contextPackGenerate(input: {
@@ -1676,12 +1690,12 @@ export function createToolHandlers(
       maxChars: number;
     }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      return generateProjectContextPack({ ...input, repoRoot });
+      return generateProjectContextPack({ ...input, repoRoot, projectModelCache });
     },
 
     projectIntelligenceSnapshot(input: Parameters<typeof createProjectIntelligenceSnapshot>[0]) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      return createProjectIntelligenceSnapshot({ ...input, repoRoot });
+      return createProjectIntelligenceSnapshot({ ...input, repoRoot, projectModelCache });
     },
 
     toolLayerMap() {
@@ -1727,12 +1741,16 @@ export function createToolHandlers(
 
     missionRoute(input: Parameters<typeof recommendMissionRoute>[0]) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      return recommendMissionRoute({ ...input, repoRoot });
+      return recommendMissionRoute({ ...input, repoRoot, projectModelCache });
     },
 
     agentContextPrepare(input: Parameters<typeof prepareAgentContext>[0]) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      return prepareAgentContext({ ...input, repoRoot });
+      return prepareAgentContext({ ...input, repoRoot, projectModelCache });
+    },
+
+    projectModelCacheStats() {
+      return projectModelCache.stats();
     },
 
     stateMaintenanceRun(input: StateMaintenanceRunInput) {
@@ -1786,12 +1804,33 @@ export function createToolHandlers(
 
     durableRepoIndexRefresh(input: RepoIndexBuildOptions) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      return refreshDurableRepoIndex({ ...input, repoRoot });
+      const result = refreshDurableRepoIndex({ ...input, repoRoot });
+      repoIndexes.delete(createRepoIndexCacheKey({ ...input, repoRoot }));
+      projectModelCache.delete(repoRoot);
+      return result;
+    },
+
+    durableIndexManifestRefresh(input: RepoIndexBuildOptions) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const result = refreshDurableIndexManifest({ ...input, repoRoot });
+      repoIndexes.delete(createRepoIndexCacheKey({ ...input, repoRoot }));
+      projectModelCache.delete(repoRoot);
+      return result;
     },
 
     durableIndexStatus(input: { repoRoot: string }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return durableIndexStatus({ repoRoot });
+    },
+
+    durableIndexManifestStatus(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return durableIndexManifestStatus({ repoRoot });
+    },
+
+    durableRepoIndexQuery(input: Parameters<typeof queryDurableShardedRepoIndex>[0]) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return queryDurableShardedRepoIndex({ ...input, repoRoot });
     },
 
     durableSemanticIndexRefresh(input: { repoRoot: string; records: SemanticRecordInput[] }) {
@@ -1806,7 +1845,8 @@ export function createToolHandlers(
 
     testImpactAnalyzeV2(input: { repoRoot: string; changedFiles: string[]; diffText?: string }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      return analyzeTestImpactV2({ ...input, repoRoot });
+      const model = projectModelCache.get({ repoRoot });
+      return analyzeTestImpactV2({ ...input, repoRoot, index: model.index });
     },
 
     dependencySecurityReport(input: { repoRoot: string }) {

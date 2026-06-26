@@ -1,5 +1,5 @@
 import { analyzeImpact, type ImpactAnalysisResult } from "./impact-analysis.js";
-import { buildRepoIndex, type RepoIndexSymbol } from "./repo-index.js";
+import { buildRepoIndex, type RepoIndex, type RepoIndexSymbol } from "./repo-index.js";
 
 export type DiffHunk = {
   file: string;
@@ -23,9 +23,10 @@ export function analyzeTestImpactV2(input: {
   repoRoot: string;
   changedFiles: string[];
   diffText?: string;
+  index?: RepoIndex;
 }): TestImpactV2Result {
-  const base = analyzeImpact({ repoRoot: input.repoRoot, changedFiles: input.changedFiles });
-  const index = buildRepoIndex({ repoRoot: input.repoRoot });
+  const index = input.index ?? buildRepoIndex({ repoRoot: input.repoRoot });
+  const base = analyzeImpact({ repoRoot: input.repoRoot, changedFiles: input.changedFiles, index });
   const hunks = parseUnifiedDiff(input.diffText ?? "", input.changedFiles);
   const changedSymbols = index.symbols.filter((symbol) => {
     if (!input.changedFiles.includes(symbol.path)) {

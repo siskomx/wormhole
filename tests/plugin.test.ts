@@ -146,6 +146,9 @@ describe("Claude Desktop extension metadata", () => {
       discovery_tools: ["tool_layer_map", "tool_catalog_query"],
     });
     expect(manifest.tools.map((tool) => tool.name)).toContain("durable_repo_index_refresh");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("durable_index_manifest_refresh");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("durable_index_manifest_status");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("durable_repo_index_query");
     expect(manifest.tools.map((tool) => tool.name)).toContain("durable_semantic_search");
     expect(manifest.tools.map((tool) => tool.name)).toContain("test_impact_analyze_v2");
     expect(manifest.tools.map((tool) => tool.name)).toContain("dependency_security_report");

@@ -17,7 +17,7 @@
     "category": "Productivity",
     "capabilities": ["Interactive", "Write", "MCP"],
     "defaultPrompt": [
-      "Run this through Wormhole: mission_start, round_start, use workflow_start_feature/workflow_fix_bug/workflow_review_pr/workflow_onboard_repo when applicable, project_intelligence_snapshot, tool_layer_map, tool_exposure_profile, tool_catalog_query, next_best_tool, mission_route, agent_context_prepare, state_maintenance_run when state refresh is needed, repo_index_query before broad grep, record evidence, resolve questions, gate_request, then emit_plan.",
+      "Run this through Wormhole: mission_start, round_start, use workflow_start_feature/workflow_fix_bug/workflow_review_pr/workflow_onboard_repo when applicable, project_intelligence_snapshot, tool_layer_map, tool_exposure_profile, tool_catalog_query, next_best_tool, mission_route, agent_context_prepare, state_maintenance_run when state refresh is needed, durable_index_manifest_refresh/status and durable_repo_index_query for reusable large-repo indexes, repo_index_query before broad grep, record evidence, resolve questions, gate_request, then emit_plan.",
       "Use Wormhole orchestration for this feature: record context packs, refresh pack budgets when they overflow, inspect state_maintenance_status or use state_maintenance_retry after partial maintenance failures, create agent workspaces for shared concurrent state, register tasks, use tool_admission_review and action_policy_review before risky write/execute tools, use patch transactions for reversible edits, plan local orchestration waves, and use verified external agents or printed CLIs only when needed.",
       "Produce a cited Wormhole implementation plan and do not emit it until the evidence gate opens."
     ],

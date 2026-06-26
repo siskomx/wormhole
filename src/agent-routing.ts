@@ -3,9 +3,11 @@ import {
   createArchitectureMap,
   discoverEntrypointFlows,
   generateProjectContextPack,
+  createProjectModelCache,
   type ArchitectureMap,
   type BlastRadiusAnalysis,
   type EntrypointFlowDiscovery,
+  type ProjectModelCache,
   type ProjectContextPack,
 } from "./project-intelligence.js";
 
@@ -108,6 +110,8 @@ export type AgentRoutingInput = {
   diffText?: string;
   completedTools?: string[];
   maxChars?: number;
+  projectModelCache?: ProjectModelCache;
+  projectIntelligenceSnapshot?: ProjectIntelligenceSnapshot;
 };
 
 const DEFAULT_CONTEXT_CHARS = 6_000;
@@ -116,14 +120,21 @@ export function createProjectIntelligenceSnapshot(
   input: AgentRoutingInput,
 ): ProjectIntelligenceSnapshot {
   const changedFiles = normalizeChangedFiles(input.changedFiles);
-  const architecture = createArchitectureMap({ repoRoot: input.repoRoot });
-  const entrypoints = discoverEntrypointFlows({ repoRoot: input.repoRoot });
+  const architecture = createArchitectureMap({
+    repoRoot: input.repoRoot,
+    projectModelCache: input.projectModelCache,
+  });
+  const entrypoints = discoverEntrypointFlows({
+    repoRoot: input.repoRoot,
+    projectModelCache: input.projectModelCache,
+  });
   const blastRadius =
     changedFiles.length > 0
       ? analyzeBlastRadius({
           repoRoot: input.repoRoot,
           changedFiles,
           diffText: input.diffText,
+          projectModelCache: input.projectModelCache,
         })
       : undefined;
   const route = routeFor({
@@ -176,7 +187,7 @@ export function recommendNextBestTool(input: AgentRoutingInput): NextBestToolRec
 }
 
 export function recommendMissionRoute(input: AgentRoutingInput): MissionRouteRecommendation {
-  const snapshot = createProjectIntelligenceSnapshot(input);
+  const snapshot = input.projectIntelligenceSnapshot ?? createProjectIntelligenceSnapshot(input);
   const changedFiles = normalizeChangedFiles(input.changedFiles);
   const objective = input.objective ?? "Safely complete the requested coding task.";
   return {
@@ -267,14 +278,17 @@ export function recommendMissionRoute(input: AgentRoutingInput): MissionRouteRec
 
 export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "repoRoot" | "objective" | "query">> & AgentRoutingInput): PreparedAgentContext {
   const changedFiles = normalizeChangedFiles(input.changedFiles);
-  const snapshot = createProjectIntelligenceSnapshot(input);
-  const route = recommendMissionRoute(input);
+  const projectModelCache = input.projectModelCache ?? createProjectModelCache();
+  const cachedInput = { ...input, projectModelCache };
+  const snapshot = createProjectIntelligenceSnapshot(cachedInput);
+  const route = recommendMissionRoute({ ...cachedInput, projectIntelligenceSnapshot: snapshot });
   const contextPack = generateProjectContextPack({
     repoRoot: input.repoRoot,
     objective: input.objective,
     query: input.query,
     changedFiles,
     maxChars: input.maxChars ?? DEFAULT_CONTEXT_CHARS,
+    projectModelCache,
   });
   return {
     repoRoot: input.repoRoot,

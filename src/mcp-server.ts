@@ -9,6 +9,7 @@ import {
   TOOL_PLANES,
   TOOL_RISKS,
 } from "./tool-registry.js";
+import { PROJECT_LANES } from "./project-lanes.js";
 
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
@@ -301,6 +302,7 @@ export function createWormholeMcpServer(
   const toolPackSchema = z.enum(TOOL_PACKS);
   const toolRiskSchema = z.enum(TOOL_RISKS);
   const toolExposureModeSchema = z.enum(TOOL_EXPOSURE_MODES);
+  const projectLaneSchema = z.enum(PROJECT_LANES);
   const workflowInputSchema = {
     repoRoot: z.string(),
     objective: z.string(),
@@ -2070,6 +2072,47 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.durableIndexStatus(input)),
+  );
+
+  server.registerTool(
+    "durable_index_manifest_refresh",
+    {
+      description: "Refresh the durable repo index manifest and write lane/root shard indexes.",
+      inputSchema: {
+        repoRoot: z.string(),
+        include: z.array(z.string()).optional(),
+        exclude: z.array(z.string()).optional(),
+        maxFiles: z.number().optional(),
+        maxFileBytes: z.number().optional(),
+        maxTotalBytes: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.durableIndexManifestRefresh(input)),
+  );
+
+  server.registerTool(
+    "durable_index_manifest_status",
+    {
+      description: "Return durable repo index manifest and shard freshness status.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.durableIndexManifestStatus(input)),
+  );
+
+  server.registerTool(
+    "durable_repo_index_query",
+    {
+      description: "Query durable repo index shards by lane, falling back to the full durable index when no manifest exists.",
+      inputSchema: {
+        repoRoot: z.string(),
+        query: z.string(),
+        lanes: z.array(projectLaneSchema).optional(),
+        limit: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.durableRepoIndexQuery(input)),
   );
 
   server.registerTool(
