@@ -49,7 +49,11 @@ export function projectOnboard(input: {
     ...impact,
     likelyTests: impact.likelyTests.map((test) => test.path),
   };
-  const verificationPlan = createVerificationPlan({ contract, impact: impactForPlan });
+  const verificationPlan = createVerificationPlan({
+    contract,
+    impact: impactForPlan,
+    changedFiles: input.changedFiles ?? [],
+  });
   const dependencySecurity = createDependencySecurityReport({ repoRoot: input.repoRoot });
   const actionPolicy = reviewActionPolicy(input.action ?? { operations: [] });
 

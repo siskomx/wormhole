@@ -119,6 +119,9 @@ export function createWormholeMcpServer(
     timeoutMs: z.number().optional(),
     stdin: z.string().optional(),
     reason: z.string().optional(),
+    tier: z.enum(["smoke", "focused", "standard", "full"]).optional(),
+    lanes: z.array(z.enum(["runtime", "tests", "fixtures", "benchmarks", "docs", "generated"])).optional(),
+    source: z.enum(["contract", "impact", "fallback"]).optional(),
   });
   const semanticRecordSchema = z.object({
     id: z.string(),
@@ -298,6 +301,15 @@ export function createWormholeMcpServer(
   const toolPackSchema = z.enum(TOOL_PACKS);
   const toolRiskSchema = z.enum(TOOL_RISKS);
   const toolExposureModeSchema = z.enum(TOOL_EXPOSURE_MODES);
+  const workflowInputSchema = {
+    repoRoot: z.string(),
+    objective: z.string(),
+    query: z.string().optional(),
+    missionId: z.string().optional(),
+    changedFiles: z.array(z.string()).optional(),
+    diffText: z.string().optional(),
+    diagnosticSource: z.string().optional(),
+  };
 
   server.registerTool(
     "mission_start",
@@ -1605,6 +1617,7 @@ export function createWormholeMcpServer(
       inputSchema: {
         repoRoot: z.string(),
         changedFiles: z.array(z.string()),
+        tier: z.enum(["smoke", "focused", "standard", "full"]).optional(),
       },
     },
     async (input) => jsonResult(tools.testPlanSelect(input)),
@@ -1829,6 +1842,42 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.toolAdmissionReview(input)),
+  );
+
+  server.registerTool(
+    "workflow_start_feature",
+    {
+      description: "Return the golden-path sequence for implementing a feature with context, policy, patch, verification, and gate steps.",
+      inputSchema: workflowInputSchema,
+    },
+    async (input) => jsonResult(tools.workflowStartFeature(input)),
+  );
+
+  server.registerTool(
+    "workflow_fix_bug",
+    {
+      description: "Return the repro-first golden-path sequence for fixing a bug with diagnostics, impact, context, patch, verification, and gate steps.",
+      inputSchema: workflowInputSchema,
+    },
+    async (input) => jsonResult(tools.workflowFixBug(input)),
+  );
+
+  server.registerTool(
+    "workflow_review_pr",
+    {
+      description: "Return the read-only golden-path sequence for reviewing a PR or local diff with impact, security, verification, evidence, and gate steps.",
+      inputSchema: workflowInputSchema,
+    },
+    async (input) => jsonResult(tools.workflowReviewPr(input)),
+  );
+
+  server.registerTool(
+    "workflow_onboard_repo",
+    {
+      description: "Return the golden-path sequence for onboarding a repo through project intelligence, tool exposure, context, evidence, and gate steps.",
+      inputSchema: workflowInputSchema,
+    },
+    async (input) => jsonResult(tools.workflowOnboardRepo(input)),
   );
 
   server.registerTool(

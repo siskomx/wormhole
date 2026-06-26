@@ -47,3 +47,6 @@ export * from "./agent-workspace.js";
 export * from "./mission-delta-replan.js";
 export * from "./repo-activity.js";
 export * from "./patch-transactions.js";
+export * from "./project-lanes.js";
+export * from "./privileged-action-gate.js";
+export * from "./workflows.js";

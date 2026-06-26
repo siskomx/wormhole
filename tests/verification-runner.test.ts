@@ -26,10 +26,55 @@ describe("verification runner", () => {
         name: "test",
         command: "npm",
         args: ["test", "--", "tests/user.test.ts"],
+        tier: "focused",
+        lanes: ["runtime"],
       }),
     );
     expect(plan.commands.map((command) => command.name)).toContain("build");
     expect(plan.reasons).toContain("Focused tests were selected from impacted files.");
+  });
+
+  it("uses smoke tier for docs-only changes without scheduling the full suite", () => {
+    const plan = createVerificationPlan({
+      contract: {
+        repoRoot: "/repo",
+        packageManager: "npm",
+        scripts: [
+          { name: "build", command: "tsc -p tsconfig.json" },
+          { name: "test", command: "vitest run tests" },
+        ],
+      },
+      changedFiles: ["README.md", "docs/usage.md"],
+      tier: "smoke",
+    });
+
+    expect(plan.commands).toEqual([]);
+    expect(plan.reasons).toContain("Docs-only changes do not require automated test commands at smoke tier.");
+  });
+
+  it("adds benchmark validation in full tier when benchmark lanes change", () => {
+    const plan = createVerificationPlan({
+      contract: {
+        repoRoot: "/repo",
+        packageManager: "npm",
+        scripts: [
+          { name: "test", command: "vitest run tests" },
+          { name: "benchmarks:validate", command: "tsx scripts/validate-benchmarks.ts" },
+        ],
+      },
+      changedFiles: ["benchmarks/cases/sample.json"],
+      tier: "full",
+    });
+
+    expect(plan.commands.map((command) => command.name)).toEqual(
+      expect.arrayContaining(["test", "benchmarks:validate"]),
+    );
+    expect(plan.commands.find((command) => command.name === "benchmarks:validate")).toEqual(
+      expect.objectContaining({
+        tier: "full",
+        lanes: ["benchmarks"],
+      }),
+    );
   });
 
   it("runs verification commands through the optimized command runner", async () => {

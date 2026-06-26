@@ -104,6 +104,12 @@ import {
   type LspProtocolLocation,
 } from "./lsp-ground-truth.js";
 import { reviewActionPolicy, type ActionPolicyOperation } from "./action-policy.js";
+import {
+  createPrivilegedActionGate,
+  type PrivilegedActionGate,
+  type PrivilegedActionPolicy,
+  type PrivilegedActionRequest,
+} from "./privileged-action-gate.js";
 import { createDependencySecurityReport } from "./dependency-security.js";
 import {
   durableIndexStatus,
@@ -158,6 +164,13 @@ import {
   recommendMissionRoute,
   recommendNextBestTool,
 } from "./agent-routing.js";
+import {
+  createBugfixWorkflow,
+  createFeatureWorkflow,
+  createOnboardingWorkflow,
+  createReviewWorkflow,
+  type WorkflowInput,
+} from "./workflows.js";
 import {
   createPatchTransactionStore,
   type PatchTransactionSnapshot,
@@ -246,6 +259,8 @@ export type ToolHandlerOptions = {
   allowedRepoRoots?: string[];
   maxCachedRepoIndexes?: number;
   runtimeStatePath?: string;
+  privilegedActionGate?: PrivilegedActionGate;
+  privilegedActionPolicy?: PrivilegedActionPolicy;
 };
 
 export type StateMaintenanceAction = {
@@ -486,6 +501,12 @@ export function createToolHandlers(
   const repoIndexes = new Map<string, RepoIndex>();
   const allowedRepoRoots = parseAllowedRepoRoots(options);
   const maxCachedRepoIndexes = options.maxCachedRepoIndexes ?? 8;
+  const privilegedActionGate =
+    options.privilegedActionGate ?? createPrivilegedActionGate(options.privilegedActionPolicy);
+
+  function assertPrivilegedAction(request: PrivilegedActionRequest): void {
+    privilegedActionGate.assertAllowed(request);
+  }
 
   function getRepoIndex(repoRoot: string): RepoIndex {
     const absoluteRoot = resolveAllowedRepoRoot(repoRoot, allowedRepoRoots);
@@ -823,6 +844,12 @@ export function createToolHandlers(
     },
 
     optimizedCommandRun(input: OptimizedCommandInput) {
+      assertPrivilegedAction({
+        toolName: "optimized_command_run",
+        kind: "command",
+        operations: [{ kind: "command", command: input.command, args: input.args }],
+        target: { command: input.command, args: input.args },
+      });
       return optimizedCommandRunner.run(input);
     },
 
@@ -1010,6 +1037,12 @@ export function createToolHandlers(
       if (planned.action !== "install") {
         throw new Error("shell_hook_install requires an install planToken");
       }
+      assertPrivilegedAction({
+        toolName: "shell_hook_install",
+        kind: "shell_hook",
+        operations: [{ kind: "file_write", path: planned.homeDir }],
+        target: { path: planned.homeDir, repoRoot: planned.repoRoot },
+      });
       const manager = createShellHookManager({
         homeDir: planned.homeDir,
         repoRoot: planned.repoRoot,
@@ -1046,6 +1079,12 @@ export function createToolHandlers(
       if (planned.action !== "uninstall") {
         throw new Error("shell_hook_uninstall requires an uninstall planToken");
       }
+      assertPrivilegedAction({
+        toolName: "shell_hook_uninstall",
+        kind: "shell_hook",
+        operations: [{ kind: "file_write", path: planned.homeDir }],
+        target: { path: planned.homeDir, repoRoot: planned.repoRoot },
+      });
       const manager = createShellHookManager({
         homeDir: planned.homeDir,
         repoRoot: planned.repoRoot,
@@ -1256,6 +1295,20 @@ export function createToolHandlers(
       if (!agent) {
         throw new Error(`Agent not found for run: ${run.assignedAgentId}`);
       }
+      assertPrivilegedAction({
+        toolName: "agent_dispatch_execute",
+        kind: agent.transport === "http" ? "network" : "adapter_execute",
+        operations:
+          agent.transport === "http" && agent.runtime?.endpoint
+            ? [{ kind: "network", url: agent.runtime.endpoint, method: agent.runtime.method ?? "POST" }]
+            : [{ kind: "command", command: agent.runtime?.command ?? agent.target, args: agent.runtime?.args }],
+        target: {
+          adapterId: agent.agentId,
+          command: agent.runtime?.command,
+          args: agent.runtime?.args,
+          url: agent.runtime?.endpoint,
+        },
+      });
       let result: AgentRunResult;
       try {
         result = await executeAgentTransport(agent, run);
@@ -1307,6 +1360,17 @@ export function createToolHandlers(
     },
 
     printingPressRun(input: PrintingPressRunInput) {
+      const cli = printingPressRegistry.list().find((candidate) => candidate.cliId === input.cliId);
+      assertPrivilegedAction({
+        toolName: "printing_press_run",
+        kind: "adapter_execute",
+        operations: [{ kind: "command", command: cli?.command ?? input.cliId, args: [...(cli?.args ?? []), ...(input.args ?? [])] }],
+        target: {
+          adapterId: input.cliId,
+          command: cli?.command,
+          args: [...(cli?.args ?? []), ...(input.args ?? [])],
+        },
+      });
       return printingPressRegistry.run(input);
     },
 
@@ -1523,14 +1587,22 @@ export function createToolHandlers(
       return analyzeImpact({ ...input, repoRoot });
     },
 
-    testPlanSelect(input: { repoRoot: string; changedFiles: string[] }) {
+    testPlanSelect(input: { repoRoot: string; changedFiles: string[]; tier?: VerificationCommand["tier"] }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       const contract = detectProjectContract({ repoRoot });
       const impact = analyzeImpact({ repoRoot, changedFiles: input.changedFiles });
-      return createVerificationPlan({ contract, impact });
+      return createVerificationPlan({ contract, impact, changedFiles: input.changedFiles, tier: input.tier });
     },
 
     verificationRun(input: { commands: VerificationCommand[] }) {
+      for (const command of input.commands) {
+        assertPrivilegedAction({
+          toolName: "verification_run",
+          kind: "command",
+          operations: [{ kind: "command", command: command.command, args: command.args }],
+          target: { command: command.command, args: command.args, repoRoot: command.cwd },
+        });
+      }
       return runVerificationPlan(input);
     },
 
@@ -1626,6 +1698,26 @@ export function createToolHandlers(
 
     toolAdmissionReview(input: ToolAdmissionReviewInput) {
       return reviewRegistryToolAdmission(input);
+    },
+
+    workflowStartFeature(input: WorkflowInput) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return createFeatureWorkflow({ ...input, repoRoot });
+    },
+
+    workflowFixBug(input: WorkflowInput) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return createBugfixWorkflow({ ...input, repoRoot });
+    },
+
+    workflowReviewPr(input: WorkflowInput) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return createReviewWorkflow({ ...input, repoRoot });
+    },
+
+    workflowOnboardRepo(input: WorkflowInput) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return createOnboardingWorkflow({ ...input, repoRoot });
     },
 
     nextBestTool(input: Parameters<typeof recommendNextBestTool>[0]) {
@@ -1738,6 +1830,12 @@ export function createToolHandlers(
       verificationCommands?: PatchVerificationCommand[];
     }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      assertPrivilegedAction({
+        toolName: "patch_apply",
+        kind: "file_write",
+        operations: [{ kind: "file_write", path: repoRoot }],
+        target: { repoRoot, path: repoRoot },
+      });
       return patchTransactionStore.apply({ ...input, repoRoot });
     },
 
@@ -1748,6 +1846,12 @@ export function createToolHandlers(
 
     patchRollback(input: { repoRoot: string; transactionId: string }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      assertPrivilegedAction({
+        toolName: "patch_rollback",
+        kind: "file_write",
+        operations: [{ kind: "file_write", path: repoRoot }],
+        target: { repoRoot, path: repoRoot },
+      });
       return patchTransactionStore.rollback({ ...input, repoRoot });
     },
 
@@ -1778,6 +1882,12 @@ export function createToolHandlers(
 
     lspSessionStart(input: Parameters<typeof lspSessionManager.start>[0]) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      assertPrivilegedAction({
+        toolName: "lsp_session_start",
+        kind: "command",
+        operations: [{ kind: "command", command: input.command, args: input.args }],
+        target: { repoRoot, command: input.command, args: input.args },
+      });
       return lspSessionManager.start({ ...input, repoRoot });
     },
 
@@ -1826,6 +1936,21 @@ export function createToolHandlers(
     },
 
     optimizationAdapterRun(input: Parameters<typeof optimizationAdapterRegistry.run>[0]) {
+      const adapter = optimizationAdapterRegistry.list().find((candidate) => candidate.adapterId === input.adapterId);
+      assertPrivilegedAction({
+        toolName: "optimization_adapter_run",
+        kind: adapter?.transport === "http" ? "network" : "adapter_execute",
+        operations:
+          adapter?.transport === "http" && adapter.endpoint
+            ? [{ kind: "network", url: adapter.endpoint, method: "POST" }]
+            : [{ kind: "command", command: adapter?.command ?? input.adapterId, args: adapter?.args }],
+        target: {
+          adapterId: input.adapterId,
+          command: adapter?.command,
+          args: adapter?.args,
+          url: adapter?.endpoint,
+        },
+      });
       return optimizationAdapterRegistry.run(input);
     },
 
@@ -1838,6 +1963,12 @@ export function createToolHandlers(
     },
 
     toolFactoryWrite(input: { scaffold: ToolScaffold; targetDir: string }) {
+      assertPrivilegedAction({
+        toolName: "tool_factory_write",
+        kind: "file_write",
+        operations: [{ kind: "tool_write", targetDir: input.targetDir }],
+        target: { path: input.targetDir },
+      });
       resolveAllowedRepoRoot(input.targetDir, allowedRepoRoots);
       return writeToolScaffold(input.scaffold, { targetDir: input.targetDir });
     },
