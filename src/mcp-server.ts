@@ -164,6 +164,13 @@ export function createWormholeMcpServer(
       method: z.string().optional(),
     }),
   ]);
+  const patchVerificationCommandSchema = z.object({
+    name: z.string(),
+    command: z.string(),
+    args: z.array(z.string()).optional(),
+    cwd: z.string().optional(),
+    reason: z.string().optional(),
+  });
   const optimizationAdapterSchema = z.object({
     adapterId: z.string(),
     transport: z.enum(["native", "cli", "http"]),
@@ -1906,6 +1913,58 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.actionPolicyReview(input)),
+  );
+
+  server.registerTool(
+    "patch_checkpoint",
+    {
+      description: "Create a repo-confined patch checkpoint with before-content snapshots for rollback.",
+      inputSchema: {
+        repoRoot: z.string(),
+        label: z.string().optional(),
+        files: z.array(z.string()),
+      },
+    },
+    async (input) => jsonResult(tools.patchCheckpoint(input)),
+  );
+
+  server.registerTool(
+    "patch_apply",
+    {
+      description: "Apply a git-style unified diff against a checkpoint and record rollback plus verification metadata.",
+      inputSchema: {
+        repoRoot: z.string(),
+        checkpointId: z.string(),
+        unifiedDiff: z.string(),
+        verificationCommands: z.array(patchVerificationCommandSchema).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.patchApply(input)),
+  );
+
+  server.registerTool(
+    "patch_status",
+    {
+      description: "List patch checkpoints and transactions without returning captured file contents.",
+      inputSchema: {
+        repoRoot: z.string().optional(),
+        checkpointId: z.string().optional(),
+        transactionId: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.patchStatus(input)),
+  );
+
+  server.registerTool(
+    "patch_rollback",
+    {
+      description: "Rollback an applied patch transaction to its captured before-content snapshots.",
+      inputSchema: {
+        repoRoot: z.string(),
+        transactionId: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.patchRollback(input)),
   );
 
   server.registerTool(

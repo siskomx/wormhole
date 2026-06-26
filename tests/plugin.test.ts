@@ -48,6 +48,7 @@ describe("repo-local Codex plugin metadata", () => {
     expect(plugin.interface.longDescription).toContain("required Python runtime");
     expect(plugin.interface.longDescription).toContain("repo watch sessions");
     expect(plugin.interface.longDescription).toContain("git diff detection");
+    expect(plugin.interface.longDescription).toContain("patch transactions");
     expect(plugin.interface.longDescription).not.toContain("optional Python graph");
     expect(serialized).not.toContain("TODO");
     expect(mcp.mcpServers.wormhole.command).toBe("node");
@@ -123,6 +124,10 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("test_impact_analyze_v2");
     expect(manifest.tools.map((tool) => tool.name)).toContain("dependency_security_report");
     expect(manifest.tools.map((tool) => tool.name)).toContain("action_policy_review");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("patch_checkpoint");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("patch_apply");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("patch_status");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("patch_rollback");
     expect(manifest.tools.map((tool) => tool.name)).toContain("lsp_session_start");
     expect(manifest.tools.map((tool) => tool.name)).toContain("lsp_feedback_replan");
     expect(manifest.tools.map((tool) => tool.name)).toContain("lsp_session_request");

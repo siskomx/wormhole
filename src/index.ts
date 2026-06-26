@@ -45,3 +45,4 @@ export * from "./agent-behavior-verification.js";
 export * from "./agent-workspace.js";
 export * from "./mission-delta-replan.js";
 export * from "./repo-activity.js";
+export * from "./patch-transactions.js";

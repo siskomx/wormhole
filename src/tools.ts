@@ -157,6 +157,11 @@ import {
   recommendNextBestTool,
 } from "./agent-routing.js";
 import {
+  createPatchTransactionStore,
+  type PatchTransactionSnapshot,
+  type PatchVerificationCommand,
+} from "./patch-transactions.js";
+import {
   analyzeAgentDrift,
   createAgentRemit,
   createRemitCoverageReport,
@@ -246,6 +251,7 @@ type RuntimeToolState = {
   optimizationAdapters?: Partial<OptimizationAdapterSnapshot>;
   agentWorkspace?: Partial<AgentWorkspaceSnapshot>;
   repoActivity?: Partial<RepoActivitySnapshot>;
+  patchTransactions?: Partial<PatchTransactionSnapshot>;
 };
 
 function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): string {
@@ -368,6 +374,9 @@ export function createToolHandlers(
   );
   const repoActivityStore = createRepoActivityStore(runtimeState.repoActivity, (snapshot) =>
     persistRuntimeState("repoActivity", snapshot),
+  );
+  const patchTransactionStore = createPatchTransactionStore(runtimeState.patchTransactions, (snapshot) =>
+    persistRuntimeState("patchTransactions", snapshot),
   );
   const lspSessionManager = createLspSessionManager();
   const shellHookPlans = new Map<string, {
@@ -1348,6 +1357,31 @@ export function createToolHandlers(
 
     actionPolicyReview(input: { operations: ActionPolicyOperation[] }) {
       return reviewActionPolicy(input);
+    },
+
+    patchCheckpoint(input: { repoRoot: string; label?: string; files: string[] }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return patchTransactionStore.checkpoint({ ...input, repoRoot });
+    },
+
+    patchApply(input: {
+      repoRoot: string;
+      checkpointId: string;
+      unifiedDiff: string;
+      verificationCommands?: PatchVerificationCommand[];
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return patchTransactionStore.apply({ ...input, repoRoot });
+    },
+
+    patchStatus(input: { repoRoot?: string; checkpointId?: string; transactionId?: string } = {}) {
+      const repoRoot = input.repoRoot ? resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots) : undefined;
+      return patchTransactionStore.status({ ...input, repoRoot });
+    },
+
+    patchRollback(input: { repoRoot: string; transactionId: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return patchTransactionStore.rollback({ ...input, repoRoot });
     },
 
     agentRemitCreate(input: AgentRemitInput) {

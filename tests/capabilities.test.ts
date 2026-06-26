@@ -133,6 +133,7 @@ describe("capability manifest", () => {
         "orchestration.agent-workspace-memory",
         "orchestration.graph-artifact-suite",
         "orchestration.repo-activity-watch-layer",
+        "orchestration.patch-transactions",
         "orchestration.optimized-command-runner",
         "orchestration.native-tool-factory",
         "orchestration.local-runner",
@@ -177,6 +178,10 @@ describe("capability manifest", () => {
       manifest.capabilities.find((capability) => capability.id === "orchestration.repo-activity-watch-layer")
         ?.description,
     ).toContain("git diff detection");
+    expect(
+      manifest.capabilities.find((capability) => capability.id === "orchestration.patch-transactions")
+        ?.description,
+    ).toContain("rollback");
     expect(
       manifest.capabilities.find((capability) => capability.id === "adaptive.required-python-runtime")
         ?.description,

@@ -59,6 +59,7 @@ Implemented `orchestration` capabilities include:
 - `orchestration.agent-workspace-memory`: shared mission workspace memory for concurrent agent runs with attributed records, provenance, snapshot persistence, merge views, and conflict detection.
 - `orchestration.graph-artifact-suite`: native graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis.
 - `orchestration.repo-activity-watch-layer`: opt-in repo watch sessions with file change scans, git diff detection, structured activity recording, mission evidence capture, and durable repo graph refresh.
+- `orchestration.patch-transactions`: repo-confined patch checkpoints, unified-diff application, transaction status, and captured before-content rollback for safer coding-agent edits.
 - `orchestration.optimized-command-runner`: no-shell command execution with reversible output optimization, retrieval handles, hashes, and savings stats.
 - `orchestration.external-optimization-adapters`: native, CLI, and HTTP optimization adapter registry with capability selection and bounded CLI execution.
 - `orchestration.native-tool-factory`: deterministic generation of CLI/MCP scaffold files from constrained tool specs.

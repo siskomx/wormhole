@@ -63,6 +63,10 @@ describe("Wormhole MCP server", () => {
         "repo_change_scan",
         "repo_activity_record",
         "repo_graph_refresh_incremental",
+        "patch_checkpoint",
+        "patch_apply",
+        "patch_status",
+        "patch_rollback",
       ]),
     );
     expect(registeredToolMetadata.python_sidecar_probe?.description).toContain(

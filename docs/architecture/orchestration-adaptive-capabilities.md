@@ -145,6 +145,7 @@ Project intelligence sequencing composes the ground-truth tools into a higher-le
 - `mission_delta_replan` and `lsp_feedback_replan` re-scope missions from changed files, diagnostics, stale evidence, and LSP/typecheck feedback.
 - `dependency_security_report` summarizes package/lockfile metadata, direct and transitive counts, license data, and local-only vulnerability-provider status.
 - `action_policy_review` classifies proposed commands, file writes, deletes, tool writes, and network actions with approval and rollback guidance.
+- `patch_checkpoint`, `patch_apply`, `patch_status`, and `patch_rollback` provide repo-confined unified-diff transactions with before-content snapshots and rollback metadata.
 - `lsp_session_start`, `lsp_session_request`, `lsp_session_status`, `lsp_session_list`, and `lsp_session_stop` provide bounded process-local JSON-RPC session management for installed language servers.
 - `optimization_adapter_register`, `optimization_adapter_select`, `optimization_adapter_list`, and `optimization_adapter_run` implement native, CLI, and HTTP optimization adapter contracts.
 
@@ -224,7 +225,7 @@ Wormhole implements these runtime surfaces as first-class native capabilities:
 - Repo graph artifacts: `repo_index_*`, `repo_graph_export`, `python_graph_metrics`, and `python_graph_communities`.
 - Repo activity watch layer: `repo_watch_*`, `repo_change_scan`, `repo_activity_record`, and `repo_graph_refresh_incremental`.
 - Project ground truth: `project_contract_detect`, `diagnostics_*`, `impact_analyze`, `test_plan_select`, `verification_run`, `secret_scan`, `operation_risk_review`, `semantic_*`, and `lsp_*`.
-- Project-intelligence sequencing: `project_onboard`, durable index tools, LSP session tools, `test_impact_analyze_v2`, `dependency_security_report`, `action_policy_review`, and `optimization_adapter_*`.
+- Project-intelligence sequencing: `project_onboard`, durable index tools, LSP session tools, `test_impact_analyze_v2`, `dependency_security_report`, `action_policy_review`, patch transaction tools, and `optimization_adapter_*`.
 - Coordination feedback loop: `ctx_pack_budget_review`, `ctx_pack_refresh`, `lsp_feedback_replan`, `agent_workspace_*`, and `orchestration_policy_live_feedback`.
 - Optimized command runner: `optimization_apply`, `optimization_retrieve`, `optimized_command_run`, and `optimization_stats`.
 - Native tool factory: `printing_press_*` runtime tools and `tool_factory_generate`.

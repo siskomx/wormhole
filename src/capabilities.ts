@@ -296,6 +296,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Opt-in repo watch sessions with file change scans, git diff detection, structured activity recording, mission evidence capture, and durable repo graph refresh.",
       },
       {
+        id: "orchestration.patch-transactions",
+        area: "orchestration",
+        status: "implemented",
+        description: "Repo-confined patch checkpoints, unified-diff application, transaction status, and captured before-content rollback for safer coding-agent edits.",
+      },
+      {
         id: "orchestration.optimized-command-runner",
         area: "orchestration",
         status: "implemented",

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -810,6 +810,50 @@ describe("Wormhole MCP tool handlers", () => {
 
       expect(filtered.fileCount).toBe(1);
       expect(query.results[0].path).toBe("docs/notes.md");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("exposes patch transaction checkpoint, apply, status, and rollback handlers", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-patch-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "src", "app.ts"), "export const name = 'old';\n");
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+      });
+      const checkpoint = tools.patchCheckpoint({
+        repoRoot,
+        label: "before patch",
+        files: ["src/app.ts"],
+      });
+      const applied = tools.patchApply({
+        repoRoot,
+        checkpointId: checkpoint.checkpointId,
+        unifiedDiff: [
+          "diff --git a/src/app.ts b/src/app.ts",
+          "--- a/src/app.ts",
+          "+++ b/src/app.ts",
+          "@@ -1 +1 @@",
+          "-export const name = 'old';",
+          "+export const name = 'new';",
+          "",
+        ].join("\n"),
+      });
+      const status = tools.patchStatus({ repoRoot });
+      const rolledBack = tools.patchRollback({
+        repoRoot,
+        transactionId: applied.transactionId,
+      });
+
+      expect(applied.status).toBe("applied");
+      expect(status.transactions.map((transaction) => transaction.transactionId)).toContain(
+        applied.transactionId,
+      );
+      expect(rolledBack.status).toBe("rolled_back");
+      expect(readFileSync(path.join(repoRoot, "src", "app.ts"), "utf8")).toContain("'old'");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
