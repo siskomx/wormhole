@@ -68,6 +68,13 @@ describe("Claude Desktop extension metadata", () => {
       };
       tools: Array<{ name: string; description: string }>;
       prompts: Array<{ name: string; text: string }>;
+      tool_manifest_policy?: {
+        mode: string;
+        source_of_truth: string;
+        full_runtime_tool_surface: boolean;
+        manifest_tools_are_curated: boolean;
+        discovery_tools: string[];
+      };
       compatibility: { runtimes: Record<string, string> };
     }>(path.resolve("plugins/wormhole-claude-desktop/manifest.json"));
     const serialized = JSON.stringify(manifest);
@@ -115,9 +122,18 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("blast_radius_analyze");
     expect(manifest.tools.map((tool) => tool.name)).toContain("context_pack_generate");
     expect(manifest.tools.map((tool) => tool.name)).toContain("project_intelligence_snapshot");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("tool_layer_map");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("tool_catalog_query");
     expect(manifest.tools.map((tool) => tool.name)).toContain("next_best_tool");
     expect(manifest.tools.map((tool) => tool.name)).toContain("mission_route");
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_context_prepare");
+    expect(manifest.tool_manifest_policy).toEqual({
+      mode: "compact-guided",
+      source_of_truth: "runtime-tool-registry",
+      full_runtime_tool_surface: true,
+      manifest_tools_are_curated: true,
+      discovery_tools: ["tool_layer_map", "tool_catalog_query"],
+    });
     expect(manifest.tools.map((tool) => tool.name)).toContain("durable_repo_index_refresh");
     expect(manifest.tools.map((tool) => tool.name)).toContain("durable_semantic_search");
     expect(manifest.tools.map((tool) => tool.name)).toContain("test_impact_analyze_v2");
@@ -173,6 +189,12 @@ describe("Claude Desktop extension metadata", () => {
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "next_best_tool",
+    );
+    expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
+      "tool_layer_map",
+    );
+    expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
+      "tool_catalog_query",
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "optimized_command_run",

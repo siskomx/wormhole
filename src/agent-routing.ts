@@ -55,11 +55,31 @@ export type MissionRouteStage = {
   toolCalls: AgentToolCall[];
 };
 
+export type StateMaintenanceAdvice = {
+  discovery: {
+    firstTools: string[];
+    purpose: string;
+  };
+  graph: {
+    ownerTools: string[];
+    refreshWhen: string[];
+  };
+  context: {
+    ownerTools: string[];
+    refreshWhen: string[];
+  };
+  workspace: {
+    ownerTools: string[];
+    useWhen: string[];
+  };
+};
+
 export type MissionRouteRecommendation = {
   repoRoot: string;
   objective: string;
   route: AgentRoute;
   stages: MissionRouteStage[];
+  stateMaintenance: StateMaintenanceAdvice;
   stopRule: string;
 };
 
@@ -70,6 +90,8 @@ export type PreparedAgentContext = {
   route: MissionRouteRecommendation;
   contextPack: ProjectContextPack;
   nextToolCalls: AgentToolCall[];
+  recommendedDiscovery: AgentToolCall[];
+  stateMaintenance: StateMaintenanceAdvice;
   agentInstructions: string;
 };
 
@@ -233,6 +255,7 @@ export function recommendMissionRoute(input: AgentRoutingInput): MissionRouteRec
         ],
       },
     ],
+    stateMaintenance: createStateMaintenanceAdvice(),
     stopRule: "Stop after the gate closes, verification fails, or a blocking question lacks an assumption fallback.",
   };
 }
@@ -254,6 +277,8 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     snapshot,
     route,
     contextPack,
+    recommendedDiscovery: createDiscoveryToolCalls(),
+    stateMaintenance: createStateMaintenanceAdvice(),
     nextToolCalls: [
       toolCall("record_evidence", 90, "Record the context pack and key source files as evidence.", {}, [
         "missionId",
@@ -268,11 +293,49 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
       ]),
     ],
     agentInstructions: [
+      "Start with tool_layer_map before browsing the full MCP surface.",
       "Use this context pack before broad file reads.",
+      "Use tool_catalog_query when the route recommends a plane, phase, pack, risk, or exact tool name.",
       "Prefer the recommended route over browsing the full MCP tool surface.",
+      "Refresh graph and context state only through the stateMaintenance owner tools.",
       "Record source-backed evidence before making implementation claims.",
       "Run focused verification before requesting the gate.",
     ].join(" "),
+  };
+}
+
+function createDiscoveryToolCalls(): AgentToolCall[] {
+  return [
+    toolCall("tool_layer_map", 100, "Inspect the layered tool map before scanning the full MCP surface.", {}),
+    toolCall(
+      "tool_catalog_query",
+      95,
+      "Query the registry by structured filters once the route identifies a plane, phase, pack, risk, or exact tool.",
+      {
+        pack: "core",
+      },
+    ),
+  ];
+}
+
+function createStateMaintenanceAdvice(): StateMaintenanceAdvice {
+  return {
+    discovery: {
+      firstTools: ["tool_layer_map", "tool_catalog_query", "next_best_tool"],
+      purpose: "Use the registry layer to choose a narrow tool pack before lower-level MCP calls.",
+    },
+    graph: {
+      ownerTools: ["durable_repo_index_refresh", "repo_graph_refresh_incremental", "durable_index_status"],
+      refreshWhen: ["repo changes are known", "watch sessions detect changed files", "index status is stale"],
+    },
+    context: {
+      ownerTools: ["ctx_pack_budget_review", "ctx_pack_refresh", "context_pack_generate"],
+      refreshWhen: ["context pack exceeds budget", "pinned or stale records change", "changed files shift the task scope"],
+    },
+    workspace: {
+      ownerTools: ["agent_workspace_create", "agent_workspace_write", "agent_workspace_read", "agent_workspace_merge"],
+      useWhen: ["multiple agents share findings", "parallel workers can conflict", "handoffs need attributed state"],
+    },
   };
 }
 
