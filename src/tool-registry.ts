@@ -41,11 +41,13 @@ export const TOOL_PACKS = [
 ] as const;
 
 export const TOOL_RISKS = ["read", "write", "execute", "policy"] as const;
+export const TOOL_EXPOSURE_MODES = ["full", "guided", "layered"] as const;
 
 export type ToolPlane = (typeof TOOL_PLANES)[number];
 export type ToolPhase = (typeof TOOL_PHASES)[number];
 export type ToolPack = (typeof TOOL_PACKS)[number];
 export type ToolRisk = (typeof TOOL_RISKS)[number];
+export type ToolExposureMode = (typeof TOOL_EXPOSURE_MODES)[number];
 
 export type ToolRegistryEntry = {
   name: string;
@@ -72,11 +74,47 @@ export type ToolCatalogQueryResult = {
   tools: ToolRegistryEntry[];
 };
 
+export type ToolExposureProfileInput = {
+  mode?: ToolExposureMode;
+};
+
+export type ToolExposureProfile = {
+  mode: ToolExposureMode;
+  fullToolSurfaceVisible: boolean;
+  dynamicToolHiding: boolean;
+  visibleTools: string[];
+  hiddenToolCount: number;
+  hiddenTools: string[];
+  recommendedFor: string[];
+};
+
+export type ToolAdmissionApproval = "not_required" | "recommended" | "required";
+
+export type ToolAdmissionDecision = {
+  toolName: string;
+  known: boolean;
+  risk?: ToolRisk;
+  approval: ToolAdmissionApproval;
+  requiredPreflightTools: string[];
+  reasons: string[];
+};
+
+export type ToolAdmissionReviewInput = {
+  toolNames: string[];
+};
+
+export type ToolAdmissionReview = {
+  approval: ToolAdmissionApproval;
+  decisions: ToolAdmissionDecision[];
+};
+
 export type ToolLayerMap = {
   toolCount: number;
   entryTools: string[];
   compatibility: {
     defaultMode: "guided";
+    activeMode: "guided";
+    availableModes: ToolExposureMode[];
     fullToolSurfaceVisible: boolean;
     dynamicToolHiding: boolean;
   };
@@ -176,6 +214,7 @@ const TOOL_NAMES = [
   "repo_change_scan",
   "repo_activity_record",
   "repo_graph_refresh_incremental",
+  "repo_graph_refresh_full",
   "project_contract_detect",
   "dependency_inventory",
   "project_command_map",
@@ -201,10 +240,15 @@ const TOOL_NAMES = [
   "context_pack_generate",
   "project_intelligence_snapshot",
   "tool_layer_map",
+  "tool_exposure_profile",
   "tool_catalog_query",
+  "tool_admission_review",
   "next_best_tool",
   "mission_route",
   "agent_context_prepare",
+  "state_maintenance_run",
+  "state_maintenance_status",
+  "state_maintenance_retry",
   "mission_delta_replan",
   "durable_repo_index_refresh",
   "durable_index_status",
@@ -262,10 +306,13 @@ const TOOL_NAMES = [
 
 const ENTRY_TOOLS = [
   "tool_layer_map",
+  "tool_exposure_profile",
   "tool_catalog_query",
+  "tool_admission_review",
   "next_best_tool",
   "mission_route",
   "agent_context_prepare",
+  "state_maintenance_run",
 ];
 
 const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
@@ -285,9 +332,58 @@ const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
     summary: "Query Wormhole tool metadata by structured filters such as plane, phase, pack, risk, or name.",
     inputs: ["plane", "phase", "pack", "risk", "toolNames", "limit"],
   },
+  tool_exposure_profile: {
+    plane: "mission",
+    phase: "orient",
+    pack: "core",
+    risk: "read",
+    summary: "Describe full, guided, or layered tool exposure without changing the registered MCP surface.",
+    inputs: ["mode"],
+  },
+  tool_admission_review: {
+    plane: "policy",
+    phase: "maintain",
+    pack: "policy-lab",
+    risk: "policy",
+    summary: "Review selected tool names for advisory approval and preflight requirements before write or execute work.",
+    inputs: ["toolNames"],
+  },
   next_best_tool: { plane: "mission", phase: "orient", pack: "core", risk: "read" },
   mission_route: { plane: "mission", phase: "plan", pack: "core", risk: "read" },
   agent_context_prepare: { plane: "mission", phase: "context", pack: "core", risk: "read" },
+  state_maintenance_run: {
+    plane: "coordination",
+    phase: "maintain",
+    pack: "coordination",
+    risk: "write",
+    summary:
+      "Run graph refresh, context-pack refresh, evidence recording, route refresh, and shared workspace updates as one audited maintenance pass.",
+    inputs: [
+      "repoRoot",
+      "missionId",
+      "objective",
+      "changedFiles",
+      "watchId",
+      "context",
+      "workspace",
+    ],
+  },
+  state_maintenance_status: {
+    plane: "coordination",
+    phase: "maintain",
+    pack: "coordination",
+    risk: "read",
+    summary: "Read durable state-maintenance run records, including partial failure status and actions.",
+    inputs: ["runId", "status"],
+  },
+  state_maintenance_retry: {
+    plane: "coordination",
+    phase: "maintain",
+    pack: "coordination",
+    risk: "write",
+    summary: "Retry a prior state-maintenance run from durable input with optional overrides.",
+    inputs: ["runId", "overrides"],
+  },
   project_onboard: { plane: "project", phase: "orient", pack: "large-repo", risk: "read" },
   architecture_map: { plane: "project", phase: "orient", pack: "large-repo", risk: "read" },
   entrypoint_flow_discover: { plane: "project", phase: "orient", pack: "large-repo", risk: "read" },
@@ -306,6 +402,14 @@ const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
     risk: "write",
     summary: "Scan an existing repo watch session and optionally record evidence or refresh graph state.",
     inputs: ["watchId"],
+  },
+  repo_graph_refresh_full: {
+    plane: "project",
+    phase: "maintain",
+    pack: "large-repo",
+    risk: "write",
+    summary: "Run the explicit full durable repo graph rebuild and report impact context for changed files.",
+    inputs: ["repoRoot", "changedFiles", "diffText"],
   },
   lsp_feedback_replan: {
     plane: "project",
@@ -393,10 +497,69 @@ export function toolLayerMap(registry: ToolRegistryEntry[] = TOOL_REGISTRY): Too
     entryTools: [...ENTRY_TOOLS],
     compatibility: {
       defaultMode: "guided",
+      activeMode: "guided",
+      availableModes: [...TOOL_EXPOSURE_MODES],
       fullToolSurfaceVisible: true,
       dynamicToolHiding: false,
     },
     planes: groupByPlane(registry),
+  };
+}
+
+const LAYERED_VISIBLE_TOOLS = [
+  "mission_start",
+  "mission_status",
+  "round_start",
+  "record_evidence",
+  "record_question",
+  "update_question",
+  "gate_request",
+  "tool_layer_map",
+  "tool_exposure_profile",
+  "tool_catalog_query",
+  "tool_admission_review",
+  "next_best_tool",
+  "mission_route",
+  "agent_context_prepare",
+  "project_intelligence_snapshot",
+  "state_maintenance_run",
+  "state_maintenance_status",
+  "state_maintenance_retry",
+];
+
+export function toolExposureProfile(
+  input: ToolExposureProfileInput = {},
+  registry: ToolRegistryEntry[] = TOOL_REGISTRY,
+): ToolExposureProfile {
+  const mode = input.mode ?? "guided";
+  const allTools = registry.map((tool) => tool.name);
+  const visibleSet =
+    mode === "layered"
+      ? new Set(LAYERED_VISIBLE_TOOLS.filter((toolName) => allTools.includes(toolName)))
+      : new Set(allTools);
+  const visibleTools = allTools.filter((toolName) => visibleSet.has(toolName));
+  const hiddenTools = allTools.filter((toolName) => !visibleSet.has(toolName));
+  const fullToolSurfaceVisible = mode !== "layered";
+  return {
+    mode,
+    fullToolSurfaceVisible,
+    dynamicToolHiding: false,
+    visibleTools,
+    hiddenToolCount: hiddenTools.length,
+    hiddenTools,
+    recommendedFor:
+      mode === "layered"
+        ? [
+            "new agents entering a large repo",
+            "clients that want a small startup surface",
+            "guided onboarding before specialist tools are selected",
+          ]
+        : mode === "guided"
+          ? [
+              "capable coding agents that can see all tools but should start from routing and catalog guidance",
+              "default MCP compatibility without dynamic hiding",
+            ]
+          : ["debugging, audits, and clients that intentionally want the full MCP tool list"],
   };
 }
 
@@ -418,6 +581,89 @@ export function queryToolCatalog(
     count: tools.length,
     tools,
   };
+}
+
+const PREFLIGHT_EXEMPT_TOOLS = new Set([
+  "action_policy_review",
+  "tool_admission_review",
+  "patch_checkpoint",
+  "patch_status",
+  "shell_hook_plan",
+  "shell_hook_verify",
+  "tool_factory_validate",
+]);
+
+const ADMISSION_APPROVAL_RANK: Record<ToolAdmissionApproval, number> = {
+  not_required: 0,
+  recommended: 1,
+  required: 2,
+};
+
+export function reviewToolAdmission(
+  input: ToolAdmissionReviewInput,
+  registry: ToolRegistryEntry[] = TOOL_REGISTRY,
+): ToolAdmissionReview {
+  const registryByName = new Map(registry.map((tool) => [tool.name, tool]));
+  const decisions = input.toolNames.map((toolName): ToolAdmissionDecision => {
+    const tool = registryByName.get(toolName);
+    if (!tool) {
+      return {
+        toolName,
+        known: false,
+        approval: "required",
+        requiredPreflightTools: ["action_policy_review"],
+        reasons: ["Tool is not in the Wormhole registry; require explicit policy review before use."],
+      };
+    }
+
+    if (tool.risk === "read" || PREFLIGHT_EXEMPT_TOOLS.has(tool.name)) {
+      return {
+        toolName,
+        known: true,
+        risk: tool.risk,
+        approval: "not_required",
+        requiredPreflightTools: [],
+        reasons: [`${tool.name} is ${tool.risk} risk and can be called directly.`],
+      };
+    }
+
+    const requiredPreflightTools = new Set<string>(["action_policy_review"]);
+    const reasons = [`${tool.name} is ${tool.risk} risk and should be preflighted before use.`];
+
+    if (tool.name === "patch_apply") {
+      requiredPreflightTools.add("patch_checkpoint");
+      reasons.push("Patch application should have a repo-confined checkpoint for rollback.");
+    }
+    if (tool.name === "patch_rollback") {
+      requiredPreflightTools.add("patch_status");
+      reasons.push("Rollback should confirm transaction status before restoring files.");
+    }
+    if (tool.name === "shell_hook_install" || tool.name === "shell_hook_uninstall") {
+      requiredPreflightTools.add("shell_hook_plan");
+      reasons.push("Shell hook edits should be planned before profile files are changed.");
+    }
+    if (tool.name === "tool_factory_write") {
+      requiredPreflightTools.add("tool_factory_validate");
+      reasons.push("Generated tools should validate before files are written.");
+    }
+
+    return {
+      toolName,
+      known: true,
+      risk: tool.risk,
+      approval: "required",
+      requiredPreflightTools: [...requiredPreflightTools],
+      reasons,
+    };
+  });
+  const approval = decisions.reduce<ToolAdmissionApproval>(
+    (current, decision) =>
+      ADMISSION_APPROVAL_RANK[decision.approval] > ADMISSION_APPROVAL_RANK[current]
+        ? decision.approval
+        : current,
+    "not_required",
+  );
+  return { approval, decisions };
 }
 
 function createRegistryEntry(name: string): ToolRegistryEntry {

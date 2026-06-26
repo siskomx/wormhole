@@ -1,5 +1,6 @@
 import path from "node:path";
 import { homedir } from "node:os";
+import { randomUUID } from "node:crypto";
 import { createBehaviorPolicyStore, type BehaviorMode } from "./behavior-policy.js";
 import { captureBrowserNetwork } from "./browser-capture.js";
 import {
@@ -27,6 +28,7 @@ import {
 import { createGraphArtifacts, type GraphCommunity } from "./graph-artifacts.js";
 import type {
   EvidenceInput,
+  EvidenceRecord,
   PlanInput,
   ControlAckInput,
   ControlMessageInput,
@@ -163,8 +165,12 @@ import {
 } from "./patch-transactions.js";
 import {
   queryToolCatalog as queryRegistryToolCatalog,
+  reviewToolAdmission as reviewRegistryToolAdmission,
+  toolExposureProfile as createRegistryToolExposureProfile,
   toolLayerMap as createRegistryToolLayerMap,
+  type ToolAdmissionReviewInput,
   type ToolCatalogQueryInput,
+  type ToolExposureProfileInput,
 } from "./tool-registry.js";
 import {
   analyzeAgentDrift,
@@ -242,6 +248,76 @@ export type ToolHandlerOptions = {
   runtimeStatePath?: string;
 };
 
+export type StateMaintenanceAction = {
+  toolName: string;
+  status: "ran" | "skipped" | "failed";
+  reason?: string;
+};
+
+export type StateMaintenanceContextInput = {
+  maxChars: number;
+  recordIds?: string[];
+  pinnedRecordIds?: string[];
+  staleRecordIds?: string[];
+};
+
+export type StateMaintenanceWorkspaceInput = {
+  workspaceId: string;
+  runId?: string;
+  key?: string;
+  value?: unknown;
+  visibility?: "shared" | "private";
+  merge?: boolean;
+  runIds?: string[];
+};
+
+export type StateMaintenanceRunInput = {
+  repoRoot: string;
+  missionId?: string;
+  objective: string;
+  query?: string;
+  changedFiles?: string[];
+  diffText?: string;
+  watchId?: string;
+  scanWatch?: boolean;
+  refreshGraph?: boolean;
+  recordEvidence?: boolean;
+  context?: StateMaintenanceContextInput;
+  workspace?: StateMaintenanceWorkspaceInput;
+};
+
+export type StateMaintenanceRunStatus = "running" | "completed" | "failed";
+
+export type StateMaintenanceRunRecord = {
+  runId: string;
+  retryOf?: string;
+  status: StateMaintenanceRunStatus;
+  repoRoot: string;
+  missionId?: string;
+  objective: string;
+  query: string;
+  input: StateMaintenanceRunInput;
+  changedFiles: string[];
+  actions: StateMaintenanceAction[];
+  startedAt: string;
+  updatedAt: string;
+  error?: string;
+};
+
+export type StateMaintenanceSnapshot = {
+  runs: StateMaintenanceRunRecord[];
+};
+
+export type StateMaintenanceStatusInput = {
+  runId?: string;
+  status?: StateMaintenanceRunStatus;
+};
+
+export type StateMaintenanceRetryInput = {
+  runId: string;
+  overrides?: Partial<StateMaintenanceRunInput>;
+};
+
 type RuntimeToolState = {
   agents?: Partial<AgentRegistrySnapshot>;
   printingPress?: Partial<PrintingPressRegistrySnapshot>;
@@ -257,6 +333,7 @@ type RuntimeToolState = {
   agentWorkspace?: Partial<AgentWorkspaceSnapshot>;
   repoActivity?: Partial<RepoActivitySnapshot>;
   patchTransactions?: Partial<PatchTransactionSnapshot>;
+  stateMaintenance?: Partial<StateMaintenanceSnapshot>;
 };
 
 function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): string {
@@ -383,6 +460,21 @@ export function createToolHandlers(
   const patchTransactionStore = createPatchTransactionStore(runtimeState.patchTransactions, (snapshot) =>
     persistRuntimeState("patchTransactions", snapshot),
   );
+  const stateMaintenanceRuns = new Map<string, StateMaintenanceRunRecord>(
+    (runtimeState.stateMaintenance?.runs ?? []).map((run) => [run.runId, run]),
+  );
+  function cloneStateMaintenanceRun(run: StateMaintenanceRunRecord): StateMaintenanceRunRecord {
+    return JSON.parse(JSON.stringify(run)) as StateMaintenanceRunRecord;
+  }
+  function persistStateMaintenance(): void {
+    persistRuntimeState("stateMaintenance", {
+      runs: [...stateMaintenanceRuns.values()].map((run) => cloneStateMaintenanceRun(run)),
+    });
+  }
+  function saveStateMaintenanceRun(run: StateMaintenanceRunRecord): void {
+    stateMaintenanceRuns.set(run.runId, cloneStateMaintenanceRun(run));
+    persistStateMaintenance();
+  }
   const lspSessionManager = createLspSessionManager();
   const shellHookPlans = new Map<string, {
     operations: ShellHookOperation[];
@@ -406,6 +498,252 @@ export function createToolHandlers(
     repoIndexes.set(cacheKey, index);
     evictOldestRepoIndex(repoIndexes, maxCachedRepoIndexes);
     return index;
+  }
+
+  function refreshRepoGraphForChangedFiles(input: {
+    repoRoot: string;
+    changedFiles: string[];
+    diffText?: string;
+  }) {
+    const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+    const changedFiles = uniqueSorted(input.changedFiles.map((file) => repoRelativePath(repoRoot, file)));
+    const index = refreshDurableRepoIndex({ repoRoot });
+    repoIndexes.delete(createRepoIndexCacheKey({ repoRoot }));
+    const testImpact = analyzeTestImpactV2({
+      repoRoot,
+      changedFiles,
+      diffText: input.diffText,
+    });
+    const activity = repoActivityStore.recordActivity({
+      repoRoot,
+      kind: "graph_refreshed",
+      summary: `Refreshed repo graph for changed files: ${changedFiles.join(", ")}.`,
+      paths: changedFiles,
+      metadata: {
+        refreshMode: "full_rebuild",
+        indexPath: index.indexPath,
+        fileCount: index.summary.fileCount,
+        edgeCount: index.summary.edgeCount,
+      },
+    });
+    return {
+      repoRoot,
+      changedFiles,
+      refreshMode: "full_rebuild" as const,
+      index,
+      testImpact,
+      activity,
+    };
+  }
+
+  function runStateMaintenance(input: StateMaintenanceRunInput, retryOf?: string) {
+    const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+    const query = input.query ?? input.objective;
+    const actions: StateMaintenanceAction[] = [];
+    const recordedEvidence: EvidenceRecord[] = [];
+    let changedFiles = uniqueSorted((input.changedFiles ?? []).map((file) => repoRelativePath(repoRoot, file)));
+    const startedAt = new Date().toISOString();
+    const runRecord: StateMaintenanceRunRecord = {
+      runId: `state-maintenance:${randomUUID()}`,
+      ...(retryOf ? { retryOf } : {}),
+      status: "running",
+      repoRoot,
+      missionId: input.missionId,
+      objective: input.objective,
+      query,
+      input: {
+        ...input,
+        repoRoot,
+        changedFiles,
+      },
+      changedFiles,
+      actions,
+      startedAt,
+      updatedAt: startedAt,
+    };
+    let watchScan:
+      | ReturnType<ReturnType<typeof createRepoActivityStore>["scanWatch"]>
+      | undefined;
+    let graph:
+      | ReturnType<typeof refreshRepoGraphForChangedFiles>
+      | undefined;
+    let context:
+      | ReturnType<ReturnType<typeof createContextStore>["refreshPack"]>
+      | undefined;
+    let workspace:
+      | {
+          written?: ReturnType<ReturnType<typeof createAgentWorkspaceStore>["write"]>;
+          merge?: ReturnType<ReturnType<typeof createAgentWorkspaceStore>["merge"]>;
+        }
+      | undefined;
+    let route: ReturnType<typeof recommendMissionRoute> | undefined;
+    let currentToolName = "state_maintenance_run";
+
+    function addAction(action: StateMaintenanceAction): void {
+      actions.push(action);
+      runRecord.actions = [...actions];
+      runRecord.changedFiles = [...changedFiles];
+      runRecord.updatedAt = new Date().toISOString();
+      saveStateMaintenanceRun(runRecord);
+    }
+
+    function finish(status: StateMaintenanceRunStatus, error?: string) {
+      runRecord.status = status;
+      runRecord.error = error;
+      runRecord.actions = [...actions];
+      runRecord.changedFiles = [...changedFiles];
+      runRecord.updatedAt = new Date().toISOString();
+      saveStateMaintenanceRun(runRecord);
+      return {
+        runId: runRecord.runId,
+        ...(runRecord.retryOf ? { retryOf: runRecord.retryOf } : {}),
+        status: runRecord.status,
+        startedAt: runRecord.startedAt,
+        updatedAt: runRecord.updatedAt,
+        ...(runRecord.error ? { error: runRecord.error } : {}),
+        repoRoot,
+        missionId: input.missionId,
+        objective: input.objective,
+        query,
+        changedFiles,
+        actions,
+        ...(watchScan ? { watchScan } : {}),
+        ...(graph ? { graph } : {}),
+        ...(context ? { context } : {}),
+        recordedEvidence,
+        ...(workspace ? { workspace } : {}),
+        ...(route ? { route } : {}),
+      };
+    }
+
+    saveStateMaintenanceRun(runRecord);
+
+    try {
+      if (input.watchId && input.scanWatch !== false) {
+        currentToolName = "repo_watch_scan";
+        watchScan = repoActivityStore.scanWatch({ watchId: input.watchId });
+        resolveAllowedRepoRoot(watchScan.repoRoot, allowedRepoRoots);
+        changedFiles = uniqueSorted([...changedFiles, ...watchScan.changedFiles]);
+        addAction({ toolName: "repo_watch_scan", status: "ran" });
+      }
+
+      if (input.refreshGraph || (input.refreshGraph !== false && changedFiles.length > 0)) {
+        currentToolName = "repo_graph_refresh_incremental";
+        if (changedFiles.length > 0) {
+          graph = refreshRepoGraphForChangedFiles({
+            repoRoot,
+            changedFiles,
+            diffText: input.diffText,
+          });
+          addAction({ toolName: "repo_graph_refresh_incremental", status: "ran" });
+        } else {
+          addAction({
+            toolName: "repo_graph_refresh_incremental",
+            status: "skipped",
+            reason: "No changed files were supplied or discovered.",
+          });
+        }
+      }
+
+      if (input.context) {
+        currentToolName = "ctx_pack_refresh";
+        context = contextStore.refreshPack({
+          objective: input.objective,
+          query,
+          maxChars: input.context.maxChars,
+          recordIds: input.context.recordIds,
+          pinnedRecordIds: input.context.pinnedRecordIds,
+          staleRecordIds: input.context.staleRecordIds,
+          changedFiles,
+        });
+        addAction({ toolName: "ctx_pack_refresh", status: "ran" });
+      }
+
+      if (input.recordEvidence) {
+        currentToolName = "record_evidence";
+        if (input.missionId) {
+          recordedEvidence.push(
+            kernel.recordEvidence(input.missionId, {
+              sourceType: "derived_note",
+              retrievalMethod: "state_maintenance_run",
+              summary:
+                changedFiles.length > 0
+                  ? `State maintenance refreshed changed files: ${changedFiles.join(", ")}.`
+                  : "State maintenance ran without changed files.",
+              rawContent: JSON.stringify(
+                {
+                  changedFiles,
+                  graphRefreshMode: graph?.refreshMode,
+                  graphIndexPath: graph?.index.indexPath,
+                  contextPackId: context?.pack.packId,
+                  watchId: input.watchId,
+                },
+                null,
+                2,
+              ),
+            }),
+          );
+          addAction({ toolName: "record_evidence", status: "ran" });
+        } else {
+          addAction({
+            toolName: "record_evidence",
+            status: "skipped",
+            reason: "recordEvidence requires missionId.",
+          });
+        }
+      }
+
+      if (input.workspace) {
+        workspace = {};
+        if (input.workspace.key) {
+          currentToolName = "agent_workspace_write";
+          workspace.written = agentWorkspaceStore.write({
+            workspaceId: input.workspace.workspaceId,
+            runId: input.workspace.runId,
+            key: input.workspace.key,
+            value:
+              input.workspace.value ??
+              {
+                changedFiles,
+                graphRefreshMode: graph?.refreshMode,
+                contextPackId: context?.pack.packId,
+              },
+            visibility: input.workspace.visibility,
+            provenance:
+              recordedEvidence.length > 0
+                ? {
+                    evidenceIds: recordedEvidence.map((record) => record.evidenceId),
+                  }
+                : undefined,
+          });
+          addAction({ toolName: "agent_workspace_write", status: "ran" });
+        }
+        if (input.workspace.merge) {
+          currentToolName = "agent_workspace_merge";
+          workspace.merge = agentWorkspaceStore.merge({
+            workspaceId: input.workspace.workspaceId,
+            runIds: input.workspace.runIds,
+          });
+          addAction({ toolName: "agent_workspace_merge", status: "ran" });
+        }
+      }
+
+      currentToolName = "mission_route";
+      route = recommendMissionRoute({
+        repoRoot,
+        objective: input.objective,
+        query,
+        changedFiles,
+        diffText: input.diffText,
+      });
+      addAction({ toolName: "mission_route", status: "ran" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      addAction({ toolName: currentToolName, status: "failed", reason: message });
+      return finish("failed", message);
+    }
+
+    return finish("completed");
   }
 
   return {
@@ -1084,33 +1422,15 @@ export function createToolHandlers(
       changedFiles: string[];
       diffText?: string;
     }) {
-      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      const changedFiles = uniqueSorted(input.changedFiles.map((file) => repoRelativePath(repoRoot, file)));
-      const index = refreshDurableRepoIndex({ repoRoot });
-      repoIndexes.delete(createRepoIndexCacheKey({ repoRoot }));
-      const testImpact = analyzeTestImpactV2({
-        repoRoot,
-        changedFiles,
-        diffText: input.diffText,
-      });
-      const activity = repoActivityStore.recordActivity({
-        repoRoot,
-        kind: "graph_refreshed",
-        summary: `Refreshed repo graph for changed files: ${changedFiles.join(", ")}.`,
-        paths: changedFiles,
-        metadata: {
-          indexPath: index.indexPath,
-          fileCount: index.summary.fileCount,
-          edgeCount: index.summary.edgeCount,
-        },
-      });
-      return {
-        repoRoot,
-        changedFiles,
-        index,
-        testImpact,
-        activity,
-      };
+      return refreshRepoGraphForChangedFiles(input);
+    },
+
+    repoGraphRefreshFull(input: {
+      repoRoot: string;
+      changedFiles: string[];
+      diffText?: string;
+    }) {
+      return refreshRepoGraphForChangedFiles(input);
     },
 
     projectContractDetect(input: { repoRoot: string }): ProjectContract {
@@ -1296,8 +1616,16 @@ export function createToolHandlers(
       return createRegistryToolLayerMap();
     },
 
+    toolExposureProfile(input: ToolExposureProfileInput = {}) {
+      return createRegistryToolExposureProfile(input);
+    },
+
     toolCatalogQuery(input: ToolCatalogQueryInput = {}) {
       return queryRegistryToolCatalog(input);
+    },
+
+    toolAdmissionReview(input: ToolAdmissionReviewInput) {
+      return reviewRegistryToolAdmission(input);
     },
 
     nextBestTool(input: Parameters<typeof recommendNextBestTool>[0]) {
@@ -1313,6 +1641,32 @@ export function createToolHandlers(
     agentContextPrepare(input: Parameters<typeof prepareAgentContext>[0]) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return prepareAgentContext({ ...input, repoRoot });
+    },
+
+    stateMaintenanceRun(input: StateMaintenanceRunInput) {
+      return runStateMaintenance(input);
+    },
+
+    stateMaintenanceStatus(input: StateMaintenanceStatusInput = {}) {
+      const runs = [...stateMaintenanceRuns.values()]
+        .filter((run) => !input.runId || run.runId === input.runId)
+        .filter((run) => !input.status || run.status === input.status)
+        .map((run) => cloneStateMaintenanceRun(run));
+      return { runs, count: runs.length };
+    },
+
+    stateMaintenanceRetry(input: StateMaintenanceRetryInput) {
+      const previousRun = stateMaintenanceRuns.get(input.runId);
+      if (!previousRun) {
+        throw new Error(`State maintenance run not found: ${input.runId}`);
+      }
+      return runStateMaintenance(
+        {
+          ...cloneStateMaintenanceRun(previousRun).input,
+          ...(input.overrides ?? {}),
+        },
+        previousRun.runId,
+      );
     },
 
     missionDeltaReplan(

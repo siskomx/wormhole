@@ -93,6 +93,12 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("repo_watch_start");
     expect(manifest.tools.map((tool) => tool.name)).toContain("repo_watch_scan");
     expect(manifest.tools.map((tool) => tool.name)).toContain("repo_graph_refresh_incremental");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("repo_graph_refresh_full");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("state_maintenance_run");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("state_maintenance_status");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("state_maintenance_retry");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("tool_exposure_profile");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("tool_admission_review");
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_workspace_merge");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_plan_local");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_run_local");
@@ -200,6 +206,9 @@ describe("Claude Desktop extension metadata", () => {
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "tool_catalog_query",
+    );
+    expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
+      "state_maintenance_run",
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "optimized_command_run",

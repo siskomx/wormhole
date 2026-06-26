@@ -56,6 +56,11 @@ export type MissionRouteStage = {
 };
 
 export type StateMaintenanceAdvice = {
+  coordinator: {
+    toolName: "state_maintenance_run";
+    purpose: string;
+    useWhen: string[];
+  };
   discovery: {
     firstTools: string[];
     purpose: string;
@@ -320,6 +325,15 @@ function createDiscoveryToolCalls(): AgentToolCall[] {
 
 function createStateMaintenanceAdvice(): StateMaintenanceAdvice {
   return {
+    coordinator: {
+      toolName: "state_maintenance_run",
+      purpose: "Run graph, context, evidence, route, and shared-workspace maintenance as one audited tool call.",
+      useWhen: [
+        "repo changes need graph and context refresh together",
+        "watch scans detect changed files",
+        "parallel workers need shared maintenance state",
+      ],
+    },
     discovery: {
       firstTools: ["tool_layer_map", "tool_catalog_query", "next_best_tool"],
       purpose: "Use the registry layer to choose a narrow tool pack before lower-level MCP calls.",

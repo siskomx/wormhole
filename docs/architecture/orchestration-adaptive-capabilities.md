@@ -145,6 +145,7 @@ Project intelligence sequencing composes the ground-truth tools into a higher-le
 - `mission_delta_replan` and `lsp_feedback_replan` re-scope missions from changed files, diagnostics, stale evidence, and LSP/typecheck feedback.
 - `dependency_security_report` summarizes package/lockfile metadata, direct and transitive counts, license data, and local-only vulnerability-provider status.
 - `action_policy_review` classifies proposed commands, file writes, deletes, tool writes, and network actions with approval and rollback guidance.
+- `tool_admission_review` maps selected Wormhole tool names to advisory preflight requirements, so write/execute tools can point agents at `action_policy_review`, `patch_checkpoint`, `shell_hook_plan`, or validation tools before side effects.
 - `patch_checkpoint`, `patch_apply`, `patch_status`, and `patch_rollback` provide repo-confined unified-diff transactions with before-content snapshots and rollback metadata.
 - `lsp_session_start`, `lsp_session_request`, `lsp_session_status`, `lsp_session_list`, and `lsp_session_stop` provide bounded process-local JSON-RPC session management for installed language servers.
 - `optimization_adapter_register`, `optimization_adapter_select`, `optimization_adapter_list`, and `optimization_adapter_run` implement native, CLI, and HTTP optimization adapter contracts.
@@ -157,6 +158,11 @@ Wormhole now has native coordination tools for the mid-session states that usual
 
 - `ctx_pack_budget_review` explains which context records will be retained or evicted from a budgeted pack using pinned records, stale-record ids, changed-file relevance, query score, and explicit eviction reasons.
 - `ctx_pack_refresh` creates a refreshed context pack from that review instead of silently truncating context.
+- `state_maintenance_run` coordinates watch-scan results, durable graph refresh, context-pack refresh, evidence recording, route refresh, and shared workspace writes/merges in one audited tool response. It records each step durably, returns failed partial runs instead of throwing away the audit trail, and remains explicit and caller-triggered; Wormhole does not run a hidden daemon.
+- `state_maintenance_status` reads completed and failed maintenance records after reconnects or handoffs.
+- `state_maintenance_retry` reruns a previous maintenance input with optional corrected overrides.
+- `repo_graph_refresh_full` is the explicit full durable repo-index rebuild.
+- `repo_graph_refresh_incremental` is retained as a compatibility alias that currently performs the same full rebuild and returns `refreshMode: "full_rebuild"` while using changed files for impact analysis and activity metadata. It is not a partial graph-mutation engine yet.
 - `lsp_feedback_replan` normalizes LSP diagnostics, records them in runtime diagnostics, infers repo-relative changed files, and feeds `mission_delta_replan`.
 - `agent_workspace_create`, `agent_workspace_write`, `agent_workspace_read`, and `agent_workspace_merge` provide shared mission workspace memory for concurrent agents, with run attribution, provenance, snapshot persistence, and conflict detection.
 - `orchestration_policy_live_feedback` records live outcomes and returns bounded advisory hints. It does not train or activate learned policies; activation remains replay-gated through `orchestration_policy_evaluate` and `orchestration_policy_activate`.
@@ -223,10 +229,10 @@ Wormhole's tool factory is implemented as a bounded native tool-spec pipeline: H
 Wormhole implements these runtime surfaces as first-class native capabilities:
 
 - Repo graph artifacts: `repo_index_*`, `repo_graph_export`, `python_graph_metrics`, and `python_graph_communities`.
-- Repo activity watch layer: `repo_watch_*`, `repo_change_scan`, `repo_activity_record`, and `repo_graph_refresh_incremental`.
+- Repo activity watch layer: `repo_watch_*`, `repo_change_scan`, `repo_activity_record`, `repo_graph_refresh_incremental`, `repo_graph_refresh_full`, and `state_maintenance_*`.
 - Project ground truth: `project_contract_detect`, `diagnostics_*`, `impact_analyze`, `test_plan_select`, `verification_run`, `secret_scan`, `operation_risk_review`, `semantic_*`, and `lsp_*`.
-- Project-intelligence sequencing: `project_onboard`, durable index tools, LSP session tools, `test_impact_analyze_v2`, `dependency_security_report`, `action_policy_review`, patch transaction tools, and `optimization_adapter_*`.
-- Coordination feedback loop: `ctx_pack_budget_review`, `ctx_pack_refresh`, `lsp_feedback_replan`, `agent_workspace_*`, and `orchestration_policy_live_feedback`.
+- Project-intelligence sequencing: `project_onboard`, durable index tools, LSP session tools, `test_impact_analyze_v2`, `dependency_security_report`, `action_policy_review`, `tool_admission_review`, patch transaction tools, and `optimization_adapter_*`.
+- Coordination feedback loop: `ctx_pack_budget_review`, `ctx_pack_refresh`, `state_maintenance_*`, `lsp_feedback_replan`, `agent_workspace_*`, and `orchestration_policy_live_feedback`.
 - Optimized command runner: `optimization_apply`, `optimization_retrieve`, `optimized_command_run`, and `optimization_stats`.
 - Native tool factory: `printing_press_*` runtime tools and `tool_factory_generate`.
 - Deterministic conductor: `model_profile_*`, `conductor_plan`, and `conductor_replay`.

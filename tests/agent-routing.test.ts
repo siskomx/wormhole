@@ -146,6 +146,7 @@ describe("agent-facing routing tools", () => {
         "tool_catalog_query",
         "next_best_tool",
       ]);
+      expect(route.stateMaintenance.coordinator.toolName).toBe("state_maintenance_run");
       expect(route.stateMaintenance.context.ownerTools).toEqual(
         expect.arrayContaining(["ctx_pack_budget_review", "ctx_pack_refresh"]),
       );
@@ -178,6 +179,7 @@ describe("agent-facing routing tools", () => {
         "tool_layer_map",
         "tool_catalog_query",
       ]);
+      expect(prepared.stateMaintenance.coordinator.toolName).toBe("state_maintenance_run");
       expect(prepared.stateMaintenance.context.ownerTools).toContain("ctx_pack_refresh");
       expect(prepared.agentInstructions).toContain("Start with tool_layer_map before browsing the full MCP surface.");
     } finally {

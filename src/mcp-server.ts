@@ -2,7 +2,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { WormholeKernel } from "./kernel.js";
 import { createToolHandlers, type ToolHandlerOptions } from "./tools.js";
-import { TOOL_PACKS, TOOL_PHASES, TOOL_PLANES, TOOL_RISKS } from "./tool-registry.js";
+import {
+  TOOL_EXPOSURE_MODES,
+  TOOL_PACKS,
+  TOOL_PHASES,
+  TOOL_PLANES,
+  TOOL_RISKS,
+} from "./tool-registry.js";
 
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
@@ -291,6 +297,7 @@ export function createWormholeMcpServer(
   const toolPhaseSchema = z.enum(TOOL_PHASES);
   const toolPackSchema = z.enum(TOOL_PACKS);
   const toolRiskSchema = z.enum(TOOL_RISKS);
+  const toolExposureModeSchema = z.enum(TOOL_EXPOSURE_MODES);
 
   server.registerTool(
     "mission_start",
@@ -1467,6 +1474,19 @@ export function createWormholeMcpServer(
   );
 
   server.registerTool(
+    "repo_graph_refresh_full",
+    {
+      description: "Run the explicit full durable repo graph rebuild and return impact-aware graph context.",
+      inputSchema: {
+        repoRoot: z.string(),
+        changedFiles: z.array(z.string()),
+        diffText: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.repoGraphRefreshFull(input)),
+  );
+
+  server.registerTool(
     "project_contract_detect",
     {
       description: "Detect package manager, scripts, dependencies, env hints, lockfiles, and ports for a repo.",
@@ -1774,6 +1794,17 @@ export function createWormholeMcpServer(
   );
 
   server.registerTool(
+    "tool_exposure_profile",
+    {
+      description: "Describe full, guided, or layered tool exposure without changing the registered MCP tool surface.",
+      inputSchema: {
+        mode: toolExposureModeSchema.optional(),
+      },
+    },
+    async (input) => jsonResult(tools.toolExposureProfile(input)),
+  );
+
+  server.registerTool(
     "tool_catalog_query",
     {
       description: "Query Wormhole tool metadata by structured plane, phase, pack, risk, or tool-name filters.",
@@ -1787,6 +1818,17 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.toolCatalogQuery(input)),
+  );
+
+  server.registerTool(
+    "tool_admission_review",
+    {
+      description: "Review selected tools for advisory approval and preflight requirements before write or execute work.",
+      inputSchema: {
+        toolNames: z.array(z.string()),
+      },
+    },
+    async (input) => jsonResult(tools.toolAdmissionReview(input)),
   );
 
   server.registerTool(
@@ -1838,6 +1880,102 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.agentContextPrepare(input)),
+  );
+
+  server.registerTool(
+    "state_maintenance_run",
+    {
+      description:
+        "Coordinate graph refresh, context-pack refresh, evidence recording, route refresh, and shared workspace updates in one audited maintenance call.",
+      inputSchema: {
+        repoRoot: z.string(),
+        missionId: z.string().optional(),
+        objective: z.string(),
+        query: z.string().optional(),
+        changedFiles: z.array(z.string()).optional(),
+        diffText: z.string().optional(),
+        watchId: z.string().optional(),
+        scanWatch: z.boolean().optional(),
+        refreshGraph: z.boolean().optional(),
+        recordEvidence: z.boolean().optional(),
+        context: z
+          .object({
+            maxChars: z.number(),
+            recordIds: z.array(z.string()).optional(),
+            pinnedRecordIds: z.array(z.string()).optional(),
+            staleRecordIds: z.array(z.string()).optional(),
+          })
+          .optional(),
+        workspace: z
+          .object({
+            workspaceId: z.string(),
+            runId: z.string().optional(),
+            key: z.string().optional(),
+            value: z.unknown().optional(),
+            visibility: z.enum(["shared", "private"]).optional(),
+            merge: z.boolean().optional(),
+            runIds: z.array(z.string()).optional(),
+          })
+          .optional(),
+      },
+    },
+    async (input) => jsonResult(tools.stateMaintenanceRun(input)),
+  );
+
+  server.registerTool(
+    "state_maintenance_status",
+    {
+      description: "Read durable state-maintenance run records, including completed and partial failed runs.",
+      inputSchema: {
+        runId: z.string().optional(),
+        status: z.enum(["running", "completed", "failed"]).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.stateMaintenanceStatus(input)),
+  );
+
+  server.registerTool(
+    "state_maintenance_retry",
+    {
+      description: "Retry a prior state-maintenance run from durable input with optional corrected overrides.",
+      inputSchema: {
+        runId: z.string(),
+        overrides: z
+          .object({
+            repoRoot: z.string().optional(),
+            missionId: z.string().optional(),
+            objective: z.string().optional(),
+            query: z.string().optional(),
+            changedFiles: z.array(z.string()).optional(),
+            diffText: z.string().optional(),
+            watchId: z.string().optional(),
+            scanWatch: z.boolean().optional(),
+            refreshGraph: z.boolean().optional(),
+            recordEvidence: z.boolean().optional(),
+            context: z
+              .object({
+                maxChars: z.number(),
+                recordIds: z.array(z.string()).optional(),
+                pinnedRecordIds: z.array(z.string()).optional(),
+                staleRecordIds: z.array(z.string()).optional(),
+              })
+              .optional(),
+            workspace: z
+              .object({
+                workspaceId: z.string(),
+                runId: z.string().optional(),
+                key: z.string().optional(),
+                value: z.unknown().optional(),
+                visibility: z.enum(["shared", "private"]).optional(),
+                merge: z.boolean().optional(),
+                runIds: z.array(z.string()).optional(),
+              })
+              .optional(),
+          })
+          .optional(),
+      },
+    },
+    async (input) => jsonResult(tools.stateMaintenanceRetry(input)),
   );
 
   server.registerTool(
