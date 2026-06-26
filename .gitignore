@@ -5,8 +5,10 @@ coverage/
 *.log
 __pycache__/
 *.pyc
+
+# Local/generated analysis artifacts.
 agent_tooling_analysis.md
 docs/architecture/layered-tool-loading-map.md
 docs/architecture/wormhole-tool-function-inventory.md
-docs/superpowers/plans/2026-06-26-layered-tool-loading.md
+docs/superpowers/
 security_best_practices_report.md
