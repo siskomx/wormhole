@@ -25,6 +25,7 @@ export * from "./printing-press.js";
 export * from "./repo-index.js";
 export * from "./runtime-state.js";
 export * from "./tool-factory.js";
+export * from "./tool-registry.js";
 export * from "./orchestration-runner.js";
 export * from "./project-contract.js";
 export * from "./diagnostics.js";

@@ -38,6 +38,8 @@ describe("Wormhole MCP server", () => {
         "blast_radius_analyze",
         "context_pack_generate",
         "project_intelligence_snapshot",
+        "tool_layer_map",
+        "tool_catalog_query",
         "next_best_tool",
         "mission_route",
         "agent_context_prepare",

@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { WormholeKernel } from "./kernel.js";
 import { createToolHandlers, type ToolHandlerOptions } from "./tools.js";
+import { TOOL_PACKS, TOOL_PHASES, TOOL_PLANES, TOOL_RISKS } from "./tool-registry.js";
 
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
@@ -286,6 +287,10 @@ export function createWormholeMcpServer(
     "graph_refreshed",
     "note",
   ]);
+  const toolPlaneSchema = z.enum(TOOL_PLANES);
+  const toolPhaseSchema = z.enum(TOOL_PHASES);
+  const toolPackSchema = z.enum(TOOL_PACKS);
+  const toolRiskSchema = z.enum(TOOL_RISKS);
 
   server.registerTool(
     "mission_start",
@@ -1757,6 +1762,31 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.projectIntelligenceSnapshot(input)),
+  );
+
+  server.registerTool(
+    "tool_layer_map",
+    {
+      description: "Return the read-only layered Wormhole tool map with planes, phases, packs, and entry tools.",
+      inputSchema: {},
+    },
+    async () => jsonResult(tools.toolLayerMap()),
+  );
+
+  server.registerTool(
+    "tool_catalog_query",
+    {
+      description: "Query Wormhole tool metadata by structured plane, phase, pack, risk, or tool-name filters.",
+      inputSchema: {
+        plane: toolPlaneSchema.optional(),
+        phase: toolPhaseSchema.optional(),
+        pack: toolPackSchema.optional(),
+        risk: toolRiskSchema.optional(),
+        toolNames: z.array(z.string()).optional(),
+        limit: z.number().int().min(1).max(200).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.toolCatalogQuery(input)),
   );
 
   server.registerTool(

@@ -141,6 +141,15 @@ describe("agent-facing routing tools", () => {
       expect(route.stages.flatMap((stage) => stage.toolCalls.map((call) => call.toolName))).toEqual(
         expect.arrayContaining(["architecture_map", "blast_radius_analyze", "context_pack_generate", "verification_run"]),
       );
+      expect(route.stateMaintenance.discovery.firstTools).toEqual([
+        "tool_layer_map",
+        "tool_catalog_query",
+        "next_best_tool",
+      ]);
+      expect(route.stateMaintenance.context.ownerTools).toEqual(
+        expect.arrayContaining(["ctx_pack_budget_review", "ctx_pack_refresh"]),
+      );
+      expect(route.stateMaintenance.graph.ownerTools).toContain("durable_repo_index_refresh");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
@@ -165,7 +174,12 @@ describe("agent-facing routing tools", () => {
         expect.arrayContaining(["record_evidence", "test_plan_select", "gate_request"]),
       );
       expect(prepared.nextToolCalls.find((call) => call.toolName === "record_evidence")?.missingInput).toContain("missionId");
-      expect(prepared.agentInstructions).toContain("Use this context pack before broad file reads.");
+      expect(prepared.recommendedDiscovery.map((call) => call.toolName)).toEqual([
+        "tool_layer_map",
+        "tool_catalog_query",
+      ]);
+      expect(prepared.stateMaintenance.context.ownerTools).toContain("ctx_pack_refresh");
+      expect(prepared.agentInstructions).toContain("Start with tool_layer_map before browsing the full MCP surface.");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
@@ -194,6 +208,10 @@ describe("agent-facing routing tools", () => {
           maxChars: 2_000,
         }).contextPack.rendered,
       ).toContain("Context Pack");
+      expect(tools.toolLayerMap().entryTools).toContain("tool_catalog_query");
+      expect(tools.toolCatalogQuery({ plane: "project", phase: "orient" }).tools.map((tool) => tool.name)).toEqual(
+        expect.arrayContaining(["architecture_map", "entrypoint_flow_discover"]),
+      );
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

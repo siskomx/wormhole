@@ -162,6 +162,11 @@ import {
   type PatchVerificationCommand,
 } from "./patch-transactions.js";
 import {
+  queryToolCatalog as queryRegistryToolCatalog,
+  toolLayerMap as createRegistryToolLayerMap,
+  type ToolCatalogQueryInput,
+} from "./tool-registry.js";
+import {
   analyzeAgentDrift,
   createAgentRemit,
   createRemitCoverageReport,
@@ -1285,6 +1290,14 @@ export function createToolHandlers(
     projectIntelligenceSnapshot(input: Parameters<typeof createProjectIntelligenceSnapshot>[0]) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return createProjectIntelligenceSnapshot({ ...input, repoRoot });
+    },
+
+    toolLayerMap() {
+      return createRegistryToolLayerMap();
+    },
+
+    toolCatalogQuery(input: ToolCatalogQueryInput = {}) {
+      return queryRegistryToolCatalog(input);
     },
 
     nextBestTool(input: Parameters<typeof recommendNextBestTool>[0]) {
