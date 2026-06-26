@@ -106,6 +106,38 @@ describe("project model cache", () => {
     }
   });
 
+  it("reuses derived project intelligence across repeated agent context preparation", () => {
+    const repoRoot = createFixtureRepo();
+    const counter = { builds: 0 };
+    const projectModelCache = countingCache(counter);
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+        projectModelCache,
+      });
+      const input = {
+        repoRoot,
+        objective: "Change user loading behavior",
+        query: "load user API tests",
+        changedFiles: ["src/services/user-service.ts"],
+        maxChars: 2_000,
+      };
+
+      const first = tools.agentContextPrepare(input);
+      const afterFirst = projectModelCache.stats();
+      const second = tools.agentContextPrepare(input);
+      const afterSecond = projectModelCache.stats();
+
+      expect(first.contextPack.packId).toBe(second.contextPack.packId);
+      expect(counter.builds).toBe(1);
+      expect(afterFirst.derivedEntries).toBeGreaterThan(0);
+      expect(afterSecond.derivedHits).toBeGreaterThan(afterFirst.derivedHits);
+      expect(afterSecond.derivedMisses).toBe(afterFirst.derivedMisses);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("reuses the cached index for focused verification planning", () => {
     const repoRoot = createFixtureRepo();
     const counter = { builds: 0 };

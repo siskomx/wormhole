@@ -131,10 +131,21 @@ type OwnershipRule = {
 
 export type ProjectModelCacheStats = {
   entries: number;
+  derivedEntries: number;
   hits: number;
   misses: number;
   refreshes: number;
   stale: number;
+  derivedHits: number;
+  derivedMisses: number;
+};
+
+export type ProjectModelDerivedCacheInput<T> = {
+  repoRoot: string;
+  kind: string;
+  keyParts?: readonly string[];
+  indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">;
+  create: (model: ProjectModel) => T;
 };
 
 export type ProjectModelCache = {
@@ -142,6 +153,7 @@ export type ProjectModelCache = {
     repoRoot: string;
     indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">;
   }): ProjectModel;
+  getDerived<T>(input: ProjectModelDerivedCacheInput<T>): T;
   delete(repoRoot: string): void;
   clear(): void;
   stats(): ProjectModelCacheStats;
@@ -149,6 +161,7 @@ export type ProjectModelCache = {
 
 export type ProjectModelCacheOptions = {
   maxEntries?: number;
+  maxDerivedEntries?: number;
   freshnessTtlMs?: number;
   indexBuilder?: (options: RepoIndexBuildOptions) => RepoIndex;
 };
@@ -160,17 +173,21 @@ export type ProjectModelCacheInput = {
 
 export function createProjectModelCache(options: ProjectModelCacheOptions = {}): ProjectModelCache {
   const maxEntries = options.maxEntries ?? 8;
+  const maxDerivedEntries = options.maxDerivedEntries ?? maxEntries * 12;
   const freshnessTtlMs = options.freshnessTtlMs ?? 30_000;
   const indexBuilder = options.indexBuilder ?? buildRepoIndex;
   const entries = new Map<string, { model: ProjectModel; lastFreshCheckMs: number }>();
-  const stats: Omit<ProjectModelCacheStats, "entries"> = {
+  const derivedEntries = new Map<string, { repoRoot: string; value: unknown }>();
+  const stats: Omit<ProjectModelCacheStats, "entries" | "derivedEntries"> = {
     hits: 0,
     misses: 0,
     refreshes: 0,
     stale: 0,
+    derivedHits: 0,
+    derivedMisses: 0,
   };
 
-  function evictOldest(): void {
+  function evictOldestModel(): void {
     while (entries.size > maxEntries) {
       const oldestKey = entries.keys().next().value;
       if (!oldestKey) {
@@ -180,31 +197,78 @@ export function createProjectModelCache(options: ProjectModelCacheOptions = {}):
     }
   }
 
+  function evictOldestDerived(): void {
+    while (derivedEntries.size > maxDerivedEntries) {
+      const oldestKey = derivedEntries.keys().next().value;
+      if (!oldestKey) {
+        break;
+      }
+      derivedEntries.delete(oldestKey);
+    }
+  }
+
+  function deleteDerivedForRepo(repoRoot: string): void {
+    for (const [key, entry] of derivedEntries) {
+      if (entry.repoRoot === repoRoot) {
+        derivedEntries.delete(key);
+      }
+    }
+  }
+
+  function get(input: {
+    repoRoot: string;
+    indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">;
+  }): ProjectModel {
+    const repoRoot = path.resolve(input.repoRoot);
+    const indexOptions = { ...(input.indexOptions ?? {}), repoRoot };
+    const cacheKey = createRepoIndexCacheKey(indexOptions);
+    const now = Date.now();
+    const existing = entries.get(cacheKey);
+    if (existing) {
+      const shouldCheckFreshness =
+        freshnessTtlMs <= 0 || now - existing.lastFreshCheckMs >= freshnessTtlMs;
+      if (!shouldCheckFreshness || isRepoIndexFresh(existing.model.index)) {
+        existing.lastFreshCheckMs = shouldCheckFreshness ? now : existing.lastFreshCheckMs;
+        stats.hits += 1;
+        return existing.model;
+      }
+      stats.stale += 1;
+      entries.delete(cacheKey);
+      deleteDerivedForRepo(repoRoot);
+    }
+
+    stats.misses += 1;
+    stats.refreshes += 1;
+    const model = createProjectModel(repoRoot, input.indexOptions, indexBuilder);
+    entries.set(cacheKey, { model, lastFreshCheckMs: now });
+    evictOldestModel();
+    return model;
+  }
+
   return {
-    get(input) {
-      const repoRoot = path.resolve(input.repoRoot);
-      const indexOptions = { ...(input.indexOptions ?? {}), repoRoot };
-      const cacheKey = createRepoIndexCacheKey(indexOptions);
-      const now = Date.now();
-      const existing = entries.get(cacheKey);
+    get,
+    getDerived<T>(input: ProjectModelDerivedCacheInput<T>): T {
+      const model = get({
+        repoRoot: input.repoRoot,
+        indexOptions: input.indexOptions,
+      });
+      const cacheKey = JSON.stringify({
+        repoRoot: model.repoRoot,
+        fingerprint: model.index.fingerprint,
+        kind: input.kind,
+        keyParts: input.keyParts ?? [],
+      });
+      const existing = derivedEntries.get(cacheKey);
       if (existing) {
-        const shouldCheckFreshness =
-          freshnessTtlMs <= 0 || now - existing.lastFreshCheckMs >= freshnessTtlMs;
-        if (!shouldCheckFreshness || isRepoIndexFresh(existing.model.index)) {
-          existing.lastFreshCheckMs = shouldCheckFreshness ? now : existing.lastFreshCheckMs;
-          stats.hits += 1;
-          return existing.model;
-        }
-        stats.stale += 1;
-        entries.delete(cacheKey);
+        stats.derivedHits += 1;
+        return existing.value as T;
       }
 
-      stats.misses += 1;
-      stats.refreshes += 1;
-      const model = createProjectModel(repoRoot, input.indexOptions, indexBuilder);
-      entries.set(cacheKey, { model, lastFreshCheckMs: now });
-      evictOldest();
-      return model;
+      stats.derivedMisses += 1;
+      const value = input.create(model);
+      derivedEntries.set(cacheKey, { repoRoot: model.repoRoot, value });
+      evictOldestDerived();
+      return value;
     },
     delete(repoRootInput) {
       const repoRoot = path.resolve(repoRootInput);
@@ -213,19 +277,28 @@ export function createProjectModelCache(options: ProjectModelCacheOptions = {}):
           entries.delete(key);
         }
       }
+      deleteDerivedForRepo(repoRoot);
     },
     clear() {
       entries.clear();
+      derivedEntries.clear();
     },
     stats() {
-      return { entries: entries.size, ...stats };
+      return { entries: entries.size, derivedEntries: derivedEntries.size, ...stats };
     },
   };
 }
 
 export function createArchitectureMap(input: { repoRoot: string } & ProjectModelCacheInput): ArchitectureMap {
-  const model = getProjectModel(input);
-  return createArchitectureMapFromModel(model);
+  if (input.projectModelCache) {
+    return input.projectModelCache.getDerived({
+      repoRoot: input.repoRoot,
+      indexOptions: input.indexOptions,
+      kind: "architecture_map",
+      create: createArchitectureMapFromModel,
+    });
+  }
+  return createArchitectureMapFromModel(getProjectModel(input));
 }
 
 function createArchitectureMapFromModel(model: ProjectModel): ArchitectureMap {
@@ -315,6 +388,14 @@ function createArchitectureMapFromModel(model: ProjectModel): ArchitectureMap {
 }
 
 export function discoverEntrypointFlows(input: { repoRoot: string } & ProjectModelCacheInput): EntrypointFlowDiscovery {
+  if (input.projectModelCache) {
+    return input.projectModelCache.getDerived({
+      repoRoot: input.repoRoot,
+      indexOptions: input.indexOptions,
+      kind: "entrypoint_flows",
+      create: discoverEntrypointFlowsFromModel,
+    });
+  }
   return discoverEntrypointFlowsFromModel(getProjectModel(input));
 }
 
@@ -323,7 +404,38 @@ export function analyzeBlastRadius(input: {
   changedFiles: string[];
   diffText?: string;
 } & ProjectModelCacheInput): BlastRadiusAnalysis {
-  const model = getProjectModel(input);
+  const changedFiles = uniqueSorted(input.changedFiles.map(toRepoPath));
+  if (input.projectModelCache) {
+    return input.projectModelCache.getDerived({
+      repoRoot: input.repoRoot,
+      indexOptions: input.indexOptions,
+      kind: "blast_radius",
+      keyParts: [
+        ...changedFiles,
+        input.diffText ? `diff:${hashParts([input.diffText])}` : "diff:",
+      ],
+      create: (model) =>
+        analyzeBlastRadiusFromModel(model, {
+          changedFiles,
+          diffText: input.diffText,
+          projectModelCache: input.projectModelCache,
+          indexOptions: input.indexOptions,
+        }),
+    });
+  }
+  return analyzeBlastRadiusFromModel(getProjectModel(input), {
+    changedFiles,
+    diffText: input.diffText,
+  });
+}
+
+function analyzeBlastRadiusFromModel(
+  model: ProjectModel,
+  input: {
+    changedFiles: string[];
+    diffText?: string;
+  } & ProjectModelCacheInput,
+): BlastRadiusAnalysis {
   const changedFiles = uniqueSorted(input.changedFiles.map(toRepoPath));
   const changedSet = new Set(changedFiles);
   const changedNodeIds = new Set<string>(changedFiles);
@@ -354,7 +466,13 @@ export function analyzeBlastRadius(input: {
     addImpactedFile(impacted, test.path, test.reason, test.confidence);
   }
 
-  const entrypoints = discoverEntrypointFlowsFromModel(model).entrypoints;
+  const entrypoints = input.projectModelCache
+    ? discoverEntrypointFlows({
+        repoRoot: model.repoRoot,
+        projectModelCache: input.projectModelCache,
+        indexOptions: input.indexOptions,
+      }).entrypoints
+    : discoverEntrypointFlowsFromModel(model).entrypoints;
   const impactedEntrypoints = entrypoints.filter(
     (entrypoint) =>
       changedSet.has(entrypoint.path) ||
@@ -412,19 +530,66 @@ export function generateProjectContextPack(input: {
   changedFiles?: string[];
   maxChars: number;
 } & ProjectModelCacheInput): ProjectContextPack {
-  const model = getProjectModel(input);
-  const architecture = createArchitectureMapFromModel(model);
-  const entrypoints = discoverEntrypointFlowsFromModel(model);
+  const changedFiles = uniqueSorted((input.changedFiles ?? []).map(toRepoPath));
+  if (input.projectModelCache) {
+    return input.projectModelCache.getDerived({
+      repoRoot: input.repoRoot,
+      indexOptions: input.indexOptions,
+      kind: "context_pack",
+      keyParts: [input.objective, input.query, String(input.maxChars), ...changedFiles],
+      create: (model) =>
+        generateProjectContextPackFromModel(
+          model,
+          {
+            objective: input.objective,
+            query: input.query,
+            changedFiles,
+            maxChars: input.maxChars,
+          },
+          input.projectModelCache,
+          input.indexOptions,
+        ),
+    });
+  }
+  return generateProjectContextPackFromModel(getProjectModel(input), {
+    objective: input.objective,
+    query: input.query,
+    changedFiles,
+    maxChars: input.maxChars,
+  });
+}
+
+function generateProjectContextPackFromModel(
+  model: ProjectModel,
+  input: {
+    objective: string;
+    query: string;
+    changedFiles: string[];
+    maxChars: number;
+  },
+  projectModelCache?: ProjectModelCache,
+  indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">,
+): ProjectContextPack {
+  const architecture = projectModelCache
+    ? createArchitectureMap({ repoRoot: model.repoRoot, projectModelCache, indexOptions })
+    : createArchitectureMapFromModel(model);
+  const entrypoints = projectModelCache
+    ? discoverEntrypointFlows({ repoRoot: model.repoRoot, projectModelCache, indexOptions })
+    : discoverEntrypointFlowsFromModel(model);
   const blast =
-    input.changedFiles && input.changedFiles.length > 0
-      ? analyzeBlastRadius({
-          repoRoot: model.repoRoot,
-          changedFiles: input.changedFiles,
-          projectModelCache: input.projectModelCache,
-          indexOptions: input.indexOptions,
-        })
+    input.changedFiles.length > 0
+      ? projectModelCache
+        ? analyzeBlastRadius({
+            repoRoot: model.repoRoot,
+            changedFiles: input.changedFiles,
+            projectModelCache,
+            indexOptions,
+          })
+        : analyzeBlastRadiusFromModel(model, {
+            changedFiles: input.changedFiles,
+          })
       : undefined;
-  const sources = selectContextSources(model, input.query, input.changedFiles ?? [], blast);
+  const sources = selectContextSources(model, input.query, input.changedFiles, blast);
   const rendered = clampToBudget(
     renderProjectContextPack({
       objective: input.objective,
