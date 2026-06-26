@@ -2050,7 +2050,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "durable_repo_index_refresh",
     {
-      description: "Refresh and persist the repo index under .wormhole/indexes.",
+      description: "Refresh and persist the SQLite-backed repo index and JSON compatibility export under .wormhole/indexes.",
       inputSchema: {
         repoRoot: z.string(),
         include: z.array(z.string()).optional(),
@@ -2066,7 +2066,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "durable_index_status",
     {
-      description: "Return durable repo and semantic index cache status.",
+      description: "Return durable JSON repo index, SQLite repo index, and semantic index cache status.",
       inputSchema: {
         repoRoot: z.string(),
       },
@@ -2077,7 +2077,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "durable_index_manifest_refresh",
     {
-      description: "Refresh the durable repo index manifest and write lane/root shard indexes.",
+      description: "Refresh the durable SQLite repo index, JSON export, manifest, and lane/root shard indexes.",
       inputSchema: {
         repoRoot: z.string(),
         include: z.array(z.string()).optional(),
@@ -2104,7 +2104,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "durable_repo_index_query",
     {
-      description: "Query durable repo index shards by lane, falling back to the full durable index when no manifest exists.",
+      description: "Query the durable SQLite repo index by lane, falling back to manifest shards or the full JSON index when needed.",
       inputSchema: {
         repoRoot: z.string(),
         query: z.string(),

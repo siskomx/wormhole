@@ -162,7 +162,7 @@ Core excludes:
 - Parallel execution
 - Dynamic sub-orchestrators
 - Codex-specific runtime behavior beyond plugin metadata
-- SQLite storage
+- SQLite runtime-state storage
 - Content-addressed cache
 - Full evidence graph
 - Claim normalization
@@ -564,7 +564,7 @@ These are outside the core scope:
 - Full evidence graph
 - Claim-level contradiction detection
 - Citation entailment verification
-- SQLite persistence
+- SQLite runtime-state persistence
 - Codex-specific UI behavior beyond adapter config generation
 - UI/workbench
 - Policy marketplace

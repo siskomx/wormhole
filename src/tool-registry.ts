@@ -459,7 +459,7 @@ const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
     phase: "maintain",
     pack: "large-repo",
     risk: "write",
-    summary: "Refresh the durable index-of-indexes manifest and root/lane shard files for scalable repo queries.",
+    summary: "Refresh the durable SQLite repo index plus index-of-indexes manifest and root/lane shard files for scalable repo queries.",
     inputs: ["repoRoot", "include", "exclude", "maxFiles", "maxFileBytes", "maxTotalBytes"],
   },
   durable_index_manifest_status: {
@@ -475,7 +475,7 @@ const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
     phase: "orient",
     pack: "large-repo",
     risk: "read",
-    summary: "Query durable root/lane repo-index shards by lane with full-index fallback.",
+    summary: "Query the durable SQLite repo index by lane, with manifest shard and full JSON fallback.",
     inputs: ["repoRoot", "query", "lanes", "limit"],
   },
   lsp_feedback_replan: {

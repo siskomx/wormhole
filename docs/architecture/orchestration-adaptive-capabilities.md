@@ -140,7 +140,7 @@ These tools are repo-root confined where they read project files. They complemen
 Project intelligence sequencing composes the ground-truth tools into a higher-level onboarding and admission layer:
 
 - `project_onboard` runs contract detection, durable repo indexing, LSP probe, safety scan, diff/test impact, verification-plan selection, dependency security, action policy, and optional semantic search in one report.
-- `durable_repo_index_refresh`, `durable_index_status`, `durable_semantic_index_refresh`, and `durable_semantic_search` persist index data under `.wormhole/indexes`.
+- `durable_repo_index_refresh`, `durable_index_status`, `durable_semantic_index_refresh`, and `durable_semantic_search` persist index data under `.wormhole/indexes`. Repo indexes are mirrored into `repo-index.sqlite` for large-repo query performance while retaining JSON exports and manifests for compatibility, inspection, and sharded fallback.
 - `test_impact_analyze_v2` maps unified diff hunks to changed symbols and confidence-scored test recommendations.
 - `mission_delta_replan` and `lsp_feedback_replan` re-scope missions from changed files, diagnostics, stale evidence, and LSP/typecheck feedback.
 - `dependency_security_report` summarizes package/lockfile metadata, direct and transitive counts, license data, and local-only vulnerability-provider status.

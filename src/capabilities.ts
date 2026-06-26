@@ -239,7 +239,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "orchestration.repo-index-graph",
         area: "orchestration",
         status: "implemented",
-        description: "Deterministic repo-local index with file, symbol, import, link, reference, provenance, confidence, query, explain, report, and dependency-path tools.",
+        description: "Deterministic repo-local index with file, symbol, import, link, reference, provenance, confidence, SQLite-backed durable query, JSON compatibility exports, explain, report, and dependency-path tools.",
       },
       {
         id: "orchestration.project-ground-truth-suite",
@@ -251,7 +251,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "orchestration.project-intelligence-sequencing",
         area: "orchestration",
         status: "implemented",
-        description: "One-shot project onboarding, process-local LSP sessions, durable repo and semantic indexes, diff-aware test impact, dependency security reports, action admission policy, and optimization adapter execution.",
+        description: "One-shot project onboarding, process-local LSP sessions, SQLite-backed durable repo indexes, semantic indexes, diff-aware test impact, dependency security reports, action admission policy, and optimization adapter execution.",
       },
       {
         id: "orchestration.native-project-intelligence-spine",

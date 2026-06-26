@@ -20,10 +20,17 @@ import {
   type SemanticRecordInput,
   type SemanticSearchResult,
 } from "./semantic-search.js";
+import {
+  querySqliteRepoIndex,
+  readSqliteRepoIndexStatus,
+  writeSqliteRepoIndex,
+  type SqliteRepoIndexStatus,
+} from "./sqlite-repo-index.js";
 
 export type DurableRepoIndexResult = {
   repoRoot: string;
   indexPath: string;
+  sqliteIndexPath: string;
   summary: RepoIndexSummary;
 };
 
@@ -40,6 +47,7 @@ export type DurableIndexStatus = {
     fresh: boolean;
     summary: RepoIndexSummary;
   };
+  sqliteIndex?: SqliteRepoIndexStatus;
   semanticIndex?: {
     indexPath: string;
     recordCount: number;
@@ -98,6 +106,7 @@ export type DurableShardedRepoIndexQueryResult = RepoIndexQueryResult & {
   queriedLanes: ProjectLane[];
   indexPaths: string[];
   shardCount: number;
+  usedSqlite: boolean;
 };
 
 export function refreshDurableRepoIndex(input: RepoIndexBuildOptions): DurableRepoIndexResult {
@@ -105,9 +114,11 @@ export function refreshDurableRepoIndex(input: RepoIndexBuildOptions): DurableRe
   const index = buildRepoIndex({ ...input, repoRoot });
   const indexPath = repoIndexPath(repoRoot);
   writeJson(indexPath, index);
+  const sqliteIndexPath = writeSqliteRepoIndex(index);
   return {
     repoRoot,
     indexPath,
+    sqliteIndexPath,
     summary: summarizeRepoIndex(index),
   };
 }
@@ -117,6 +128,7 @@ export function refreshDurableIndexManifest(input: RepoIndexBuildOptions): Durab
   const index = buildRepoIndex({ ...input, repoRoot });
   const indexPath = repoIndexPath(repoRoot);
   writeJson(indexPath, index);
+  writeSqliteRepoIndex(index);
 
   const lanes = PROJECT_LANES
     .map((lane) => {
@@ -179,6 +191,7 @@ export function searchDurableSemanticIndex(input: {
 export function durableIndexStatus(input: { repoRoot: string }): DurableIndexStatus {
   const repoRoot = path.resolve(input.repoRoot);
   const repoIndex = readJson<RepoIndex>(repoIndexPath(repoRoot));
+  const sqliteIndex = readSqliteRepoIndexStatus(repoRoot);
   const semanticIndex = readJson<SemanticIndex>(semanticIndexPath(repoRoot));
   return {
     repoRoot,
@@ -191,6 +204,7 @@ export function durableIndexStatus(input: { repoRoot: string }): DurableIndexSta
           },
         }
       : {}),
+    ...(sqliteIndex ? { sqliteIndex } : {}),
     ...(semanticIndex
       ? {
           semanticIndex: {
@@ -246,6 +260,25 @@ export function queryDurableShardedRepoIndex(input: {
 }): DurableShardedRepoIndexQueryResult {
   const repoRoot = path.resolve(input.repoRoot);
   const limit = input.limit ?? 10;
+  const sqlite = querySqliteRepoIndex({
+    repoRoot,
+    query: input.query,
+    lanes: input.lanes,
+    limit,
+  });
+  if (sqlite) {
+    return {
+      query: sqlite.query,
+      results: sqlite.results,
+      repoRoot,
+      usedManifest: false,
+      usedSqlite: true,
+      queriedLanes: sqlite.queriedLanes,
+      indexPaths: [sqlite.indexPath],
+      shardCount: 1,
+    };
+  }
+
   const manifest = readJson<DurableIndexManifest>(indexManifestPath(repoRoot));
   if (!manifest) {
     const fullIndex = readJson<RepoIndex>(repoIndexPath(repoRoot));
@@ -254,6 +287,7 @@ export function queryDurableShardedRepoIndex(input: {
       ...fallback,
       repoRoot,
       usedManifest: false,
+      usedSqlite: false,
       queriedLanes: [],
       indexPaths: fullIndex ? [repoIndexPath(repoRoot)] : [],
       shardCount: fullIndex ? 1 : 0,
@@ -292,6 +326,7 @@ export function queryDurableShardedRepoIndex(input: {
     results: mergeSearchResults(shardResults, limit),
     repoRoot,
     usedManifest: true,
+    usedSqlite: false,
     queriedLanes,
     indexPaths,
     shardCount: indexPaths.length,

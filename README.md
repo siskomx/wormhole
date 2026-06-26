@@ -6,7 +6,7 @@ Wormhole is an evidence-aware MCP operating layer for AI coding agents. It is no
 
 - Mission kernel: mission rounds, evidence records, open questions, gate checks, and evidence-cited plan artifacts.
 - Agent routing: `agent_context_prepare`, `mission_route`, `next_best_tool`, `tool_layer_map`, `tool_exposure_profile`, and `tool_catalog_query`.
-- Repo intelligence: durable repo indexes, project contracts, architecture maps, entrypoint discovery, blast-radius analysis, context packs, and cached project models/derived intelligence for repeated large-repo calls.
+- Repo intelligence: SQLite-backed durable repo indexes, JSON compatibility exports, project contracts, architecture maps, entrypoint discovery, blast-radius analysis, context packs, and cached project models/derived intelligence for repeated large-repo calls.
 - State maintenance: `state_maintenance_run`, `state_maintenance_status`, and `state_maintenance_retry` coordinate graph refresh, context refresh, evidence capture, and workspace updates.
 - Verification and safety: focused test planning, command/LSP diagnostics, dependency and secret scans, action policy review, privileged tool admission review, and patch transactions with rollback.
 - Agent collaboration: task registration, control messages, shared workspace memory, external agent adapters, behavior/remit verification, generated-tool validation, and static workbench artifacts.
@@ -19,7 +19,7 @@ The authoritative tool/capability list lives in `src/capabilities.ts`; the READM
 - MCP entrypoint: `src/cli.ts`
 - Event log: `.wormhole/events.jsonl`
 - Handler runtime state: `.wormhole/runtime-state.json`
-- Durable indexes: `.wormhole/indexes`
+- Durable indexes: `.wormhole/indexes` stores SQLite repo indexes plus JSON compatibility exports/manifests.
 - Codex plugin metadata: `plugins/wormhole/.codex-plugin/plugin.json`
 - Claude Desktop extension metadata: `plugins/wormhole-claude-desktop`
 
@@ -56,6 +56,8 @@ Use these environment variables when needed:
 - `WORMHOLE_ALLOWED_REPO_ROOTS`: comma- or semicolon-separated allowed repo roots for MCP repo tools.
 
 ## Local Commands
+
+Requires Node.js 22.5.0 or newer for the built-in SQLite durable index backend.
 
 ```bash
 npm install

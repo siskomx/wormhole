@@ -103,7 +103,8 @@ describe("durable index manifest and shards", () => {
       expect(tests.results.map((result) => result.path)).toContain("tests/user.test.ts");
       expect(docs.results.map((result) => result.path)).toContain("docs/usage.md");
       expect(runtime.queriedLanes).toEqual(["runtime"]);
-      expect(tests.usedManifest).toBe(true);
+      expect(tests.usedSqlite).toBe(true);
+      expect(tests.usedManifest).toBe(false);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
