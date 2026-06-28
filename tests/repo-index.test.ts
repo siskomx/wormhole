@@ -182,6 +182,29 @@ describe("repo index", () => {
     }
   });
 
+  it("indexes large symbol batches without spread-argument overflows", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-index-large-"));
+    const symbolCount = 1_250;
+    const content = Array.from(
+      { length: symbolCount },
+      (_, index) => `export const largeSymbol${index} = ${index};`,
+    ).join("\n");
+    writeFileSync(path.join(repoRoot, "large.ts"), `${content}\n`);
+
+    try {
+      const index = buildRepoIndex({
+        repoRoot,
+        maxFileBytes: 1_000_000,
+        maxTotalBytes: 1_000_000,
+      });
+
+      expect(index.symbols).toHaveLength(symbolCount);
+      expect(index.edges.filter((edge) => edge.kind === "defines")).toHaveLength(symbolCount);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("indexes markdown links and code references as graph edges", () => {
     const repoRoot = createFixtureRepo();
 

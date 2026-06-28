@@ -152,6 +152,8 @@ type EdgeDraft = {
 const DEFAULT_MAX_FILES = 1_000;
 const DEFAULT_MAX_FILE_BYTES = 512 * 1024;
 const DEFAULT_MAX_TOTAL_BYTES = 10 * 1024 * 1024;
+const MAX_INFERRED_REFERENCES_PER_FILE = 200;
+const MAX_SYMBOLS_PER_REFERENCE_NAME = 25;
 const DEFAULT_EXCLUDED_DIRECTORIES = new Set([
   ".git",
   ".next",
@@ -226,9 +228,10 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
       content,
     };
     files.push(file);
-    symbols.push(...fileSymbols);
-    edges.push(
-      ...fileSymbols.map((symbol) => ({
+    pushAll(symbols, fileSymbols);
+    pushAll(
+      edges,
+      fileSymbols.map((symbol) => ({
         from: relativePath,
         to: symbol.id,
         kind: "defines" as const,
@@ -238,7 +241,7 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
         label: symbol.name,
       })),
     );
-    edgeDrafts.push(...extractEdgeDrafts(relativePath, language, content));
+    pushAll(edgeDrafts, extractEdgeDrafts(relativePath, language, content));
   }
 
   const knownFiles = new Set(files.map((file) => file.path));
@@ -257,8 +260,8 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
       label: draft.specifier,
     });
   }
-  edges.push(...extractReferenceEdges(files, symbols, edges));
-  edges.push(...extractCallEdges(files, symbols, edges));
+  pushAll(edges, extractReferenceEdges(files, symbols, edges));
+  pushAll(edges, extractCallEdges(files, symbols, edges));
 
   return {
     repoRoot,
@@ -694,30 +697,50 @@ function extractReferenceEdges(
   const existingKeys = new Set(
     existingEdges.map((edge) => `${edge.from}\0${edge.to}\0${edge.kind}`),
   );
+  const symbolsByName = new Map<string, RepoIndexSymbol[]>();
+  for (const symbol of symbols) {
+    if (symbol.name.length < 3) {
+      continue;
+    }
+    symbolsByName.set(symbol.name, [...(symbolsByName.get(symbol.name) ?? []), symbol]);
+  }
   const edges: RepoIndexEdge[] = [];
 
   for (const file of files) {
-    for (const symbol of symbols) {
-      if (symbol.path === file.path || symbol.name.length < 3) {
+    let referenceCount = 0;
+    for (const token of identifierTokens(file.content)) {
+      const matchingSymbols = symbolsByName.get(token);
+      if (!matchingSymbols) {
         continue;
       }
-      const regex = new RegExp(`\\b${escapeRegex(symbol.name)}\\b`);
-      if (!regex.test(file.content)) {
+      if (matchingSymbols.length > MAX_SYMBOLS_PER_REFERENCE_NAME) {
         continue;
       }
-      const key = `${file.path}\0${symbol.id}\0references`;
-      if (existingKeys.has(key)) {
-        continue;
+      for (const symbol of matchingSymbols) {
+        if (referenceCount >= MAX_INFERRED_REFERENCES_PER_FILE) {
+          break;
+        }
+        if (symbol.path === file.path) {
+          continue;
+        }
+        const key = `${file.path}\0${symbol.id}\0references`;
+        if (existingKeys.has(key)) {
+          continue;
+        }
+        existingKeys.add(key);
+        edges.push({
+          from: file.path,
+          to: symbol.id,
+          kind: "references",
+          provenance: "inferred",
+          confidence: 0.7,
+          label: symbol.name,
+        });
+        referenceCount += 1;
       }
-      existingKeys.add(key);
-      edges.push({
-        from: file.path,
-        to: symbol.id,
-        kind: "references",
-        provenance: "inferred",
-        confidence: 0.7,
-        label: symbol.name,
-      });
+      if (referenceCount >= MAX_INFERRED_REFERENCES_PER_FILE) {
+        break;
+      }
     }
   }
 
@@ -777,6 +800,17 @@ function extractCallEdges(
     }
   }
   return edges;
+}
+
+function identifierTokens(content: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const match of content.matchAll(/\b[A-Za-z_$][A-Za-z0-9_$]*\b/g)) {
+    const token = match[0];
+    if (token.length >= 3) {
+      tokens.add(token);
+    }
+  }
+  return tokens;
 }
 
 function resolveEdgeTarget(draft: EdgeDraft, knownFiles: Set<string>): string | undefined {
@@ -1033,6 +1067,13 @@ function createRepoIndexFingerprint(
   }
 
   return createHash("sha256").update(entries.join("\n")).digest("hex");
+}
+
+function pushAll<T>(target: T[], values: T[]): void {
+  const chunkSize = 1_000;
+  for (let index = 0; index < values.length; index += chunkSize) {
+    target.push(...values.slice(index, index + chunkSize));
+  }
 }
 
 function normalizePatternList(patterns?: string[]): string[] | undefined {

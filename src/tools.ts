@@ -232,6 +232,28 @@ import {
   type ToolScaffold,
 } from "./tool-factory.js";
 import {
+  checkBlueprintGate,
+  compileBootstrapBlueprint,
+  compileRepoBlueprint,
+  type BlueprintGateInput,
+} from "./blueprint.js";
+import { writeBlueprintArtifacts, writeProgressiveBlueprintArtifacts } from "./blueprint-files.js";
+import {
+  checkAppProcessGate,
+  compileAppProcess,
+  validateAppProcess,
+  type AppProcess,
+  type AppProcessGateInput,
+} from "./app-process.js";
+import { writeAppProcessArtifacts } from "./app-process-files.js";
+import {
+  acceptAppProcessRunSectionFile,
+  continueAppProcessRunFile,
+  loadAppProcessRunBundle,
+  recordAppProcessVerificationFile,
+} from "./app-process-run-files.js";
+import type { AppProcessDraftSectionId } from "./app-process-run.js";
+import {
   buildRepoIndex,
   createRepoIndexCacheKey,
   explainRepoIndex,
@@ -528,6 +550,25 @@ export function createToolHandlers(
     repoIndexes.set(cacheKey, index);
     evictOldestRepoIndex(repoIndexes, maxCachedRepoIndexes);
     return index;
+  }
+
+  function compileBlueprintForRepo(input: { repoRoot: string; objective: string }) {
+    const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+    return compileRepoBlueprint({
+      objective: input.objective,
+      onboard: projectOnboard({ repoRoot }),
+      architecture: createArchitectureMap({ repoRoot, projectModelCache }),
+      entrypoints: discoverEntrypointFlows({ repoRoot, projectModelCache }),
+    });
+  }
+
+  function compileAppProcessForRepo(input: { repoRoot: string; objective: string }) {
+    const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+    return compileAppProcess({
+      repoRoot,
+      objective: input.objective,
+      blueprint: compileBootstrapBlueprint({ repoRoot, objective: input.objective }),
+    });
   }
 
   function refreshRepoGraphForChangedFiles(input: {
@@ -1665,6 +1706,110 @@ export function createToolHandlers(
     projectOnboard(input: Parameters<typeof projectOnboard>[0]) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return projectOnboard({ ...input, repoRoot });
+    },
+
+    blueprintCompileRepo(input: { repoRoot: string; objective: string; progressive?: boolean }) {
+      if (input.progressive) {
+        const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+        return compileBootstrapBlueprint({ ...input, repoRoot });
+      }
+      return compileBlueprintForRepo(input);
+    },
+
+    blueprintWriteArtifacts(input: { repoRoot: string; objective: string; progressive?: boolean }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      assertPrivilegedAction({
+        toolName: "blueprint_write_artifacts",
+        kind: "file_write",
+        operations: [{ kind: "file_write", path: path.join(repoRoot, ".wormhole") }],
+        target: { repoRoot, path: path.join(repoRoot, ".wormhole") },
+      });
+      if (input.progressive) {
+        const result = compileBootstrapBlueprint({ ...input, repoRoot });
+        return writeProgressiveBlueprintArtifacts({ repoRoot, result });
+      }
+      const result = compileBlueprintForRepo({ ...input, repoRoot });
+      return writeBlueprintArtifacts({ repoRoot, result });
+    },
+
+    blueprintGateCheck(input: BlueprintGateInput) {
+      return checkBlueprintGate(input);
+    },
+
+    appProcessCompile(input: { repoRoot: string; objective: string }) {
+      return compileAppProcessForRepo(input);
+    },
+
+    appProcessWriteArtifacts(input: { repoRoot: string; objective: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      assertPrivilegedAction({
+        toolName: "app_process_write_artifacts",
+        kind: "file_write",
+        operations: [{ kind: "file_write", path: path.join(repoRoot, ".wormhole") }],
+        target: { repoRoot, path: path.join(repoRoot, ".wormhole") },
+      });
+      return writeAppProcessArtifacts({
+        repoRoot,
+        result: compileAppProcessForRepo({ ...input, repoRoot }),
+      });
+    },
+
+    appProcessValidate(input: { appProcess: AppProcess }) {
+      return validateAppProcess(input.appProcess);
+    },
+
+    appProcessGateCheck(input: AppProcessGateInput) {
+      return checkAppProcessGate(input);
+    },
+
+    appProcessStatus(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return loadAppProcessRunBundle({ repoRoot });
+    },
+
+    appProcessAcceptSection(input: {
+      repoRoot: string;
+      section: AppProcessDraftSectionId;
+      acceptedBy?: string;
+      note?: string;
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      assertPrivilegedAction({
+        toolName: "app_process_accept_section",
+        kind: "file_write",
+        operations: [{ kind: "file_write", path: path.join(repoRoot, ".wormhole/app-process") }],
+        target: { repoRoot, path: path.join(repoRoot, ".wormhole/app-process") },
+      });
+      return acceptAppProcessRunSectionFile({ ...input, repoRoot });
+    },
+
+    appProcessContinue(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      assertPrivilegedAction({
+        toolName: "app_process_continue",
+        kind: "file_write",
+        operations: [{ kind: "file_write", path: path.join(repoRoot, ".wormhole/app-process") }],
+        target: { repoRoot, path: path.join(repoRoot, ".wormhole/app-process") },
+      });
+      return continueAppProcessRunFile({ repoRoot });
+    },
+
+    appProcessRecordVerification(input: {
+      repoRoot: string;
+      command: string;
+      args?: string[];
+      status: "passed" | "failed" | "skipped";
+      evidencePath?: string;
+      summary?: string;
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      assertPrivilegedAction({
+        toolName: "app_process_record_verification",
+        kind: "file_write",
+        operations: [{ kind: "file_write", path: path.join(repoRoot, ".wormhole/app-process") }],
+        target: { repoRoot, path: path.join(repoRoot, ".wormhole/app-process") },
+      });
+      return recordAppProcessVerificationFile({ ...input, repoRoot });
     },
 
     architectureMap(input: { repoRoot: string }) {

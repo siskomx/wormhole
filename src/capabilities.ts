@@ -260,6 +260,24 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Native architecture maps, entrypoint flow discovery, blast-radius analysis, and task-scoped project context packs built from typed repo observations with provenance.",
       },
       {
+        id: "orchestration.repo-blueprint-compiler",
+        area: "orchestration",
+        status: "implemented",
+        description: "Existing-repo blueprint and constraints compiler that writes .wormhole agent context artifacts and gates package-manager and verification drift.",
+      },
+      {
+        id: "orchestration.app-process-compiler",
+        area: "orchestration",
+        status: "implemented",
+        description: "Provisional full-app process compiler that drafts discovery, product definition, roadmap, backlog, architecture, UX, security, and verification artifacts above the repo blueprint.",
+      },
+      {
+        id: "orchestration.app-process-run-controller",
+        area: "orchestration",
+        status: "implemented",
+        description: "Durable app-process status, section acceptance, one-step continuation, event log, and verification evidence records that feed completion gates.",
+      },
+      {
         id: "orchestration.native-agent-behavior-verification",
         area: "orchestration",
         status: "implemented",

@@ -1733,6 +1733,177 @@ export function createWormholeMcpServer(
   );
 
   server.registerTool(
+    "blueprint_compile_repo",
+    {
+      description: "Compile native Wormhole project intelligence into existing-repo blueprint, constraints, and agent context artifacts.",
+      inputSchema: {
+        repoRoot: z.string(),
+        objective: z.string(),
+        progressive: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.blueprintCompileRepo(input)),
+  );
+
+  server.registerTool(
+    "blueprint_write_artifacts",
+    {
+      description: "Write .wormhole/blueprint.json, .wormhole/constraints.json, and .wormhole/agent-context.md for a repo.",
+      inputSchema: {
+        repoRoot: z.string(),
+        objective: z.string(),
+        progressive: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.blueprintWriteArtifacts(input)),
+  );
+
+  server.registerTool(
+    "blueprint_gate_check",
+    {
+      description: "Check planned commands and completion claims against a Wormhole constraints manifest.",
+      inputSchema: {
+        constraints: z.any(),
+        action: z.object({
+          plannedCommands: z
+            .array(
+              z.object({
+                command: z.string(),
+                args: z.array(z.string()).optional(),
+              }),
+            )
+            .optional(),
+          completionClaim: z.boolean().optional(),
+          reportedVerification: z
+            .array(
+              z.object({
+                command: z.string(),
+                args: z.array(z.string()).optional(),
+                status: z.enum(["passed", "failed", "skipped"]),
+              }),
+            )
+            .optional(),
+        }),
+      },
+    },
+    async (input) => jsonResult(tools.blueprintGateCheck(input)),
+  );
+
+  server.registerTool(
+    "app_process_compile",
+    {
+      description: "Compile a full-app process bootstrap from objective, repo blueprint, and local project signals.",
+      inputSchema: {
+        repoRoot: z.string(),
+        objective: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.appProcessCompile(input)),
+  );
+
+  server.registerTool(
+    "app_process_write_artifacts",
+    {
+      description: "Write .wormhole app-process, product, roadmap, backlog, and phase artifacts for coding agents.",
+      inputSchema: {
+        repoRoot: z.string(),
+        objective: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.appProcessWriteArtifacts(input)),
+  );
+
+  server.registerTool(
+    "app_process_validate",
+    {
+      description: "Validate a Wormhole app-process artifact before roadmap or implementation claims.",
+      inputSchema: {
+        appProcess: z.any(),
+      },
+    },
+    async (input) => jsonResult(tools.appProcessValidate(input)),
+  );
+
+  server.registerTool(
+    "app_process_gate_check",
+    {
+      description: "Block implementation or completion claims until app-process drafts are accepted and verification is reported.",
+      inputSchema: {
+        appProcess: z.any(),
+        action: z.object({
+          implementationClaim: z.boolean().optional(),
+          completionClaim: z.boolean().optional(),
+          acceptedDraftSections: z
+            .array(z.enum(["productDefinition", "roadmap", "backlog", "ux", "security"]))
+            .optional(),
+          reportedVerification: z
+            .array(
+              z.object({
+                command: z.string(),
+                args: z.array(z.string()).optional(),
+                status: z.enum(["passed", "failed", "skipped"]),
+              }),
+            )
+            .optional(),
+        }),
+      },
+    },
+    async (input) => jsonResult(tools.appProcessGateCheck(input)),
+  );
+
+  server.registerTool(
+    "app_process_status",
+    {
+      description: "Read durable app-process run state, blocked gates, next action, verification records, and missing artifacts.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.appProcessStatus(input)),
+  );
+
+  server.registerTool(
+    "app_process_accept_section",
+    {
+      description: "Record acceptance of one AI-drafted app-process section without modifying source code.",
+      inputSchema: {
+        repoRoot: z.string(),
+        section: z.enum(["productDefinition", "roadmap", "backlog", "ux", "security"]),
+        acceptedBy: z.string().optional(),
+        note: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.appProcessAcceptSection(input)),
+  );
+
+  server.registerTool(
+    "app_process_continue",
+    {
+      description: "Advance one bounded app-process continuation step and persist the prepared story state.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.appProcessContinue(input)),
+  );
+
+  server.registerTool(
+    "app_process_record_verification",
+    {
+      description: "Record app-process verification evidence so completion gates can use durable run state.",
+      inputSchema: {
+        repoRoot: z.string(),
+        command: z.string(),
+        args: z.array(z.string()).optional(),
+        status: z.enum(["passed", "failed", "skipped"]),
+        evidencePath: z.string().optional(),
+        summary: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.appProcessRecordVerification(input)),
+  );
+
+  server.registerTool(
     "architecture_map",
     {
       description: "Create a native architecture map with modules, owners, dependencies, entrypoint counts, and source-backed evidence.",

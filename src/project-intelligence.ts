@@ -653,6 +653,7 @@ function createProjectModel(
 
 function discoverEntrypointFlowsFromModel(model: ProjectModel): EntrypointFlowDiscovery {
   const entrypoints: EntrypointFlow[] = [];
+  const fileAdjacency = fileAdjacencyFor(model.index);
   for (const script of model.contract.scripts) {
     if (isEntrypointScript(script.name, script.command)) {
       entrypoints.push({
@@ -687,7 +688,7 @@ function discoverEntrypointFlowsFromModel(model: ProjectModel): EntrypointFlowDi
       name: symbol?.name ?? path.basename(file.path).replace(/\.[^.]+$/, ""),
       path: file.path,
       symbol: symbol?.name,
-      downstreamFiles: downstreamFilesFor(model.index, file.path),
+      downstreamFiles: downstreamFilesFor(fileAdjacency, file.path),
       moduleRoot: moduleRootFor(file.path),
       evidence: [
         {
@@ -840,7 +841,7 @@ function downstreamFilesForScript(
   );
 }
 
-function downstreamFilesFor(index: RepoIndex, repoPath: string): string[] {
+function fileAdjacencyFor(index: RepoIndex): Map<string, Set<string>> {
   const adjacency = new Map<string, Set<string>>();
   for (const edge of index.edges) {
     const fromPath = fileForNode(edge.from);
@@ -852,11 +853,14 @@ function downstreamFilesFor(index: RepoIndex, repoPath: string): string[] {
     targets.add(toPath);
     adjacency.set(fromPath, targets);
   }
+  return adjacency;
+}
 
+function downstreamFilesFor(adjacency: Map<string, Set<string>>, repoPath: string): string[] {
   const seen = new Set<string>();
   const queue = [...(adjacency.get(repoPath) ?? [])].map((file) => ({ file, depth: 1 }));
-  while (queue.length > 0) {
-    const current = queue.shift();
+  for (let index = 0; index < queue.length; index += 1) {
+    const current = queue[index];
     if (!current || seen.has(current.file) || current.depth > 3) {
       continue;
     }

@@ -140,6 +140,14 @@ These tools are repo-root confined where they read project files. They complemen
 Project intelligence sequencing composes the ground-truth tools into a higher-level onboarding and admission layer:
 
 - `project_onboard` runs contract detection, durable repo indexing, LSP probe, safety scan, diff/test impact, verification-plan selection, dependency security, action policy, and optional semantic search in one report.
+- `blueprint_compile_repo` compiles existing-repo intelligence into a coding-agent blueprint, constraints manifest, approval list, and concise agent context; `progressive: true` returns a fast partial bootstrap for large repos.
+- `blueprint_write_artifacts` writes `.wormhole/blueprint.json`, `.wormhole/constraints.json`, and `.wormhole/agent-context.md` so agents can reuse the repo-specific operating rules across sessions. With `progressive: true`, it also writes `.wormhole/lanes/*.json` coverage artifacts for backend, frontend, security, generated, tests, infra, docs, agent metadata, and runtime lanes.
+- `blueprint_gate_check` checks planned package-manager commands and completion claims against the constraints manifest, warning on package-manager drift and blocking completion claims without reported required verification.
+- `app_process_compile` drafts the full app process layer above the repo blueprint: discovery, product definition, roadmap, backlog, architecture, UX, security, and verification sections with provisional status and lane-mapped stories.
+- `app_process_write_artifacts` writes local `.wormhole` app-process, product, roadmap, backlog, lane, and per-phase artifacts so coding agents can start from the same product/process map.
+- `app_process_gate_check` blocks implementation or completion claims until provisional app-process drafts are accepted and required verification is reported.
+- `app_process_status` reads durable app-process run state, blocked gates, accepted sections, verification records, next action, and missing artifacts.
+- `app_process_accept_section`, `app_process_continue`, and `app_process_record_verification` persist the minimal run-controller loop: accept drafted sections, prepare one bounded story, and feed verification evidence back into the app-process gate.
 - `durable_repo_index_refresh`, `durable_index_status`, `durable_semantic_index_refresh`, and `durable_semantic_search` persist index data under `.wormhole/indexes`. Repo indexes are mirrored into `repo-index.sqlite` for large-repo query performance while retaining JSON exports and manifests for compatibility, inspection, and sharded fallback.
 - `test_impact_analyze_v2` maps unified diff hunks to changed symbols and confidence-scored test recommendations.
 - `mission_delta_replan` and `lsp_feedback_replan` re-scope missions from changed files, diagnostics, stale evidence, and LSP/typecheck feedback.
