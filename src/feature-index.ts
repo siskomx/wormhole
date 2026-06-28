@@ -121,7 +121,10 @@ export function createFeatureIndex(input: { repoRoot: string; generatedAt?: stri
   const featureIds = new Set<string>();
 
   for (const repoPath of allFiles) {
-    const matches = structuralFeatureIds(repoPath);
+    const matches = new Set([
+      ...structuralFeatureIds(repoPath),
+      ...semanticFeatureIds(repoPath, safeReadSmallFile(path.join(repoRoot, repoPath))),
+    ]);
     if (matches.size > 0) {
       structuralMatches.set(repoPath, matches);
       for (const featureId of matches) {
@@ -286,7 +289,7 @@ function isFeatureRelevantFile(repoPath: string): boolean {
   if (lower.startsWith("docs/_archive/")) {
     return false;
   }
-  return /\.(?:cjs|css|cts|html|js|json|jsx|md|mdx|mjs|mts|py|sql|ts|tsx|txt|ya?ml)$/.test(repoPath);
+  return /\.(?:cjs|cs|csproj|css|cts|html|js|json|jsx|md|mdx|mjs|mts|py|sln|sql|ts|tsx|txt|xml|ya?ml)$/.test(repoPath);
 }
 
 function structuralFeatureIds(repoPath: string): Set<string> {
@@ -322,6 +325,20 @@ function structuralFeatureIds(repoPath: string): Set<string> {
   const hookPrefix = basename.match(/^use([A-Z][A-Za-z0-9]+)\./);
   if (hookPrefix?.[1]) {
     addFeatureId(ids, hookPrefix[1]);
+  }
+  return ids;
+}
+
+function semanticFeatureIds(repoPath: string, content: string): Set<string> {
+  const ids = new Set<string>();
+  const lowerPath = toRepoPath(repoPath).toLowerCase();
+  const lowerContent = content.toLowerCase();
+  if (
+    lowerPath.includes("webclient") ||
+    lowerPath.includes("web-client") ||
+    /hostwebclient|no\s*web\s*client|nowebclient|webdir|web client/.test(lowerContent)
+  ) {
+    addFeatureId(ids, "web-client");
   }
   return ids;
 }
@@ -393,7 +410,7 @@ function classifyFeatureFile(repoPathInput: string): FeatureFileRole[] {
   if (lower.startsWith("migrations/") || /\.sql$/.test(basename)) {
     roles.add("db");
   }
-  if (lower.startsWith("backend/") || lower.startsWith("server/") || lower.includes("/modules/")) {
+  if (lower.startsWith("backend/") || lower.startsWith("server/") || lower.includes("/modules/") || /\.(cs|csproj|sln)$/.test(basename)) {
     roles.add("backend");
   }
   if (lower.startsWith("src/") || lower.startsWith("frontend/") || /\.(tsx|jsx|css|html)$/.test(basename)) {
@@ -408,10 +425,10 @@ function classifyFeatureFile(repoPathInput: string): FeatureFileRole[] {
   if (/(^|\/)hooks?\//.test(lower) || /^use[a-z0-9]+/.test(basename)) {
     roles.add("hook");
   }
-  if (/(routes?|controller)\.(ts|tsx|js|jsx|mts|mjs|cts|cjs)$/.test(basename)) {
+  if (/(routes?|controller)\.(ts|tsx|js|jsx|mts|mjs|cts|cjs|cs)$/.test(basename)) {
     roles.add("route");
   }
-  if (/service\.(ts|tsx|js|jsx|mts|mjs|cts|cjs)$/.test(basename)) {
+  if (/service\.(ts|tsx|js|jsx|mts|mjs|cts|cjs|cs)$/.test(basename)) {
     roles.add("service");
   }
   if (/gateway\.(ts|tsx|js|jsx|mts|mjs|cts|cjs)$/.test(basename) || lower.includes("realtime")) {

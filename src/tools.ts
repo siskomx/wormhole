@@ -179,7 +179,12 @@ import {
   type WorkflowInput,
 } from "./workflows.js";
 import { writeWorkflowArtifacts } from "./workflow-files.js";
-import type { GateFreshnessInput, GateSourceConflictsInput } from "./gate-signals.js";
+import type {
+  GateFreshnessInput,
+  GateLoopHealthInput,
+  GateRuntimeBehaviorInput,
+  GateSourceConflictsInput,
+} from "./gate-signals.js";
 import {
   createPatchTransactionStore,
   type PatchTransactionSnapshot,
@@ -837,6 +842,17 @@ export function createToolHandlers(
       if (input.recordEvidence) {
         currentToolName = "record_evidence";
         if (input.missionId) {
+          const missionStatus = kernel.missionStatus(input.missionId);
+          if (missionStatus.roundsStarted === 0) {
+            currentToolName = "round_start";
+            kernel.startRound(input.missionId);
+            addAction({
+              toolName: "round_start",
+              status: "ran",
+              reason: "Started an evidence round before state maintenance recorded evidence.",
+            });
+            currentToolName = "record_evidence";
+          }
           recordedEvidence.push(
             kernel.recordEvidence(input.missionId, {
               sourceType: "derived_note",
@@ -1004,11 +1020,15 @@ export function createToolHandlers(
       missionId: string;
       sourceConflicts?: GateSourceConflictsInput;
       freshness?: GateFreshnessInput;
+      runtimeBehavior?: GateRuntimeBehaviorInput;
+      loopHealth?: GateLoopHealthInput;
     }) {
       const storedSignals = latestMaintenanceSignalsForMission(input.missionId);
       return kernel.requestGate(input.missionId, {
         sourceConflicts: input.sourceConflicts ?? storedSignals?.sourceConflicts,
         freshness: input.freshness ?? storedSignals?.freshness,
+        runtimeBehavior: input.runtimeBehavior,
+        loopHealth: input.loopHealth,
       });
     },
 

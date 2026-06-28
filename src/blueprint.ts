@@ -227,9 +227,9 @@ export function compileRepoBlueprint(input: BlueprintCompileInput): BlueprintCom
     input.onboard.contract.packageManager === "unknown" ? 0.3 : 1,
   );
   const packageManager = field(input.onboard.contract.packageManager, "confirmed_from_repo", packageManagerEvidence);
-  const language = detectLanguage(dependencyNames);
-  const runtime = detectRuntime(dependencyNames, language.value);
-  const framework = detectFramework(dependencyNames);
+  const language = detectLanguage(dependencyNames, input.onboard.contract);
+  const runtime = detectRuntime(dependencyNames, language.value, input.onboard.contract);
+  const framework = detectFramework(dependencyNames, input.onboard.contract);
   const database = detectDatabase(dependencyNames, input.onboard.repoRoot);
   const featureIndex = createFeatureIndex({ repoRoot: input.onboard.repoRoot, generatedAt });
   const requiredVerification = selectRequiredVerification(input.onboard.verificationPlan.commands);
@@ -346,9 +346,9 @@ export function compileBootstrapBlueprint(input: {
     contract.packageManager === "unknown" ? 0.3 : 1,
   );
   const packageManager = field(contract.packageManager, "confirmed_from_repo", packageManagerEvidence);
-  const language = detectLanguage(dependencyNames);
-  const runtime = detectRuntime(dependencyNames, language.value);
-  const framework = detectFramework(dependencyNames);
+  const language = detectLanguage(dependencyNames, contract);
+  const runtime = detectRuntime(dependencyNames, language.value, contract);
+  const framework = detectFramework(dependencyNames, contract);
   const database = detectDatabase(dependencyNames, contract.repoRoot);
   const featureIndex = createFeatureIndex({ repoRoot: contract.repoRoot, generatedAt });
   const verificationPlan = createVerificationPlan({ contract });
@@ -575,21 +575,37 @@ export function checkBlueprintGate(input: BlueprintGateInput): BlueprintGateResu
   return { status: "pass", findings };
 }
 
-function detectLanguage(dependencyNames: Set<string>): BlueprintField<string> {
+function detectLanguage(
+  dependencyNames: Set<string>,
+  contract: Pick<ReturnType<typeof detectProjectContract>, "packageManager" | "lockfiles">,
+): BlueprintField<string> {
   if (dependencyNames.has("typescript") || dependencyNames.has("@types/node")) {
     return field("TypeScript", "confirmed_from_repo", contractEvidence("package.json", "TypeScript dependency detected.", 1));
+  }
+  if (contract.packageManager === "dotnet" || contract.lockfiles.some((lockfile) => /\.(?:sln|csproj)$/i.test(lockfile))) {
+    return field("C#", "confirmed_from_repo", contractEvidence("dotnet project files", "dotnet solution or C# project file detected.", 0.95));
   }
   return field("unknown", "unknown_blocking", contractEvidence("package.json", "No primary language dependency was detected.", 0.3));
 }
 
-function detectRuntime(dependencyNames: Set<string>, language: string): BlueprintField<string> {
+function detectRuntime(
+  dependencyNames: Set<string>,
+  language: string,
+  contract: Pick<ReturnType<typeof detectProjectContract>, "packageManager" | "lockfiles">,
+): BlueprintField<string> {
   if (dependencyNames.has("@types/node") || dependencyNames.has("@modelcontextprotocol/sdk") || language === "TypeScript") {
     return field("Node.js", "confirmed_from_repo", contractEvidence("package.json", "Node.js runtime dependencies detected.", 0.9));
+  }
+  if (contract.packageManager === "dotnet" || language === "C#") {
+    return field(".NET", "confirmed_from_repo", contractEvidence("dotnet project files", "dotnet project convention detected.", 0.95));
   }
   return field("unknown", "unknown_blocking", contractEvidence("package.json", "No runtime convention was detected.", 0.3));
 }
 
-function detectFramework(dependencyNames: Set<string>): BlueprintField<string> {
+function detectFramework(
+  dependencyNames: Set<string>,
+  contract: Pick<ReturnType<typeof detectProjectContract>, "packageManager" | "lockfiles">,
+): BlueprintField<string> {
   if (dependencyNames.has("@modelcontextprotocol/sdk")) {
     return field("MCP TypeScript service", "confirmed_from_repo", contractEvidence("package.json", "MCP SDK dependency detected.", 0.95));
   }
@@ -598,6 +614,9 @@ function detectFramework(dependencyNames: Set<string>): BlueprintField<string> {
   }
   if (dependencyNames.has("react")) {
     return field("React", "confirmed_from_repo", contractEvidence("package.json", "React dependency detected.", 0.9));
+  }
+  if (contract.lockfiles.some((lockfile) => /\.csproj$/i.test(lockfile))) {
+    return field("ASP.NET Core", "confirmed_from_repo", contractEvidence("*.csproj", "C# project file detected.", 0.85));
   }
   return field("unknown", "assumption_needs_approval", contractEvidence("package.json", "No framework dependency was detected.", 0.45));
 }

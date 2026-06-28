@@ -10,6 +10,8 @@ import {
 import {
   blockingGateSignalMessages,
   type GateFreshnessInput,
+  type GateLoopHealthInput,
+  type GateRuntimeBehaviorInput,
   type GateSourceConflictsInput,
 } from "./gate-signals.js";
 
@@ -677,6 +679,8 @@ export function createInMemoryKernel(
       input: {
         sourceConflicts?: GateSourceConflictsInput;
         freshness?: GateFreshnessInput;
+        runtimeBehavior?: GateRuntimeBehaviorInput;
+        loopHealth?: GateLoopHealthInput;
       } = {},
     ): GateResult {
       const state = getMissionState(missionId);

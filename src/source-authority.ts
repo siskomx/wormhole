@@ -194,7 +194,7 @@ function isConfigPath(lowerPath: string): boolean {
 }
 
 function isCodePath(lowerPath: string): boolean {
-  return /\.(?:cjs|cts|js|jsx|mjs|mts|py|ts|tsx)$/.test(lowerPath);
+  return /\.(?:cjs|cs|cts|js|jsx|mjs|mts|py|ts|tsx)$/.test(lowerPath);
 }
 
 function toRepoPath(value: string): string {

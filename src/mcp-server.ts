@@ -488,6 +488,8 @@ export function createWormholeMcpServer(
         missionId: z.string(),
         sourceConflicts: z.any().optional(),
         freshness: z.any().optional(),
+        runtimeBehavior: z.any().optional(),
+        loopHealth: z.any().optional(),
       },
     },
     async (input) => jsonResult(tools.gateRequest(input)),

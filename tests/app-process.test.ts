@@ -40,6 +40,38 @@ function createFixtureRepo(): string {
   return repoRoot;
 }
 
+function createDotnetWebClientRepo(): string {
+  const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-app-process-dotnet-web-client-"));
+  mkdirSync(path.join(repoRoot, "Jellyfin.Server"), { recursive: true });
+  mkdirSync(path.join(repoRoot, "MediaBrowser.Controller", "Extensions"), { recursive: true });
+  writeFileSync(path.join(repoRoot, "Jellyfin.sln"), "Microsoft Visual Studio Solution File\n");
+  writeFileSync(path.join(repoRoot, "Jellyfin.Server", "Jellyfin.Server.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk.Web\" />\n");
+  writeFileSync(
+    path.join(repoRoot, "README.md"),
+    "# Jellyfin\n\nJellyfin is a media server that can host web client resources for users and server administrators.\n",
+  );
+  writeFileSync(
+    path.join(repoRoot, "Jellyfin.Server", "StartupOptions.cs"),
+    [
+      "namespace Jellyfin.Server;",
+      "public class StartupOptions {",
+      "  public bool NoWebClient { get; set; }",
+      "  public string? WebDir { get; set; }",
+      "}",
+    ].join("\n"),
+  );
+  writeFileSync(
+    path.join(repoRoot, "MediaBrowser.Controller", "Extensions", "ConfigurationExtensions.cs"),
+    [
+      "namespace MediaBrowser.Controller.Extensions;",
+      "public static class ConfigurationExtensions {",
+      "  public const string HostWebClientKey = \"hostwebclient\";",
+      "}",
+    ].join("\n"),
+  );
+  return repoRoot;
+}
+
 describe("app process compiler", () => {
   it("drafts product definition, roadmap, backlog, and operating gates from a repo blueprint", () => {
     const repoRoot = createFixtureRepo();
@@ -135,6 +167,35 @@ describe("app process compiler", () => {
       expect(markdown).toContain("Product definition: ai_drafted");
       expect(markdown).toContain("Current phase: 1");
       expect(markdown).not.toContain("undefined");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("grounds app-process drafts in dotnet media server and web-client repo evidence", () => {
+    const repoRoot = createDotnetWebClientRepo();
+    try {
+      const result = compileAppProcess({
+        repoRoot,
+        objective: "Assess what it would take to implement a native in-app browser in Jellyfin.",
+        blueprint: compileBootstrapBlueprint({
+          repoRoot,
+          objective: "Assess what it would take to implement a native in-app browser in Jellyfin.",
+        }),
+      });
+
+      expect(result.appProcess.architecture.value.stack).toMatchObject({
+        packageManager: "dotnet",
+        language: "C#",
+        runtime: ".NET",
+        framework: "ASP.NET Core",
+      });
+      expect(result.appProcess.productDefinition.value.keyEntities).toEqual(
+        expect.arrayContaining(["Browser", "Web Client", "Media Server"]),
+      );
+      expect(result.appProcess.productDefinition.value.targetUsers).toEqual(["Jellyfin users", "Server admins"]);
+      expect(result.appProcess.productDefinition.value.targetUsers).not.toContain("Team members");
+      expect(result.appContextMarkdown).toContain("Stack: C#, .NET, ASP.NET Core");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

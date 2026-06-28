@@ -134,6 +134,29 @@ export type AgentRoutingInput = {
 
 const DEFAULT_CONTEXT_CHARS = 6_000;
 const RUNTIME_BEHAVIOR_REQUIRED_TOOLS = ["record_evidence", "verification_run", "gate_request"] as const;
+const RUNTIME_BEHAVIOR_IGNORED_TOOL_NAMES = [
+  "agent_context_prepare",
+  "app_process_compile",
+  "app_process_status",
+  "app_process_validate",
+  "app_process_write_artifacts",
+  "ctx_pack_refresh",
+  "durable_index_manifest_status",
+  "durable_index_status",
+  "durable_repo_index_query",
+  "durable_repo_index_refresh",
+  "mission_route",
+  "mission_start",
+  "next_best_tool",
+  "project_intelligence_snapshot",
+  "round_start",
+  "source_conflicts_analyze",
+  "state_maintenance_run",
+  "tool_catalog_query",
+  "tool_layer_map",
+  "workflow_start_feature",
+  "workflow_write_artifacts",
+] as const;
 
 export function createProjectIntelligenceSnapshot(
   input: AgentRoutingInput,
@@ -315,10 +338,15 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     indexOptions: input.indexOptions,
     preferredSources: input.preferredSources,
   });
-  const languageCoverageSummaries = (contextPack.indexHealth.languageCoverage ?? []).map(
+  const effectiveIndexHealth = selectPreparedIndexHealth(contextPack.indexHealth, input.durableRetrieval?.indexHealth);
+  const effectiveContextPack = {
+    ...contextPack,
+    indexHealth: effectiveIndexHealth,
+  };
+  const languageCoverageSummaries = (effectiveContextPack.indexHealth.languageCoverage ?? []).map(
     (coverage) => `${coverage.displayName} ${coverage.indexedFileCount}/${coverage.totalFileCount} indexed`,
   );
-  const languageCoverageReasons = (contextPack.indexHealth.languageCoverage ?? []).flatMap(
+  const languageCoverageReasons = (effectiveContextPack.indexHealth.languageCoverage ?? []).flatMap(
     (coverage) => coverage.reasons,
   );
   const instructionParts = [
@@ -339,6 +367,7 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     "Continue into implementation and verification for coding tasks.",
     "Record source-backed evidence before making implementation claims.",
     "Run focused verification before requesting the gate.",
+    "Run gate_request after verification_run and record_evidence.",
     "Run runtime_behavior_audit before final claims when observed tool calls are available.",
     "Call emit_plan only when the user explicitly asks for a plan, spec, design, or planning-only artifact.",
   ];
@@ -361,8 +390,8 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     objective: input.objective,
     snapshot,
     route,
-    contextPack,
-    indexHealth: contextPack.indexHealth,
+    contextPack: effectiveContextPack,
+    indexHealth: effectiveIndexHealth,
     recommendedDiscovery: createDiscoveryToolCalls(),
     stateMaintenance: createStateMaintenanceAdvice(),
     ...(input.durableRetrieval ? { durableRetrieval: input.durableRetrieval } : {}),
@@ -422,6 +451,7 @@ function createRuntimeBehaviorAuditToolCall(
   const input: AgentToolCall["input"] = {
     recommendedTools: createRuntimeRecommendedTools(route, nextToolCalls),
     requiredTools: [...RUNTIME_BEHAVIOR_REQUIRED_TOOLS],
+    ignoredToolNames: [...RUNTIME_BEHAVIOR_IGNORED_TOOL_NAMES],
     knownToolNames: TOOL_REGISTRY.map((tool) => tool.name),
     scope: "wormhole",
   };
@@ -468,6 +498,24 @@ function createRuntimeRecommendedTools(
     addRecommendation(call, call.toolName === "gate_request" ? "gate" : "verify");
   }
   return [...recommendationsByName.values()];
+}
+
+function selectPreparedIndexHealth(
+  contextHealth: IndexHealthSnapshot,
+  durableHealth: IndexHealthSnapshot | undefined,
+): IndexHealthSnapshot {
+  if (!durableHealth) {
+    return contextHealth;
+  }
+  const durableFileCount = durableHealth.fileCount ?? 0;
+  const contextFileCount = contextHealth.fileCount ?? 0;
+  if (durableHealth.status === "fresh" && durableFileCount >= contextFileCount) {
+    return durableHealth;
+  }
+  if (contextHealth.status === "degraded" && durableFileCount > contextFileCount) {
+    return durableHealth;
+  }
+  return contextHealth;
 }
 
 function createDefaultToolSequence(input: {

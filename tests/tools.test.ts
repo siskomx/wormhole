@@ -171,6 +171,37 @@ describe("Wormhole MCP tool handlers", () => {
     }
   });
 
+  it("state maintenance starts an evidence round when recording maintenance evidence", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-maintenance-round-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "src", "app.ts"), "export const app = true;\n");
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), { allowedRepoRoots: [repoRoot] });
+      const mission = tools.missionStart({
+        objective: "Record maintenance evidence.",
+        repoRoot,
+      });
+
+      const maintenance = tools.stateMaintenanceRun({
+        repoRoot,
+        missionId: mission.missionId,
+        objective: "Record maintenance evidence.",
+        recordEvidence: true,
+      });
+      const gate = tools.gateRequest({ missionId: mission.missionId });
+
+      expect(maintenance.status).toBe("completed");
+      expect(maintenance.actions.map((action) => action.toolName)).toEqual(
+        expect.arrayContaining(["round_start", "record_evidence"]),
+      );
+      expect(maintenance.recordedEvidence).toHaveLength(1);
+      expect(gate.open).toBe(true);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("filters stored maintenance signals by mission/status and lets caller signals override them", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-gate-maintenance-filter-"));
     const runtimeStatePath = path.join(repoRoot, ".wormhole", "runtime-state.json");

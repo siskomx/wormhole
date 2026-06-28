@@ -1,6 +1,6 @@
 {
   "name": "wormhole",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "private": true,
   "type": "module",
   "description": "Evidence-aware planning state for AI coding agents.",

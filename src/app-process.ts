@@ -253,6 +253,9 @@ export type AppProcessGateResult = {
 };
 
 const ENTITY_KEYWORDS: Array<{ pattern: RegExp; entities: string[] }> = [
+  { pattern: /\bweb\s*client|webclient|hostwebclient|webdir|nowebclient\b/i, entities: ["Web Client"] },
+  { pattern: /\bbrowser|webview|in-app browser|native browser\b/i, entities: ["Browser", "Web Client"] },
+  { pattern: /\bjellyfin|media server|media library|playback|streaming\b/i, entities: ["Media Server", "Media Library"] },
   { pattern: /\bsubscription|subscriptions\b/i, entities: ["Subscription"] },
   { pattern: /\bbilling|bill\b/i, entities: ["Subscription", "Invoice", "Payment"] },
   { pattern: /\binvoice|invoices\b/i, entities: ["Invoice"] },
@@ -268,17 +271,23 @@ const ENTITY_KEYWORDS: Array<{ pattern: RegExp; entities: string[] }> = [
 const STOP_WORDS = new Set([
   "add",
   "app",
+  "assess",
   "build",
   "create",
   "existing",
   "for",
   "full",
+  "implement",
   "into",
   "map",
   "make",
+  "native",
   "process",
+  "take",
+  "what",
   "workflow",
   "workflows",
+  "would",
   "shared",
   "the",
   "with",
@@ -1017,6 +1026,12 @@ function extractEntities(objective: string, repoSummary: string): string[] {
 
 function inferTargetUsers(objective: string, entities: string[]): string[] {
   const lower = objective.toLowerCase();
+  if (
+    entities.some((entity) => ["Browser", "Web Client", "Media Server", "Media Library"].includes(entity)) ||
+    /\bjellyfin|media server|web\s*client|browser|webview\b/.test(lower)
+  ) {
+    return ["Jellyfin users", "Server admins"];
+  }
   if (lower.includes("accountant") || entities.includes("Accountant")) {
     return ["Accountants", "Operations admins"];
   }
@@ -1041,6 +1056,12 @@ function inferDataClasses(objective: string, entities: string[]): string[] {
   }
   if (/\bschedule|calendar|appointment\b/.test(lower) || entities.includes("Schedule")) {
     classes.add("calendar_data");
+  }
+  if (
+    /\bjellyfin|media|playback|streaming|web\s*client|browser|webview\b/.test(lower) ||
+    entities.some((entity) => ["Browser", "Web Client", "Media Server", "Media Library"].includes(entity))
+  ) {
+    classes.add("media_access_data");
   }
   return [...classes].sort((left, right) => left.localeCompare(right));
 }

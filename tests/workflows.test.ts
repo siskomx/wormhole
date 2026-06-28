@@ -62,6 +62,46 @@ describe("golden-path workflows", () => {
     return repoRoot;
   }
 
+  function createCsharpWebClientFixtureRepo(): string {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-workflow-csharp-web-client-"));
+    mkdirSync(path.join(repoRoot, "Jellyfin.Server"), { recursive: true });
+    mkdirSync(path.join(repoRoot, "MediaBrowser.Controller", "Extensions"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "Jellyfin.sln"), "Microsoft Visual Studio Solution File\n");
+    writeFileSync(path.join(repoRoot, "Jellyfin.Server", "Jellyfin.Server.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk.Web\" />\n");
+    writeFileSync(
+      path.join(repoRoot, "Jellyfin.Server", "StartupOptions.cs"),
+      [
+        "namespace Jellyfin.Server;",
+        "public class StartupOptions {",
+        "  public bool NoWebClient { get; set; }",
+        "  public string? WebDir { get; set; }",
+        "}",
+      ].join("\n"),
+    );
+    writeFileSync(
+      path.join(repoRoot, "Jellyfin.Server", "Startup.cs"),
+      [
+        "namespace Jellyfin.Server;",
+        "public class Startup {",
+        "  public void Configure(dynamic mainApp) {",
+        "    mainApp.UseDefaultFiles();",
+        "    mainApp.UseStaticFiles();",
+        "  }",
+        "}",
+      ].join("\n"),
+    );
+    writeFileSync(
+      path.join(repoRoot, "MediaBrowser.Controller", "Extensions", "ConfigurationExtensions.cs"),
+      [
+        "namespace MediaBrowser.Controller.Extensions;",
+        "public static class ConfigurationExtensions {",
+        "  public const string HostWebClientKey = \"hostwebclient\";",
+        "}",
+      ].join("\n"),
+    );
+    return repoRoot;
+  }
+
   it("creates a start-feature workflow with exact next calls and evidence gates", () => {
     const workflow = createFeatureWorkflow({
       repoRoot: "/repo",
@@ -157,6 +197,34 @@ describe("golden-path workflows", () => {
           `.wormhole/workflows/${workflow.run.runId}.json`,
           `.wormhole/workflows/${workflow.run.runId}.md`,
           ".wormhole/workflows/latest.json",
+        ]),
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("binds C# web-client hosting evidence for native browser planning", () => {
+    const repoRoot = createCsharpWebClientFixtureRepo();
+    try {
+      const workflow = createFeatureWorkflow({
+        repoRoot,
+        objective: "Assess native in-app browser web client hosting.",
+        query: "native in-app browser web client HostWebClient WebDir nowebclient",
+      });
+
+      expect(workflow.featureBindings.map((feature) => feature.featureId)).toContain("web-client");
+      const binding = workflow.featureBindings.find((feature) => feature.featureId === "web-client");
+      expect(binding?.keyFiles).toEqual(
+        expect.arrayContaining([
+          "Jellyfin.Server/StartupOptions.cs",
+          "MediaBrowser.Controller/Extensions/ConfigurationExtensions.cs",
+        ]),
+      );
+      expect(binding?.sourceOfTruth.map((source) => source.sourcePath)).toEqual(
+        expect.arrayContaining([
+          "Jellyfin.Server/StartupOptions.cs",
+          "MediaBrowser.Controller/Extensions/ConfigurationExtensions.cs",
         ]),
       );
     } finally {

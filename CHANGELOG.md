@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.5.3 - 2026-06-28
+
+- Wired state maintenance to start an evidence round automatically before recording maintenance evidence.
+- Extended gate checks to consume runtime behavior blockers and agent-loop health blockers alongside source-conflict and freshness signals.
+- Carried fresh durable SQLite repo-index health into prepared agent contexts so large-repo ctx packs do not fall back to degraded native index metadata after durable refresh.
+- Tuned runtime behavior audits to ignore expected Wormhole orchestration/meta tools while still flagging unexpected runtime calls.
+- Added C#/.NET/Jellyfin web-client recognition across feature binding, source authority, blueprint/app-process grounding, and workflow context.
+
 ## 0.5.2 - 2026-06-28
 
 - Added an internal deterministic agent-loop health primitive for the perceive, reason, plan, act, observe, and maintain phases without adding a new MCP tool surface.

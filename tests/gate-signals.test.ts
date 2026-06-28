@@ -122,4 +122,46 @@ describe("gate index health signals", () => {
       "Language coverage missing for Rust: 34 files detected, 0 indexed.",
     );
   });
+
+  it("blocks gates when runtime behavior or loop health is blocking", () => {
+    const runtimeFindings = evaluateGateSignals({
+      runtimeBehavior: {
+        summary: {
+          status: "blocker",
+          uncoveredRequiredToolCount: 1,
+          orderingViolationCount: 1,
+        },
+        blockingReasons: ["Required tool was not observed: verification_run."],
+      },
+      enforce: true,
+    });
+    const loopFindings = evaluateGateSignals({
+      loopHealth: {
+        status: "blocked",
+        blockers: [
+          {
+            code: "RUNTIME_AUDIT_BLOCKER",
+            message: "Runtime behavior audit is blocking.",
+          },
+        ],
+      },
+      enforce: true,
+    });
+
+    expect(runtimeFindings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "runtime-behavior:blocker",
+        severity: "block",
+      }),
+    );
+    expect(blockingGateSignalMessages({ runtimeBehavior: { summary: { status: "blocker" } } })).toContain(
+      "Runtime behavior audit is blocking.",
+    );
+    expect(loopFindings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "agent-loop-health:blocked",
+        severity: "block",
+      }),
+    );
+  });
 });

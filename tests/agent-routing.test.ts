@@ -213,6 +213,20 @@ describe("agent-facing routing tools", () => {
       expect(runtimeAuditInput.requiredTools).toEqual(
         expect.arrayContaining(["record_evidence", "verification_run", "gate_request"]),
       );
+      expect(runtimeAuditInput.ignoredToolNames).toEqual(
+        expect.arrayContaining([
+          "agent_context_prepare",
+          "ctx_pack_refresh",
+          "durable_index_status",
+          "durable_repo_index_query",
+          "mission_route",
+          "round_start",
+          "state_maintenance_run",
+          "tool_catalog_query",
+          "tool_layer_map",
+          "workflow_write_artifacts",
+        ]),
+      );
       expect(runtimeAuditInput.knownToolNames).toEqual(
         expect.arrayContaining(TOOL_REGISTRY.map((tool) => tool.name)),
       );
@@ -237,6 +251,15 @@ describe("agent-facing routing tools", () => {
         observedToolCalls: [{ toolName: "repo_index_query" }, { toolName: "shell" }],
       });
       expect(runtimeAudit.unexpectedTools.map((tool) => tool.toolName)).toEqual(["repo_index_query"]);
+      const metaToolAudit = auditRuntimeBehavior({
+        ...runtimeAuditInput,
+        observedToolCalls: [
+          { toolName: "agent_context_prepare" },
+          { toolName: "durable_repo_index_query" },
+          { toolName: "workflow_write_artifacts" },
+        ],
+      });
+      expect(metaToolAudit.unexpectedTools).toEqual([]);
       expect(prepared.recommendedDiscovery.map((call) => call.toolName)).toEqual([
         "tool_layer_map",
         "tool_catalog_query",
@@ -245,6 +268,7 @@ describe("agent-facing routing tools", () => {
       expect(prepared.stateMaintenance.context.ownerTools).toContain("ctx_pack_refresh");
       expect(prepared.agentInstructions).toContain("Start with tool_layer_map before browsing the full MCP surface.");
       expect(prepared.agentInstructions).toContain("Continue into implementation and verification for coding tasks.");
+      expect(prepared.agentInstructions).toContain("Run gate_request after verification_run");
       expect(prepared.agentInstructions).toContain("Call emit_plan only when the user explicitly asks for a plan");
       expect(prepared.agentInstructions).toContain(
         "Use durable_repo_index_query, ctx_pack_refresh, and workflow_write_artifacts for durable handoff and resume paths.",
@@ -376,6 +400,30 @@ describe("agent-facing routing tools", () => {
       expect(prepared.contextPack.sources).toContain("src/f1004.ts");
       expect(prepared.indexHealth.fileCount).toBeGreaterThan(1000);
       expect(prepared.agentInstructions).toContain("durable repo index retrieval seeded this context pack");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("keeps prepared context health aligned with fresh durable large-repo retrieval across handler instances", () => {
+    const repoRoot = createLargeFixtureRepo();
+    try {
+      const first = createToolHandlers(createInMemoryKernel(), { allowedRepoRoots: [repoRoot] });
+      first.durableRepoIndexRefresh({ repoRoot, preset: "large_repo" });
+
+      const second = createToolHandlers(createInMemoryKernel(), { allowedRepoRoots: [repoRoot] });
+      const prepared = second.agentContextPrepare({
+        repoRoot,
+        objective: "Create accounting lifecycle feature",
+        query: "lifecycleAccountingMarker",
+        maxChars: 4_000,
+      });
+
+      expect(prepared.durableRetrieval?.usedSqlite).toBe(true);
+      expect(prepared.indexHealth.source).toMatch(/durable/);
+      expect(prepared.indexHealth.fileCount).toBeGreaterThan(1000);
+      expect(prepared.indexHealth.status).not.toBe("degraded");
+      expect(prepared.contextPack.indexHealth.fileCount).toBeGreaterThan(1000);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
