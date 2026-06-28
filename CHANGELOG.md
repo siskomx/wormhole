@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 - 2026-06-28
 
 - Added source-conflict analysis for documentation claims and stale generated `.wormhole` artifact fingerprints.
 - Added capability relation metadata and an audit tool for capability, registry, workflow, and test wiring.
