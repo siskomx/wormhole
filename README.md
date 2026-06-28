@@ -1,19 +1,159 @@
 # Wormhole
 
-Wormhole is an evidence-aware MCP operating layer for AI coding agents. It is not an autonomous agent by itself; it is the local control plane that gives agents mission state, repo intelligence, context routing, evidence gates, verification guidance, and safer write/execute workflows.
+Wormhole is an evidence-aware MCP operating layer for AI coding agents. It is not an autonomous coding agent by itself. It is the local control plane that gives agents mission state, repo intelligence, context routing, evidence gates, verification guidance, durable indexes, and safer write/execute workflows.
+
+The goal is simple: make coding agents faster and more precise in large repositories by giving them current, queryable, repo-native facts before they start broad file reads or speculative edits.
 
 ## What It Provides
 
-- Mission kernel: mission rounds, evidence records, open questions, gate checks, and evidence-cited plan artifacts.
-- Agent routing: `agent_context_prepare`, `mission_route`, `next_best_tool`, `tool_layer_map`, `tool_exposure_profile`, and `tool_catalog_query`.
-- Repo intelligence: SQLite-backed durable repo indexes, JSON compatibility exports, project contracts, architecture maps, entrypoint discovery, blast-radius analysis, context packs, repo-native coverage packs, feature-slice queries, repo-local convention/script ingestion, schema/migration summaries, verification-gate mapping, repo blueprint/constraint artifacts, app-process/product/roadmap/backlog artifacts, progressive blueprint lane artifacts, and cached project models/derived intelligence for repeated large-repo calls.
-- Index health: repo, durable-index, architecture, blast-radius, context-pack, and routing responses expose shared `indexHealth` metadata so agents can see stale, missing, or truncated guidance before trusting it.
-- State maintenance: `state_maintenance_run`, `state_maintenance_status`, and `state_maintenance_retry` coordinate graph refresh, context refresh, source-conflict analysis, durable freshness checks, evidence capture, route refresh, and workspace updates.
-- Verification and safety: focused test planning, command/LSP diagnostics, dependency and secret scans, action policy review, privileged tool admission review, and patch transactions with rollback.
-- Agent collaboration: task registration, control messages, shared workspace memory, external agent adapters, behavior/remit verification, generated-tool validation, and static workbench artifacts.
-- Optional advanced surfaces: Python-backed graph/media/policy jobs, discovery imports, shell-hook planning, adaptive routing, model profiles, and policy research traces.
+### Mission And Evidence Control
 
-The authoritative tool/capability list lives in `src/capabilities.ts`; the README intentionally stays concise.
+- Mission rounds, evidence records, open questions, task registration, task status, control messages, and gate checks.
+- Evidence-cited plan artifacts through `emit_plan`.
+- Final-claim safeguards through `gate_request`, source-backed evidence records, freshness signals, and runtime behavior audit support.
+
+### Agent Routing And Tool Discovery
+
+- `agent_context_prepare` builds a focused context pack and routing instructions for a specific objective.
+- `mission_route` and `next_best_tool` steer agents toward the next useful tool instead of forcing them to browse the full MCP surface.
+- `tool_layer_map`, `tool_exposure_profile`, `tool_catalog_query`, and `tool_admission_review` expose the registered runtime surface with structured metadata.
+- Tool registry conformance is tested against the live MCP server so stale tool metadata is treated as a regression.
+
+### Repo Intelligence
+
+- Deterministic repo-local graph indexing over files, symbols, imports, links, references, and inferred calls.
+- SQLite-backed durable repo indexes under `.wormhole/indexes`, plus JSON compatibility exports and shard manifests.
+- `repo_index_build`, `repo_index_query`, `repo_index_explain`, `repo_index_path`, and `repo_index_report` for immediate repo graph work.
+- `durable_repo_index_refresh`, `durable_index_status`, `durable_index_manifest_refresh`, `durable_index_manifest_status`, and `durable_repo_index_query` for persistent large-repo retrieval.
+- Project contracts, dependency inventory, command maps, architecture maps, entrypoint discovery, blast-radius analysis, and generated project context packs.
+- Repo-native coverage packs and feature-slice queries over feature indexes, scripts, conventions, schema evidence, verification gates, source conflicts, and coverage gaps.
+
+### Domain Indexing
+
+Wormhole also has a manifest-driven domain indexing layer for repositories where generic file/symbol indexing is not enough.
+
+Domain indexing joins:
+
+- Feature ids, aliases, roots, portals, and owned database tables from `.wormhole/domain-index.json`.
+- Route, hook, service, migration, OpenAPI, convention, and memory files.
+- OpenAPI endpoint observations, route-scan fallback endpoints, auth hints, query keys, and response schema refs.
+- Folded SQL migration facts: tables, columns, indexes, foreign keys, and migration provenance.
+- Domain verification gates mapped from feature side effects such as `authz`, `database_schema`, `http_mutation`, and `realtime`.
+- Coverage and drift signals for missing manifests, generic features missing from the manifest, routes without OpenAPI, APIs without feature ownership, tables without owners, stale indexes, and source conflicts.
+
+The domain index is persisted as SQLite at:
+
+```text
+.wormhole/indexes/domain-index.sqlite
+```
+
+Domain tools:
+
+- `domain_index_refresh`: rebuild the SQLite domain index.
+- `domain_index_status`: read freshness, summary, warnings, and index health.
+- `domain_slice_query`: query one feature with files, API endpoints, tables, coverage gaps, and gate plans.
+- `domain_api_query`: query indexed API endpoints by feature, method, path template, or text.
+- `domain_table_query`: query folded schema tables, columns, indexes, foreign keys, and migration provenance.
+- `domain_index_coverage`: list domain coverage gaps.
+- `domain_index_drift`: compare the stored domain index with the current repo.
+- `domain_verification_gate_plan`: return feature- or gate-specific verification commands.
+
+`domain_slice_query` falls back to `feature_slice_query` when the domain index is missing, stale, or refused by `requireFresh: true`, so agents still get useful repo-native context while being told the domain index needs refresh.
+
+### Verification, Safety, And Writes
+
+- Diff-aware test impact analysis and focused verification plans.
+- Command diagnostics, LSP diagnostics, dependency reports, secret scanning, action policy review, and operation risk review.
+- Privileged write admission checks for mutating artifacts.
+- Patch transactions with checkpoints, unified-diff application, status, and rollback.
+- App-process and blueprint gates for larger product or repo-change workflows.
+
+### Agent Collaboration And Runtime Extensions
+
+- Shared mission workspace memory for concurrent agent runs.
+- External agent adapters, generated-tool validation, behavior/remit verification, and deterministic findings rendering.
+- Printing Press CLI adapter support.
+- Optional Python-backed graph metrics, graph communities, media extraction, trace summaries, and offline policy jobs.
+- Discovery imports from HAR/OpenAPI, bounded HTTP crawl, optional browser capture, and deterministic tool-spec generation.
+- Adaptive routing, model profiles, conductor traces, shell-hook planning, and policy research surfaces.
+
+## Core Workflows
+
+### First Contact With A Repo
+
+1. Use `project_intelligence_snapshot`, `agent_context_prepare`, or `mission_route`.
+2. Use `tool_layer_map` and `tool_catalog_query` for tool discovery.
+3. Refresh stale or missing repo guidance through the state-maintenance owner tools.
+4. Record source-backed evidence before implementation claims.
+5. Run focused verification and ask the Wormhole gate before final artifacts.
+
+### Large-Repo Retrieval
+
+1. Refresh a durable index with `durable_repo_index_refresh` or `durable_index_manifest_refresh`.
+2. Use `durable_index_status` or `durable_index_manifest_status` to inspect freshness.
+3. Query through `durable_repo_index_query`.
+4. Pass `requireFresh: true` when stale data must be refused instead of returned with warnings.
+
+### Domain-Indexed Repos
+
+1. Add `.wormhole/domain-index.json`.
+2. Run `domain_index_refresh`.
+3. Check `domain_index_status`.
+4. Use `domain_slice_query`, `domain_api_query`, `domain_table_query`, and `domain_verification_gate_plan` before implementation.
+5. Use `domain_index_coverage` and `domain_index_drift` before trusting the stored domain facts.
+
+### Implementation Loop
+
+1. Prepare context with `agent_context_prepare`.
+2. Narrow impact with `blast_radius_analyze`, `test_impact_analyze_v2`, `domain_slice_query`, or `feature_slice_query`.
+3. Make edits through normal repo tooling or guarded patch transactions when rollback matters.
+4. Run focused verification.
+5. Record evidence.
+6. Ask `gate_request`.
+
+## Domain Manifest
+
+Create `.wormhole/domain-index.json` to teach Wormhole repo-specific feature ownership:
+
+```json
+{
+  "schemaVersion": "domain-index.v0",
+  "features": [
+    {
+      "featureId": "tickets",
+      "displayName": "Tickets",
+      "aliases": ["ticket"],
+      "roots": ["backend/src/modules/tickets", "src/features/tickets"],
+      "portals": ["internal", "client"],
+      "tables": ["tickets", "ticket_messages"]
+    }
+  ],
+  "fileGroups": {
+    "routes": ["backend/src/modules/*/*Routes.ts"],
+    "hooks": ["src/features/*/hooks/use*.ts"],
+    "services": ["backend/src/modules/**/*Service.ts"],
+    "migrations": ["migrations/*.sql"],
+    "openapi": ["public/api-docs/openapi.json"],
+    "conventions": ["docs/conventions/*.md"],
+    "memory": [".wormhole/memory/*.md"]
+  },
+  "verificationGates": [
+    {
+      "gateId": "tenant-isolation",
+      "scriptNames": ["lint:org-filter"],
+      "whenFeatureTouches": ["authz"]
+    }
+  ]
+}
+```
+
+Notes:
+
+- Paths must be repo-relative and stay inside the repo.
+- Feature ids and aliases are normalized for matching.
+- Script names are preserved exactly so package scripts like `lint:org-filter` continue to work.
+- Manifest-declared `.wormhole/memory` files are indexed by the domain layer even though the broad repo index ignores `.wormhole` runtime state.
+- If OpenAPI files are absent, route scanning still produces endpoint facts and reports `route-without-openapi` coverage gaps.
 
 ## Runtime State
 
@@ -21,29 +161,46 @@ The authoritative tool/capability list lives in `src/capabilities.ts`; the READM
 - Event log: `.wormhole/events.jsonl`
 - Handler runtime state: `.wormhole/runtime-state.json`
 - App-process run state: `.wormhole/app-process/run-state.json` and `.wormhole/app-process/events.jsonl`
-- Durable indexes: `.wormhole/indexes` stores SQLite repo indexes plus JSON compatibility exports/manifests.
+- Durable repo indexes: `.wormhole/indexes/repo-index.sqlite`, JSON compatibility exports, and manifest shards.
+- Domain index: `.wormhole/indexes/domain-index.sqlite`
 - Codex plugin metadata: `plugins/wormhole/.codex-plugin/plugin.json`
 - Claude Desktop extension metadata: `plugins/wormhole-claude-desktop`
 
 The `.wormhole` directory is local runtime state and is ignored by git.
 
-## Agent Workflow
+## Freshness And Index Health
 
-For coding agents, the intended path is:
+Repo, durable-index, domain-index, architecture, blast-radius, context-pack, and routing responses expose shared `indexHealth` metadata. Agents should inspect this before trusting generated guidance.
 
-1. Start with `app_process_compile`, `app_process_write_artifacts`, `blueprint_compile_repo`, `blueprint_write_artifacts` (`progressive: true` for a fast large-repo bootstrap), `agent_context_prepare`, or `project_intelligence_snapshot`.
-2. Use `app_process_status`, `app_process_accept_section`, `app_process_continue`, and `app_process_record_verification` to resume app-process work from durable state before broad implementation.
-3. Follow `mission_route` and `next_best_tool` instead of browsing the full MCP surface.
-4. Use `tool_layer_map` and `tool_catalog_query` for focused tool discovery.
-5. Use `state_maintenance_run` for coordinated graph, context, source-conflict, freshness, evidence, and workspace refresh. Refresh index state before trusting degraded or stale context.
-6. Record source-backed evidence before implementation claims.
-7. Run focused verification and ask the Wormhole gate before final artifacts.
+Common freshness behavior:
 
-Tool layering is guided by metadata and routing; Wormhole does not hide the full registered MCP tool surface by default.
+- `fresh`: guidance matches current repo fingerprints.
+- `stale`: stored guidance exists but the repo changed.
+- `missing`: the index or artifact has not been built.
+- `degraded`: the index exists but is truncated or has coverage gaps.
+- `requireFresh: true`: stale or missing query results are refused instead of silently returned.
 
-Durable repo queries warn when the stored index is stale. Callers that require current guidance can pass `requireFresh: true`, which refuses stale or missing durable results instead of silently returning them.
+Repo index default caps are conservative:
 
-Repo index builds keep conservative default caps: 1,000 files, 512 KiB per file, and 10 MiB total indexed bytes. `repo_index_build`, `durable_repo_index_refresh`, and `durable_index_manifest_refresh` accept `preset: "large_repo"` for explicit large-repo caps: 50,000 files, 1 MiB per file, and 512 MiB total indexed bytes. Explicit `maxFiles`, `maxFileBytes`, or `maxTotalBytes` values still override the preset. Durable SQLite status reports `ftsAvailable` and `retrievalModes`; durable query results report `retrievalMode` so agents can distinguish SQLite FTS, SQLite LIKE, JSON, and manifest fallback paths.
+- 1,000 files
+- 512 KiB per file
+- 10 MiB total indexed bytes
+
+`repo_index_build`, `durable_repo_index_refresh`, and `durable_index_manifest_refresh` accept:
+
+```json
+{ "preset": "large_repo" }
+```
+
+Large-repo caps are:
+
+- 50,000 files
+- 1 MiB per file
+- 512 MiB total indexed bytes
+
+Explicit `maxFiles`, `maxFileBytes`, or `maxTotalBytes` values override the preset.
+
+Durable SQLite status reports `ftsAvailable` and `retrievalModes`. Durable query results report `retrievalMode` so agents can distinguish SQLite FTS, SQLite LIKE, JSON, and manifest fallback paths.
 
 ## Python Runtime
 
@@ -55,7 +212,7 @@ Install Python dependencies during setup:
 python -m pip install -r python/requirements.txt
 ```
 
-Use these environment variables when needed:
+Environment variables:
 
 - `WORMHOLE_PYTHON`: explicit Python interpreter.
 - `WORMHOLE_PYTHONPATH`: sidecar package path when it is outside the repo-local `python` directory.
@@ -83,7 +240,7 @@ Build first:
 npm run build
 ```
 
-For Claude Code or direct MCP attachment, run:
+For Claude Code or direct MCP attachment:
 
 ```bash
 node dist/src/cli.js
