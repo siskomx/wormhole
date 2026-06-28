@@ -7,7 +7,7 @@ Wormhole is an evidence-aware MCP operating layer for AI coding agents. It is no
 - Mission kernel: mission rounds, evidence records, open questions, gate checks, and evidence-cited plan artifacts.
 - Agent routing: `agent_context_prepare`, `mission_route`, `next_best_tool`, `tool_layer_map`, `tool_exposure_profile`, and `tool_catalog_query`.
 - Repo intelligence: SQLite-backed durable repo indexes, JSON compatibility exports, project contracts, architecture maps, entrypoint discovery, blast-radius analysis, context packs, repo blueprint/constraint artifacts, app-process/product/roadmap/backlog artifacts, progressive blueprint lane artifacts, and cached project models/derived intelligence for repeated large-repo calls.
-- State maintenance: `state_maintenance_run`, `state_maintenance_status`, and `state_maintenance_retry` coordinate graph refresh, context refresh, evidence capture, and workspace updates.
+- State maintenance: `state_maintenance_run`, `state_maintenance_status`, and `state_maintenance_retry` coordinate graph refresh, context refresh, source-conflict analysis, durable freshness checks, evidence capture, route refresh, and workspace updates.
 - Verification and safety: focused test planning, command/LSP diagnostics, dependency and secret scans, action policy review, privileged tool admission review, and patch transactions with rollback.
 - Agent collaboration: task registration, control messages, shared workspace memory, external agent adapters, behavior/remit verification, generated-tool validation, and static workbench artifacts.
 - Optional advanced surfaces: Python-backed graph/media/policy jobs, discovery imports, shell-hook planning, adaptive routing, model profiles, and policy research traces.
@@ -34,7 +34,7 @@ For coding agents, the intended path is:
 2. Use `app_process_status`, `app_process_accept_section`, `app_process_continue`, and `app_process_record_verification` to resume app-process work from durable state before broad implementation.
 3. Follow `mission_route` and `next_best_tool` instead of browsing the full MCP surface.
 4. Use `tool_layer_map` and `tool_catalog_query` for focused tool discovery.
-5. Use `state_maintenance_run` for coordinated graph/context/evidence/workspace refresh.
+5. Use `state_maintenance_run` for coordinated graph, context, source-conflict, freshness, evidence, and workspace refresh.
 6. Record source-backed evidence before implementation claims.
 7. Run focused verification and ask the Wormhole gate before final artifacts.
 
@@ -93,5 +93,6 @@ For Codex, use the repo-local plugin metadata in `plugins/wormhole/.codex-plugin
 - [Canonical plan](docs/planning/wormhole-canonical-plan.md)
 - [Orchestration and adaptive architecture](docs/architecture/orchestration-adaptive-capabilities.md)
 - [Capability manifest contract](docs/contracts/capability-manifest.md)
+- [Changelog](CHANGELOG.md)
 
 Dated implementation plans, generated tool inventories, and one-off analysis reports are intentionally not maintained as current documentation. Use git history for implementation archaeology.
