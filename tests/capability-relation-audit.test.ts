@@ -134,6 +134,31 @@ describe("capability relation audit", () => {
         freshnessChecks: expect.arrayContaining(["repo-native-pack-fingerprint", "relation-test-file-exists"]),
       }),
     );
+    expect(CAPABILITY_RELATIONS).toContainEqual(
+      expect.objectContaining({
+        capabilityId: "orchestration.domain-indexing-layer",
+        primaryTools: expect.arrayContaining([
+          "domain_index_refresh",
+          "domain_slice_query",
+          "domain_api_query",
+          "domain_verification_gate_plan",
+        ]),
+        supportingTools: expect.arrayContaining([
+          "repo_native_pack_build",
+          "feature_slice_query",
+          "durable_repo_index_refresh",
+          "durable_index_status",
+          "source_conflicts_analyze",
+          "project_contract_detect",
+          "test_plan_select",
+          "verification_run",
+          "discovery_openapi_import",
+          "capability_relation_audit",
+        ]),
+        stateOwners: expect.arrayContaining(["sqlite-domain-index", "domain-index-manifest"]),
+        freshnessChecks: expect.arrayContaining(["domain-index-status", "domain-index-drift"]),
+      }),
+    );
   });
 
   it("warns when workflow artifact writers omit artifact freshness metadata", () => {

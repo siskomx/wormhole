@@ -127,6 +127,7 @@ describe("capability manifest", () => {
         "orchestration.project-ground-truth-suite",
         "orchestration.project-intelligence-sequencing",
         "orchestration.native-project-intelligence-spine",
+        "orchestration.domain-indexing-layer",
         "orchestration.native-agent-behavior-verification",
         "orchestration.mission-delta-replanning",
         "orchestration.lsp-feedback-replanning",
@@ -178,6 +179,10 @@ describe("capability manifest", () => {
       manifest.capabilities.find((capability) => capability.id === "orchestration.repo-activity-watch-layer")
         ?.description,
     ).toContain("git diff detection");
+    expect(
+      manifest.capabilities.find((capability) => capability.id === "orchestration.domain-indexing-layer")
+        ?.description,
+    ).toContain("SQLite-backed");
     expect(
       manifest.capabilities.find((capability) => capability.id === "orchestration.patch-transactions")
         ?.description,

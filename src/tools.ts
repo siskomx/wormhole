@@ -122,6 +122,16 @@ import {
   searchDurableSemanticIndex,
 } from "./durable-index-store.js";
 import {
+  queryDomainApi,
+  queryDomainCoverage,
+  queryDomainDrift,
+  queryDomainSlice,
+  queryDomainTable,
+  queryDomainVerificationGatePlan,
+  readDomainIndexStatus,
+  refreshDomainIndex,
+} from "./sqlite-domain-index.js";
+import {
   createRepoActivityStore,
   type RepoActivityRecordInput,
   type RepoActivitySnapshot,
@@ -2211,6 +2221,57 @@ export function createToolHandlers(
     durableRepoIndexQuery(input: Parameters<typeof queryDurableShardedRepoIndex>[0]) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return queryDurableShardedRepoIndex({ ...input, repoRoot });
+    },
+
+    domainIndexRefresh(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return refreshDomainIndex({ ...input, repoRoot });
+    },
+
+    domainIndexStatus(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return readDomainIndexStatus({ repoRoot });
+    },
+
+    domainSliceQuery(input: Parameters<typeof queryDomainSlice>[0]) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const result = queryDomainSlice({ ...input, repoRoot });
+      if (result.refused || result.indexHealth.status === "missing" || result.indexHealth.status === "stale") {
+        return {
+          ...result,
+          fallbackFeatureSlice: queryFeatureSlice({
+            repoRoot,
+            query: input.feature,
+            limit: 1,
+          }),
+        };
+      }
+      return result;
+    },
+
+    domainApiQuery(input: Parameters<typeof queryDomainApi>[0]) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return queryDomainApi({ ...input, repoRoot });
+    },
+
+    domainTableQuery(input: Parameters<typeof queryDomainTable>[0]) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return queryDomainTable({ ...input, repoRoot });
+    },
+
+    domainIndexCoverage(input: Parameters<typeof queryDomainCoverage>[0]) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return queryDomainCoverage({ ...input, repoRoot });
+    },
+
+    domainIndexDrift(input: Parameters<typeof queryDomainDrift>[0]) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return queryDomainDrift({ repoRoot });
+    },
+
+    domainVerificationGatePlan(input: Parameters<typeof queryDomainVerificationGatePlan>[0]) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return queryDomainVerificationGatePlan({ ...input, repoRoot });
     },
 
     durableSemanticIndexRefresh(input: { repoRoot: string; records: SemanticRecordInput[] }) {

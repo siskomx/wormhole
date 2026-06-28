@@ -54,6 +54,41 @@ function createTicketRepo(): string {
       2,
     ),
   );
+  writeFileSync(
+    path.join(repoRoot, ".wormhole", "domain-index.json"),
+    JSON.stringify(
+      {
+        schemaVersion: "domain-index.v0",
+        features: [
+          {
+            featureId: "tickets",
+            aliases: ["ticket"],
+            roots: ["backend/src/modules/tickets", "src/features/tickets"],
+            portals: ["internal", "client"],
+            tables: ["ticket_messages"],
+          },
+        ],
+        fileGroups: {
+          routes: ["backend/src/modules/*/*Routes.ts"],
+          hooks: ["src/features/*/hooks/use*.ts"],
+          services: ["backend/src/modules/**/*Service.ts"],
+          migrations: ["migrations/*.sql"],
+          openapi: [],
+          conventions: ["docs/conventions/*.md"],
+          memory: [],
+        },
+        verificationGates: [
+          {
+            gateId: "tenant-isolation",
+            scriptNames: ["lint:org-filter"],
+            whenFeatureTouches: ["authz"],
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+  );
   writeFileSync(path.join(repoRoot, "docs", "conventions", "multi-tenant.md"), "Use organization filters on tenant data.\n");
   writeFileSync(path.join(repoRoot, "src", "features", "tickets", "hooks", "useTickets.ts"), "export function useTickets() { return []; }\n");
   writeFileSync(
@@ -86,6 +121,7 @@ describe("repo native pack", () => {
           "buildRepoIndex",
           "analyzeSourceConflicts",
           "createVerificationPlan",
+          "buildDomainIndex",
         ]),
       );
       expect(pack.capabilities.scripts.map((script) => script.name)).toEqual(
@@ -95,8 +131,19 @@ describe("repo native pack", () => {
         "docs/conventions/multi-tenant.md",
       );
       expect(pack.schema.tables.map((table) => table.name)).toContain("ticket_messages");
+      expect(pack.domainIndex).toEqual(
+        expect.objectContaining({
+          manifestPresent: true,
+          featureCount: 1,
+        }),
+      );
+      expect(pack.domainIndex.apiEndpointCount).toBeGreaterThanOrEqual(1);
       expect(pack.featureSlices.map((slice) => slice.featureId)).toContain("tickets");
       expect(pack.featureSlices[0]?.routes).toContain("backend/src/modules/tickets/TicketRoutes.ts");
+      expect(pack.featureSlices[0]?.apiEndpoints[0]).toEqual(
+        expect.objectContaining({ pathTemplate: "/tickets", source: "route-scan" }),
+      );
+      expect(pack.featureSlices[0]?.schemaColumns.map((column) => column.name)).toContain("id");
       expect(pack.featureSlices[0]?.tests).toContain("backend/src/modules/tickets/__tests__/tickets.test.ts");
       expect(pack.verificationGates.map((gate) => gate.gateId)).toEqual(
         expect.arrayContaining(["tenant-isolation", "migration-check"]),
@@ -122,6 +169,7 @@ describe("repo native pack", () => {
       expect(result.slices[0]?.keyFiles).toContain("backend/src/modules/tickets/TicketRoutes.ts");
       expect(result.slices[0]?.keyFiles).not.toContain("backend/src/modules/billing/BillingRoutes.ts");
       expect(result.slices[0]?.schemaTables).toContain("ticket_messages");
+      expect(result.slices[0]?.apiEndpoints.map((endpoint) => endpoint.pathTemplate)).toContain("/tickets");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

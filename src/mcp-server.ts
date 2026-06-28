@@ -304,6 +304,20 @@ export function createWormholeMcpServer(
   const toolExposureModeSchema = z.enum(TOOL_EXPOSURE_MODES);
   const projectLaneSchema = z.enum(PROJECT_LANES);
   const repoIndexPresetSchema = z.enum(["default", "large_repo"]);
+  const domainCoverageGapKindSchema = z.enum([
+    "manifest-missing",
+    "feature-without-manifest",
+    "feature-without-api",
+    "route-without-openapi",
+    "api-without-feature",
+    "table-without-owner",
+    "feature-table-without-migration",
+    "openapi-path-missing",
+    "migration-path-missing",
+    "convention-path-missing",
+    "memory-path-missing",
+    "source-conflict",
+  ]);
   const workflowKindSchema = z.enum([
     "workflow_start_feature",
     "workflow_fix_bug",
@@ -2367,6 +2381,110 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.durableRepoIndexQuery(input)),
+  );
+
+  server.registerTool(
+    "domain_index_refresh",
+    {
+      description: "Refresh the SQLite-backed domain index for manifest-declared features, APIs, schema, conventions, memory, and verification gates.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.domainIndexRefresh(input)),
+  );
+
+  server.registerTool(
+    "domain_index_status",
+    {
+      description: "Return domain index freshness, summary, warnings, and health without reading stale results blindly.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.domainIndexStatus(input)),
+  );
+
+  server.registerTool(
+    "domain_slice_query",
+    {
+      description: "Query a domain feature slice with files, API endpoints, tables, coverage gaps, and gate plans; falls back to repo-native slices when stale or missing.",
+      inputSchema: {
+        repoRoot: z.string(),
+        feature: z.string(),
+        requireFresh: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.domainSliceQuery(input)),
+  );
+
+  server.registerTool(
+    "domain_api_query",
+    {
+      description: "Query indexed domain API endpoints by feature, method, path template, or text.",
+      inputSchema: {
+        repoRoot: z.string(),
+        feature: z.string().optional(),
+        method: z.string().optional(),
+        pathTemplate: z.string().optional(),
+        query: z.string().optional(),
+        requireFresh: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.domainApiQuery(input)),
+  );
+
+  server.registerTool(
+    "domain_table_query",
+    {
+      description: "Query folded domain schema tables, columns, indexes, foreign keys, and migration provenance.",
+      inputSchema: {
+        repoRoot: z.string(),
+        table: z.string().optional(),
+        feature: z.string().optional(),
+        requireFresh: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.domainTableQuery(input)),
+  );
+
+  server.registerTool(
+    "domain_index_coverage",
+    {
+      description: "List domain index coverage gaps such as undocumented routes, unowned APIs, unowned tables, and source conflicts.",
+      inputSchema: {
+        repoRoot: z.string(),
+        severity: z.enum(["warning", "blocker"]).optional(),
+        kind: domainCoverageGapKindSchema.optional(),
+        requireFresh: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.domainIndexCoverage(input)),
+  );
+
+  server.registerTool(
+    "domain_index_drift",
+    {
+      description: "Compare the stored domain index with the current repository and report added, removed, changed files and current coverage gaps.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.domainIndexDrift(input)),
+  );
+
+  server.registerTool(
+    "domain_verification_gate_plan",
+    {
+      description: "Return domain-specific verification gate scripts and commands matched to a feature or gate id.",
+      inputSchema: {
+        repoRoot: z.string(),
+        gateId: z.string().optional(),
+        feature: z.string().optional(),
+        requireFresh: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.domainVerificationGatePlan(input)),
   );
 
   server.registerTool(

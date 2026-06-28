@@ -6,6 +6,13 @@ import {
   type ProjectPackageManager,
   type ProjectScript,
 } from "./project-contract.js";
+import {
+  buildDomainIndex,
+  type DomainApiEndpoint,
+  type DomainColumn,
+  type DomainCoverageGap,
+  type DomainIndex,
+} from "./domain-index.js";
 import { buildRepoIndex, type RepoIndexFile } from "./repo-index.js";
 import type { SourceConflict, SourceProvenance } from "./source-authority.js";
 import { analyzeSourceConflicts } from "./source-conflicts.js";
@@ -44,6 +51,8 @@ export type RepoNativeFeatureSlice = {
   services: string[];
   schemaFiles: string[];
   schemaTables: string[];
+  schemaColumns: DomainColumn[];
+  apiEndpoints: DomainApiEndpoint[];
   tests: string[];
   docs: string[];
   sideEffects: FeatureSideEffect[];
@@ -87,6 +96,15 @@ export type RepoNativePack = {
     migrationFiles: string[];
     schemaFiles: string[];
   };
+  domainIndex: {
+    manifestPresent: boolean;
+    featureCount: number;
+    apiEndpointCount: number;
+    tableCount: number;
+    coverageGapCount: number;
+    warnings: string[];
+    gaps: DomainCoverageGap[];
+  };
   featureSlices: RepoNativeFeatureSlice[];
   verificationGates: RepoNativeVerificationGate[];
   coverage: {
@@ -119,6 +137,7 @@ const REUSED_TOOLS = [
   "analyzeSourceConflicts",
   "analyzeTestImpactV2",
   "createVerificationPlan",
+  "buildDomainIndex",
 ];
 
 const VALID_SIDE_EFFECTS = new Set<FeatureSideEffect>([
@@ -140,6 +159,7 @@ export function buildRepoNativePack(input: RepoNativePackInput): RepoNativePack 
   const contract = detectProjectContract({ repoRoot });
   const index = buildRepoIndex({ repoRoot, preset: "large_repo" });
   const featureIndex = createFeatureIndex({ repoRoot });
+  const domainIndex = buildRepoNativeDomainIndex(repoRoot);
   const sourceConflicts = analyzeSourceConflicts({ repoRoot, index, contract }).conflicts;
   const impact = analyzeTestImpactV2({ repoRoot, changedFiles, diffText: input.diffText, index });
   const verificationPlan = createVerificationPlan({
@@ -155,24 +175,34 @@ export function buildRepoNativePack(input: RepoNativePackInput): RepoNativePack 
     ...script,
     category: scriptCategory(script.name, script.command),
   }));
-  const schema = scanSchema(index.files);
+  const schema = mergeDomainSchema(scanSchema(index.files), domainIndex);
   const featureSlices = selectFeatureSlices({
     features: featureIndex.features,
     query,
     changedFiles,
     sourceConflicts,
     schema,
+    domainIndex,
     limit: input.limit ?? 3,
   });
   const conventions = collectConventions(repoRoot, repoPack.conventions);
-  const verificationGates = createRepoNativeVerificationGates({
-    packageManager: contract.packageManager,
-    repoRoot,
-    repoPackGates: repoPack.verificationGates,
-    scripts,
-    verificationCommands: verificationPlan.commands,
-    slices: featureSlices,
-  });
+  const verificationGates = mergeVerificationGates([
+    ...createRepoNativeVerificationGates({
+      packageManager: contract.packageManager,
+      repoRoot,
+      repoPackGates: repoPack.verificationGates,
+      scripts,
+      verificationCommands: verificationPlan.commands,
+      slices: featureSlices,
+    }),
+    ...domainIndex.verificationGates.map((gate) => ({
+      gateId: gate.gateId,
+      scriptNames: [...gate.scriptNames],
+      commands: [...gate.commands],
+      whenSideEffects: [...gate.whenFeatureTouches],
+      matchedFeatureIds: [...gate.matchedFeatureIds],
+    })),
+  ]);
 
   return {
     schemaVersion: "repo-native-pack.v0",
@@ -183,6 +213,15 @@ export function buildRepoNativePack(input: RepoNativePackInput): RepoNativePack 
     reusedTools: [...REUSED_TOOLS],
     capabilities: { scripts, conventions },
     schema,
+    domainIndex: {
+      manifestPresent: domainIndex.manifestPresent,
+      featureCount: domainIndex.features.length,
+      apiEndpointCount: domainIndex.apiEndpoints.length,
+      tableCount: domainIndex.tables.length,
+      coverageGapCount: domainIndex.coverage.gaps.length,
+      warnings: [...domainIndex.warnings],
+      gaps: [...domainIndex.coverage.gaps],
+    },
     featureSlices,
     verificationGates,
     coverage: {
@@ -316,12 +355,58 @@ function scanSchema(files: RepoIndexFile[]): SchemaSummary {
   };
 }
 
+function mergeDomainSchema(schema: SchemaSummary, domainIndex: DomainIndex): SchemaSummary {
+  const tables = new Map(schema.tables.map((table) => [`${table.name}:${table.sourcePath}`, table]));
+  const migrationFiles = new Set(schema.migrationFiles);
+  const schemaFiles = new Set(schema.schemaFiles);
+  for (const file of domainIndex.files.filter((candidate) => candidate.role === "migration")) {
+    migrationFiles.add(file.path);
+    schemaFiles.add(file.path);
+  }
+  for (const table of domainIndex.tables) {
+    const sourcePath = table.firstMigration ?? table.lastMigration ?? "domain-index";
+    tables.set(`${table.name}:${sourcePath}`, { name: table.name, sourcePath });
+  }
+  return {
+    tables: [...tables.values()].sort(compareByNameThenPath),
+    migrationFiles: uniqueSorted([...migrationFiles]),
+    schemaFiles: uniqueSorted([...schemaFiles]),
+  };
+}
+
+function buildRepoNativeDomainIndex(repoRoot: string): DomainIndex {
+  const manifestPath = path.join(repoRoot, ".wormhole", "domain-index.json");
+  if (existsSync(manifestPath)) {
+    return buildDomainIndex({ repoRoot });
+  }
+  return {
+    schemaVersion: "domain-index.v0",
+    repoRoot,
+    generatedAt: new Date().toISOString(),
+    fingerprint: "domain-index-absent",
+    manifestPath,
+    manifestPresent: false,
+    warnings: [],
+    files: [],
+    features: [],
+    apiEndpoints: [],
+    tables: [],
+    migrations: [],
+    conventions: [],
+    memory: [],
+    verificationGates: [],
+    sourceConflicts: [],
+    coverage: { gaps: [] },
+  };
+}
+
 function selectFeatureSlices(input: {
   features: RepoFeature[];
   query: string;
   changedFiles: string[];
   sourceConflicts: SourceConflict[];
   schema: SchemaSummary;
+  domainIndex: DomainIndex;
   limit: number;
 }): RepoNativeFeatureSlice[] {
   const scored = input.features
@@ -339,6 +424,7 @@ function selectFeatureSlices(input: {
       feature,
       sourceConflicts: input.sourceConflicts,
       schema: input.schema,
+      domainIndex: input.domainIndex,
     }),
   );
 }
@@ -347,41 +433,66 @@ function toFeatureSlice(input: {
   feature: RepoFeature;
   sourceConflicts: SourceConflict[];
   schema: SchemaSummary;
+  domainIndex: DomainIndex;
 }): RepoNativeFeatureSlice {
+  const domainFeature = findDomainFeature(input.domainIndex, input.feature.featureId);
+  const domainTables = domainFeature
+    ? input.domainIndex.tables.filter((table) => table.featureId === domainFeature.featureId || domainFeature.tables.includes(table.name))
+    : [];
+  const domainRoutes = domainFeature?.routes ?? [];
+  const domainHooks = domainFeature?.hooks ?? [];
+  const domainServices = domainFeature?.services ?? [];
+  const apiEndpoints = domainFeature
+    ? input.domainIndex.apiEndpoints.filter((endpoint) => endpoint.featureId === domainFeature.featureId)
+    : [];
   const services = input.feature.files
     .filter((file) => file.roles.includes("service"))
     .map((file) => file.path);
   const schemaFiles = uniqueSorted([
     ...input.feature.files.filter((file) => file.roles.includes("db") || file.roles.includes("schema")).map((file) => file.path),
     ...input.schema.schemaFiles.filter((repoPath) => pathBelongsToFeature(repoPath, input.feature.featureId)),
+    ...domainTables.flatMap((table) => [table.firstMigration, table.lastMigration].filter((value): value is string => Boolean(value))),
   ]);
   const schemaTables = uniqueSorted([
     ...input.feature.dbTables,
+    ...(domainFeature?.tables ?? []),
+    ...domainTables.map((table) => table.name),
     ...input.schema.tables
       .filter((table) => tableMatchesFeature(table.name, input.feature.featureId))
       .map((table) => table.name),
   ]);
   const keyFiles = uniqueSorted([
     ...input.feature.routes,
+    ...domainRoutes,
     ...services,
+    ...domainServices,
     ...input.feature.hooks,
+    ...domainHooks,
     ...schemaFiles,
+    ...apiEndpoints.map((endpoint) => endpoint.sourcePath),
     ...input.feature.tests,
     ...input.feature.files.slice(0, 12).map((file) => file.path),
   ]);
   const featurePaths = uniqueSorted([...input.feature.files.map((file) => file.path), ...keyFiles]);
+  const sideEffects = uniqueSorted([
+    ...input.feature.risk.sideEffects,
+    ...(domainTables.length > 0 ? ["database_schema" as const] : []),
+    ...(apiEndpoints.some((endpoint) => endpoint.authRequired) ? ["authz" as const] : []),
+  ]) as FeatureSideEffect[];
   return {
     featureId: input.feature.featureId,
     name: input.feature.name,
     keyFiles,
-    routes: [...input.feature.routes],
-    hooks: [...input.feature.hooks],
-    services,
+    routes: uniqueSorted([...input.feature.routes, ...domainRoutes]),
+    hooks: uniqueSorted([...input.feature.hooks, ...domainHooks]),
+    services: uniqueSorted([...services, ...domainServices]),
     schemaFiles,
     schemaTables,
+    schemaColumns: domainTables.flatMap((table) => table.columns),
+    apiEndpoints,
     tests: [...input.feature.tests],
     docs: [...input.feature.docs],
-    sideEffects: [...input.feature.risk.sideEffects],
+    sideEffects,
     sourceOfTruth: [...input.feature.sourceOfTruth],
     supportingDocs: [...input.feature.supportingDocs],
     conflicts: input.sourceConflicts.filter((conflict) => conflictTouchesFeature(conflict, featurePaths)),
@@ -476,6 +587,39 @@ function createGate(input: {
   };
 }
 
+function mergeVerificationGates(gates: RepoNativeVerificationGate[]): RepoNativeVerificationGate[] {
+  const byId = new Map<string, RepoNativeVerificationGate>();
+  for (const gate of gates) {
+    const existing = byId.get(gate.gateId);
+    if (!existing) {
+      byId.set(gate.gateId, {
+        ...gate,
+        scriptNames: uniqueSorted(gate.scriptNames),
+        commands: [...gate.commands],
+        whenSideEffects: uniqueSorted(gate.whenSideEffects) as FeatureSideEffect[],
+        matchedFeatureIds: uniqueSorted(gate.matchedFeatureIds),
+      });
+      continue;
+    }
+    byId.set(gate.gateId, {
+      gateId: gate.gateId,
+      scriptNames: uniqueSorted([...existing.scriptNames, ...gate.scriptNames]),
+      commands: uniqueCommands([...existing.commands, ...gate.commands]),
+      whenSideEffects: uniqueSorted([...existing.whenSideEffects, ...gate.whenSideEffects]) as FeatureSideEffect[],
+      matchedFeatureIds: uniqueSorted([...existing.matchedFeatureIds, ...gate.matchedFeatureIds]),
+    });
+  }
+  return [...byId.values()].sort((left, right) => left.gateId.localeCompare(right.gateId));
+}
+
+function uniqueCommands(commands: VerificationCommand[]): VerificationCommand[] {
+  const byKey = new Map<string, VerificationCommand>();
+  for (const command of commands) {
+    byKey.set(`${command.name}:${command.command}:${JSON.stringify(command.args ?? [])}`, command);
+  }
+  return [...byKey.values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
 function createCoverageGaps(input: {
   repoRoot: string;
   slices: RepoNativeFeatureSlice[];
@@ -562,6 +706,13 @@ function scoreFeature(feature: RepoFeature, query: string, changedFiles: string[
     }
   }
   return score;
+}
+
+function findDomainFeature(domainIndex: DomainIndex, featureId: string): DomainIndex["features"][number] | undefined {
+  const tokens = tokenVariants(featureId);
+  return domainIndex.features.find((feature) =>
+    [feature.featureId, ...feature.aliases].some((candidate) => tokens.includes(candidate) || tokenVariants(candidate).includes(featureId)),
+  );
 }
 
 function scriptCategory(name: string, command: string): RepoNativeScript["category"] {

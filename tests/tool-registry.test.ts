@@ -216,6 +216,30 @@ describe("tool registry conformance", () => {
     );
   });
 
+  it("advertises domain index tools as large-repo guidance and verification coverage", () => {
+    const catalog = queryToolCatalog({
+      toolNames: [
+        "domain_index_refresh",
+        "domain_slice_query",
+        "domain_api_query",
+        "domain_table_query",
+        "domain_index_coverage",
+        "domain_index_drift",
+        "domain_verification_gate_plan",
+      ],
+    });
+
+    expect(catalog.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "domain_index_refresh", risk: "write", phase: "maintain" }),
+        expect.objectContaining({ name: "domain_slice_query", risk: "read", phase: "gather" }),
+        expect.objectContaining({ name: "domain_index_coverage", risk: "read", phase: "verify" }),
+        expect.objectContaining({ name: "domain_verification_gate_plan", plane: "verification", phase: "plan" }),
+      ]),
+    );
+    expect(catalog.tools.find((tool) => tool.name === "domain_slice_query")?.inputs).toContain("requireFresh");
+  });
+
   it("requires Claude manifest coverage or an explicit compact-manifest policy", () => {
     const manifest = readJson<{
       tools: Array<{ name: string }>;

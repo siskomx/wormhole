@@ -266,6 +266,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Read-only repo-native coverage packs and feature-slice queries over existing feature indexes, repo-local scripts, conventions, schema evidence, verification gates, source conflicts, and coverage gaps.",
       },
       {
+        id: "orchestration.domain-indexing-layer",
+        area: "orchestration",
+        status: "implemented",
+        description: "Manifest-driven domain index with SQLite-backed feature/API/schema/convention/memory/gate coverage, freshness and drift checks, repo-native slice enrichment, and fallback feature queries for stale or missing indexes.",
+      },
+      {
         id: "orchestration.repo-blueprint-compiler",
         area: "orchestration",
         status: "implemented",

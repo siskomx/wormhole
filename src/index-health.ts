@@ -13,6 +13,7 @@ export type IndexHealthSource =
   | "durable_repo_index"
   | "durable_sqlite_index"
   | "durable_index_manifest"
+  | "domain_index"
   | "project_model";
 
 export type IndexHealthSnapshot = {
