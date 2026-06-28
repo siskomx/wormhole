@@ -167,6 +167,30 @@ describe("tool registry conformance", () => {
     expect(catalog.tools[0]?.inputs).toContain("objective");
   });
 
+  it("advertises runtime behavior audit as a behavior verification tool", () => {
+    const catalog = queryToolCatalog({ toolNames: ["runtime_behavior_audit"] });
+
+    expect(catalog.tools[0]).toEqual(
+      expect.objectContaining({
+        name: "runtime_behavior_audit",
+        plane: "behavior",
+        phase: "verify",
+        pack: "behavior",
+        risk: "read",
+      }),
+    );
+    expect(catalog.tools[0]?.inputs).toEqual(
+      expect.arrayContaining([
+        "recommendedTools",
+        "observedToolCalls",
+        "requiredTools",
+        "knownToolNames",
+        "ignoredToolNames",
+        "scope",
+      ]),
+    );
+  });
+
   it("requires Claude manifest coverage or an explicit compact-manifest policy", () => {
     const manifest = readJson<{
       tools: Array<{ name: string }>;

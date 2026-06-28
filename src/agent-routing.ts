@@ -12,6 +12,8 @@ import {
 } from "./project-intelligence.js";
 import type { IndexHealthSnapshot } from "./index-health.js";
 import type { RepoIndexBuildOptions, RepoIndexSearchResult } from "./repo-index.js";
+import type { RuntimeRecommendedTool } from "./runtime-behavior-audit.js";
+import { TOOL_REGISTRY } from "./tool-registry.js";
 
 export type AgentRoute = "fast" | "balanced" | "deep";
 
@@ -131,6 +133,7 @@ export type AgentRoutingInput = {
 };
 
 const DEFAULT_CONTEXT_CHARS = 6_000;
+const RUNTIME_BEHAVIOR_REQUIRED_TOOLS = ["record_evidence", "verification_run", "gate_request"] as const;
 
 export function createProjectIntelligenceSnapshot(
   input: AgentRoutingInput,
@@ -312,9 +315,21 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     indexOptions: input.indexOptions,
     preferredSources: input.preferredSources,
   });
+  const languageCoverageSummaries = (contextPack.indexHealth.languageCoverage ?? []).map(
+    (coverage) => `${coverage.displayName} ${coverage.indexedFileCount}/${coverage.totalFileCount} indexed`,
+  );
+  const languageCoverageReasons = (contextPack.indexHealth.languageCoverage ?? []).flatMap(
+    (coverage) => coverage.reasons,
+  );
   const instructionParts = [
     "Start with tool_layer_map before browsing the full MCP surface.",
     "Use this context pack before broad file reads.",
+    ...(languageCoverageSummaries.length > 0
+      ? [`Language profile: ${languageCoverageSummaries.join("; ")}.`]
+      : []),
+    ...(languageCoverageReasons.length > 0
+      ? [`Language coverage gaps: ${languageCoverageReasons.join(" ")}`]
+      : []),
     "Use tool_catalog_query when the route recommends a plane, phase, pack, risk, or exact tool name.",
     "Prefer the recommended route over browsing the full MCP tool surface.",
     "Refresh graph and context state only through the stateMaintenance owner tools.",
@@ -324,8 +339,23 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     "Continue into implementation and verification for coding tasks.",
     "Record source-backed evidence before making implementation claims.",
     "Run focused verification before requesting the gate.",
+    "Run runtime_behavior_audit before final claims when observed tool calls are available.",
     "Call emit_plan only when the user explicitly asks for a plan, spec, design, or planning-only artifact.",
   ];
+  const finalNextToolCalls = [
+    toolCall("record_evidence", 90, "Record the context pack and key source files as evidence.", {}, [
+      "missionId",
+      "source evidence fields",
+    ]),
+    toolCall("test_plan_select", 85, "Select focused verification for the changed files.", {
+      repoRoot: input.repoRoot,
+      changedFiles,
+    }),
+    toolCall("gate_request", 80, "Request the Wormhole gate before the final response.", {}, [
+      "missionId",
+    ]),
+  ];
+  const runtimeAuditToolCall = createRuntimeBehaviorAuditToolCall(route, finalNextToolCalls);
   return {
     repoRoot: input.repoRoot,
     objective: input.objective,
@@ -336,19 +366,7 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     recommendedDiscovery: createDiscoveryToolCalls(),
     stateMaintenance: createStateMaintenanceAdvice(),
     ...(input.durableRetrieval ? { durableRetrieval: input.durableRetrieval } : {}),
-    nextToolCalls: [
-      toolCall("record_evidence", 90, "Record the context pack and key source files as evidence.", {}, [
-        "missionId",
-        "source evidence fields",
-      ]),
-      toolCall("test_plan_select", 85, "Select focused verification for the changed files.", {
-        repoRoot: input.repoRoot,
-        changedFiles,
-      }),
-      toolCall("gate_request", 80, "Request the Wormhole gate before the final response.", {}, [
-        "missionId",
-      ]),
-    ],
+    nextToolCalls: [...finalNextToolCalls, runtimeAuditToolCall],
     agentInstructions: instructionParts.join(" "),
   };
 }
@@ -395,6 +413,61 @@ function createStateMaintenanceAdvice(): StateMaintenanceAdvice {
       useWhen: ["multiple agents share findings", "parallel workers can conflict", "handoffs need attributed state"],
     },
   };
+}
+
+function createRuntimeBehaviorAuditToolCall(
+  route: MissionRouteRecommendation,
+  nextToolCalls: AgentToolCall[],
+): AgentToolCall {
+  const input: AgentToolCall["input"] = {
+    recommendedTools: createRuntimeRecommendedTools(route, nextToolCalls),
+    requiredTools: [...RUNTIME_BEHAVIOR_REQUIRED_TOOLS],
+    knownToolNames: TOOL_REGISTRY.map((tool) => tool.name),
+    scope: "wormhole",
+  };
+  return toolCall(
+    "runtime_behavior_audit",
+    70,
+    "Compare the recommended Wormhole route against observed tool calls before final claims.",
+    input,
+    ["observedToolCalls"],
+  );
+}
+
+function createRuntimeRecommendedTools(
+  route: MissionRouteRecommendation,
+  nextToolCalls: AgentToolCall[],
+): RuntimeRecommendedTool[] {
+  const recommendationsByName = new Map<string, RuntimeRecommendedTool>();
+  const addRecommendation = (call: AgentToolCall, phase: MissionRouteStage["name"] | "gate") => {
+    if (call.toolName === "runtime_behavior_audit") {
+      return;
+    }
+    const existing = recommendationsByName.get(call.toolName);
+    const required = RUNTIME_BEHAVIOR_REQUIRED_TOOLS.includes(
+      call.toolName as (typeof RUNTIME_BEHAVIOR_REQUIRED_TOOLS)[number],
+    );
+    const recommendation: RuntimeRecommendedTool = {
+      ...(existing ?? {}),
+      toolName: call.toolName,
+      phase: existing?.phase ?? phase,
+      priority: Math.max(existing?.priority ?? 0, call.priority),
+      required: existing?.required === true || required,
+      reason: existing?.reason ?? call.reason,
+      ...(call.toolName === "gate_request" ? { after: ["record_evidence", "verification_run"] } : {}),
+    };
+    recommendationsByName.set(call.toolName, recommendation);
+  };
+
+  for (const stage of route.stages) {
+    for (const call of stage.toolCalls) {
+      addRecommendation(call, stage.name);
+    }
+  }
+  for (const call of nextToolCalls) {
+    addRecommendation(call, call.toolName === "gate_request" ? "gate" : "verify");
+  }
+  return [...recommendationsByName.values()];
 }
 
 function createDefaultToolSequence(input: {

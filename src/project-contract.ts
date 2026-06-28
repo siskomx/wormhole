@@ -1,7 +1,12 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import {
+  detectLanguageProfile,
+  type LanguageCoverage,
+  type RepoLanguageProfile,
+} from "./language-profile.js";
 
-export type ProjectPackageManager = "npm" | "pnpm" | "yarn" | "bun" | "unknown";
+export type ProjectPackageManager = "npm" | "pnpm" | "yarn" | "bun" | "cargo" | "dotnet" | "unknown";
 
 export type ProjectScript = {
   name: string;
@@ -26,6 +31,9 @@ export type ProjectContract = {
   scripts: ProjectScript[];
   dependencies: ProjectDependency[];
   lockfiles: string[];
+  languages: LanguageCoverage[];
+  frameworks: string[];
+  languageProfile: RepoLanguageProfile;
   envVars: ProjectEnvVar[];
   ports: number[];
 };
@@ -65,11 +73,10 @@ export function detectProjectContract(input: DetectProjectContractInput): Projec
   }
 
   const packageJson = readJsonFile(path.join(repoRoot, "package.json"));
+  const languageProfile = detectLanguageProfile({ repoRoot });
   const packageManager = detectPackageManager(repoRoot, packageJson);
-  const lockfiles = LOCKFILE_MANAGERS.map((lockfile) => lockfile.file).filter((file) =>
-    existsSync(path.join(repoRoot, file)),
-  );
-  const scripts = readPackageScripts(packageJson);
+  const lockfiles = readLockfiles(repoRoot, packageManager);
+  const scripts = readProjectScripts(packageJson, packageManager);
   const dependencies = readPackageDependencies(packageJson, packageManager);
   const envVars = readEnvVars(repoRoot);
   const ports = readPortHints(repoRoot, envVars);
@@ -80,6 +87,9 @@ export function detectProjectContract(input: DetectProjectContractInput): Projec
     scripts,
     dependencies,
     lockfiles,
+    languages: languageProfile.languages,
+    frameworks: languageProfile.frameworks,
+    languageProfile,
     envVars,
     ports,
   };
@@ -118,7 +128,54 @@ function detectPackageManager(
   if (packageManager.startsWith("npm@")) {
     return "npm";
   }
+  if (
+    existsSync(path.join(repoRoot, "Cargo.toml")) ||
+    findFilesByExtension(repoRoot, ".toml").some((file) => path.basename(file) === "Cargo.toml")
+  ) {
+    return "cargo";
+  }
+  if (
+    findFilesByExtension(repoRoot, ".sln").length > 0 ||
+    findFilesByExtension(repoRoot, ".csproj").length > 0
+  ) {
+    return "dotnet";
+  }
   return "unknown";
+}
+
+function readLockfiles(repoRoot: string, packageManager: ProjectPackageManager): string[] {
+  const nodeLockfiles = LOCKFILE_MANAGERS.map((lockfile) => lockfile.file).filter((file) =>
+    existsSync(path.join(repoRoot, file)),
+  );
+  if (packageManager === "cargo") {
+    return existsSync(path.join(repoRoot, "Cargo.lock")) ? ["Cargo.lock"] : [];
+  }
+  if (packageManager === "dotnet") {
+    return [...findFilesByExtension(repoRoot, ".sln"), ...findFilesByExtension(repoRoot, ".csproj")];
+  }
+  return nodeLockfiles;
+}
+
+function readProjectScripts(
+  packageJson: Record<string, unknown> | undefined,
+  packageManager: ProjectPackageManager,
+): ProjectScript[] {
+  const scripts = readPackageScripts(packageJson);
+  if (packageManager === "cargo") {
+    return uniqueScripts([
+      ...scripts,
+      { name: "build", command: "cargo build" },
+      { name: "test", command: "cargo test" },
+    ]);
+  }
+  if (packageManager === "dotnet") {
+    return uniqueScripts([
+      ...scripts,
+      { name: "build", command: "dotnet build" },
+      { name: "test", command: "dotnet test" },
+    ]);
+  }
+  return scripts;
 }
 
 function readPackageScripts(packageJson: Record<string, unknown> | undefined): ProjectScript[] {
@@ -127,6 +184,16 @@ function readPackageScripts(packageJson: Record<string, unknown> | undefined): P
     .filter((entry): entry is [string, string] => typeof entry[1] === "string")
     .map(([name, command]) => ({ name, command }))
     .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function uniqueScripts(scripts: ProjectScript[]): ProjectScript[] {
+  const byName = new Map<string, ProjectScript>();
+  for (const script of scripts) {
+    if (!byName.has(script.name)) {
+      byName.set(script.name, script);
+    }
+  }
+  return [...byName.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function readPackageDependencies(
@@ -220,4 +287,42 @@ function escapeRegex(value: string): string {
 
 export function listProjectFiles(repoRoot: string): string[] {
   return readdirSync(path.resolve(repoRoot)).sort((left, right) => left.localeCompare(right));
+}
+
+function findFilesByExtension(repoRoot: string, extension: string): string[] {
+  const root = path.resolve(repoRoot);
+  const files: string[] = [];
+  const excludedDirectories = new Set([
+    ".git",
+    ".next",
+    ".turbo",
+    ".wormhole",
+    "bin",
+    "build",
+    "coverage",
+    "dist",
+    "graphify-out",
+    "node_modules",
+    "obj",
+    "out",
+    "target",
+  ]);
+
+  function visit(directory: string): void {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const absolutePath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (!excludedDirectories.has(entry.name)) {
+          visit(absolutePath);
+        }
+        continue;
+      }
+      if (entry.isFile() && path.extname(entry.name).toLowerCase() === extension) {
+        files.push(path.relative(root, absolutePath).replace(/\\/g, "/"));
+      }
+    }
+  }
+
+  visit(root);
+  return files.sort((left, right) => left.localeCompare(right));
 }

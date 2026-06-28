@@ -106,6 +106,7 @@ describe("capability relation audit", () => {
           "durable_repo_index_query",
           "durable_index_manifest_status",
           "context_pack_generate",
+          "runtime_behavior_audit",
         ]),
         stateOwners: expect.arrayContaining(["context-store", "durable-index-store", "workflow-files"]),
         artifactKinds: expect.arrayContaining(["context_pack", "workflow_state", "workflow_resume", "workflow_latest"]),

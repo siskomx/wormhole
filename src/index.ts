@@ -56,3 +56,4 @@ export * from "./source-authority.js";
 export * from "./source-conflicts.js";
 export * from "./capability-relations.js";
 export * from "./capability-relation-audit.js";
+export * from "./runtime-behavior-audit.js";

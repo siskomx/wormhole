@@ -574,6 +574,8 @@ function createDurableRepoIndexHealth(input: {
     indexPath: input.indexPath,
     fileCount: input.summary.fileCount,
     skippedFiles: input.summary.skippedFiles,
+    languageCoverage: input.summary.indexHealth.languageCoverage,
+    reasons: input.summary.indexHealth.languageCoverage.flatMap((coverage) => coverage.reasons),
   });
 }
 

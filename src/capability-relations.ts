@@ -386,6 +386,7 @@ export const CAPABILITY_RELATIONS: CapabilityRelation[] = [
       "durable_index_status",
       "durable_index_manifest_status",
       "durable_repo_index_query",
+      "runtime_behavior_audit",
     ],
     stateOwners: ["context-store", "durable-index-store", "workflow-files"],
     artifactKinds: ["context_pack", "workflow_state", "workflow_resume", "workflow_latest"],

@@ -8,6 +8,8 @@ import {
   recommendNextBestTool,
   createProjectIntelligenceSnapshot,
 } from "../src/agent-routing.js";
+import { auditRuntimeBehavior, type RuntimeBehaviorAuditInput } from "../src/runtime-behavior-audit.js";
+import { TOOL_REGISTRY } from "../src/tool-registry.js";
 import { createInMemoryKernel } from "../src/kernel.js";
 import { createToolHandlers } from "../src/tools.js";
 
@@ -202,9 +204,39 @@ describe("agent-facing routing tools", () => {
         expect.arrayContaining(["src/services/user-service.ts", "src/api/users.ts", "tests/user-service.test.ts"]),
       );
       expect(prepared.nextToolCalls.map((call) => call.toolName)).toEqual(
-        expect.arrayContaining(["record_evidence", "test_plan_select", "gate_request"]),
+        expect.arrayContaining(["record_evidence", "test_plan_select", "gate_request", "runtime_behavior_audit"]),
       );
       expect(prepared.nextToolCalls.find((call) => call.toolName === "record_evidence")?.missingInput).toContain("missionId");
+      const runtimeAuditCall = prepared.nextToolCalls.find((call) => call.toolName === "runtime_behavior_audit");
+      expect(runtimeAuditCall?.missingInput).toContain("observedToolCalls");
+      const runtimeAuditInput = runtimeAuditCall?.input as RuntimeBehaviorAuditInput;
+      expect(runtimeAuditInput.requiredTools).toEqual(
+        expect.arrayContaining(["record_evidence", "verification_run", "gate_request"]),
+      );
+      expect(runtimeAuditInput.knownToolNames).toEqual(
+        expect.arrayContaining(TOOL_REGISTRY.map((tool) => tool.name)),
+      );
+      expect(runtimeAuditInput.recommendedTools.map((tool) => tool.toolName)).toEqual(
+        expect.arrayContaining([
+          "project_onboard",
+          "architecture_map",
+          "context_pack_generate",
+          "test_plan_select",
+          "verification_run",
+          "record_evidence",
+          "gate_request",
+        ]),
+      );
+      expect(runtimeAuditInput.recommendedTools.map((tool) => tool.toolName)).not.toContain("runtime_behavior_audit");
+      expect(runtimeAuditInput.recommendedTools.find((tool) => tool.toolName === "gate_request")?.after).toEqual([
+        "record_evidence",
+        "verification_run",
+      ]);
+      const runtimeAudit = auditRuntimeBehavior({
+        ...runtimeAuditInput,
+        observedToolCalls: [{ toolName: "repo_index_query" }, { toolName: "shell" }],
+      });
+      expect(runtimeAudit.unexpectedTools.map((tool) => tool.toolName)).toEqual(["repo_index_query"]);
       expect(prepared.recommendedDiscovery.map((call) => call.toolName)).toEqual([
         "tool_layer_map",
         "tool_catalog_query",
@@ -218,6 +250,65 @@ describe("agent-facing routing tools", () => {
         "Use durable_repo_index_query, ctx_pack_refresh, and workflow_write_artifacts for durable handoff and resume paths.",
       );
       expect(prepared.agentInstructions).toContain("Refresh index state before trusting degraded or stale context.");
+      expect(prepared.agentInstructions).toContain(
+        "Run runtime_behavior_audit before final claims when observed tool calls are available.",
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("prioritizes detected language source in prepared context for Rust tasks", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-agent-routing-rust-"));
+    try {
+      mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "docs"), { recursive: true });
+      writeFileSync(
+        path.join(repoRoot, "Cargo.toml"),
+        ["[package]", 'name = "agent-browser"', 'version = "0.1.0"', ""].join("\n"),
+      );
+      writeFileSync(
+        path.join(repoRoot, "src", "lib.rs"),
+        [
+          "mod router;",
+          "pub struct DesktopAgent;",
+          "pub fn agent_query() {",
+          "    router::route_query();",
+          "}",
+        ].join("\n"),
+      );
+      writeFileSync(path.join(repoRoot, "src", "router.rs"), "pub fn route_query() {}\n");
+      writeFileSync(
+        path.join(repoRoot, "docs", "agent-notes.md"),
+        [
+          "# DesktopAgent agent_query QueryRouter",
+          "",
+          "DesktopAgent agent_query QueryRouter DesktopAgent agent_query QueryRouter.",
+        ].join("\n"),
+      );
+
+      const prepared = prepareAgentContext({
+        repoRoot,
+        objective: "Change DesktopAgent query flow",
+        query: "DesktopAgent agent_query QueryRouter",
+        changedFiles: ["src/lib.rs"],
+        maxChars: 4_000,
+      });
+
+      expect(prepared.contextPack.sources[0]).toBe("src/lib.rs");
+      expect(prepared.contextPack.sources).toContain("src/router.rs");
+      expect(prepared.contextPack.indexHealth.languageCoverage).toContainEqual(
+        expect.objectContaining({
+          language: "rust",
+          totalFileCount: 2,
+          indexedFileCount: 2,
+          status: "ok",
+        }),
+      );
+      expect(prepared.contextPack.rendered.indexOf("## File: src/lib.rs")).toBeLessThan(
+        prepared.contextPack.rendered.indexOf("## File: docs/agent-notes.md"),
+      );
+      expect(prepared.agentInstructions).toContain("Language profile");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

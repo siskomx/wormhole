@@ -1,3 +1,5 @@
+import type { LanguageCoverage } from "./language-profile.js";
+
 export type IndexHealthStatus = "fresh" | "degraded" | "stale" | "missing" | "unknown";
 
 export type IndexHealthRecommendedAction =
@@ -25,6 +27,7 @@ export type IndexHealthSnapshot = {
   fileCount?: number;
   skippedFileCount: number;
   skippedFiles: string[];
+  languageCoverage: LanguageCoverage[];
   reasons: string[];
   recommendedAction: IndexHealthRecommendedAction;
 };
@@ -39,6 +42,7 @@ export type IndexHealthInput = {
   indexPath?: string;
   fileCount?: number;
   skippedFiles?: string[];
+  languageCoverage?: LanguageCoverage[];
   reasons?: string[];
 };
 
@@ -48,15 +52,20 @@ export function createIndexHealthSnapshot(input: IndexHealthInput): IndexHealthS
   const present = input.present ?? true;
   const truncated = input.truncated ?? false;
   const skippedFiles = [...(input.skippedFiles ?? [])].sort((left, right) => left.localeCompare(right));
+  const languageCoverage = [...(input.languageCoverage ?? [])].sort((left, right) =>
+    left.language.localeCompare(right.language),
+  );
   const status = statusFor({
     present,
     fresh: input.fresh,
     truncated,
+    languageCoverage,
   });
   const reasons = uniqueSorted([
     ...reasonForStatus(status),
     ...(truncated ? ["Index is truncated; some repository files were not indexed."] : []),
     ...criticalSkippedArtifactReasons(skippedFiles),
+    ...languageCoverage.flatMap((coverage) => coverage.reasons),
     ...(input.reasons ?? []),
   ]);
 
@@ -72,6 +81,7 @@ export function createIndexHealthSnapshot(input: IndexHealthInput): IndexHealthS
     ...(input.fileCount === undefined ? {} : { fileCount: input.fileCount }),
     skippedFileCount: skippedFiles.length,
     skippedFiles: skippedFiles.slice(0, MAX_SKIPPED_FILE_SAMPLE),
+    languageCoverage,
     reasons,
     recommendedAction: recommendedActionFor(status),
   };
@@ -81,6 +91,7 @@ function statusFor(input: {
   present: boolean;
   fresh?: boolean;
   truncated: boolean;
+  languageCoverage: LanguageCoverage[];
 }): IndexHealthStatus {
   if (!input.present) {
     return "missing";
@@ -88,7 +99,7 @@ function statusFor(input: {
   if (input.fresh === false) {
     return "stale";
   }
-  if (input.truncated) {
+  if (input.truncated || input.languageCoverage.some((coverage) => coverage.status !== "ok")) {
     return "degraded";
   }
   if (input.fresh === true) {

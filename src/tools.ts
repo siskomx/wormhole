@@ -278,6 +278,10 @@ import {
   createDefaultCapabilityRelationAuditInput,
 } from "./capability-relation-audit.js";
 import {
+  auditRuntimeBehavior,
+  type RuntimeBehaviorAuditInput,
+} from "./runtime-behavior-audit.js";
+import {
   createModelProfileRegistry,
   type ModelProfile,
   type ModelProfileOutcomeInput,
@@ -1599,6 +1603,10 @@ export function createToolHandlers(
           allowlist: input.allowlist,
         }),
       );
+    },
+
+    runtimeBehaviorAudit(input: RuntimeBehaviorAuditInput) {
+      return auditRuntimeBehavior(input);
     },
 
     repoGraphExport(input: { repoRoot: string; communities?: GraphCommunity[] }) {

@@ -172,6 +172,22 @@ function scriptCommand(
         cwd: input.cwd,
         ...metadata,
       };
+    case "cargo":
+      return {
+        name: script.name,
+        command: "cargo",
+        args: [script.name, ...extraArgs],
+        cwd: input.cwd,
+        ...metadata,
+      };
+    case "dotnet":
+      return {
+        name: script.name,
+        command: "dotnet",
+        args: [script.name, ...extraArgs],
+        cwd: input.cwd,
+        ...metadata,
+      };
     case "npm":
     case "unknown":
       return {

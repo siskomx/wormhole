@@ -312,6 +312,7 @@ const TOOL_NAMES = [
   "behavior_mode_get",
   "behavior_apply",
   "behavior_minimality_review",
+  "runtime_behavior_audit",
   "orchestration_trace_record",
   "orchestration_dataset_export",
   "orchestration_policy_train",
@@ -584,6 +585,22 @@ const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
     risk: "read",
     summary: "Audit capability relation wiring across implemented capabilities, runtime tools, workflows, and tests.",
     inputs: ["allowlist"],
+  },
+  runtime_behavior_audit: {
+    plane: "behavior",
+    phase: "verify",
+    pack: "behavior",
+    risk: "read",
+    summary:
+      "Compare recommended Wormhole route tools against observed runtime calls and report skipped, failed, missing, or out-of-order guidance.",
+    inputs: [
+      "recommendedTools",
+      "observedToolCalls",
+      "requiredTools",
+      "knownToolNames",
+      "ignoredToolNames",
+      "scope",
+    ],
   },
   entrypoint_flow_discover: { plane: "project", phase: "orient", pack: "large-repo", risk: "read" },
   project_intelligence_snapshot: {

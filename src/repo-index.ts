@@ -5,6 +5,12 @@ import {
   createIndexHealthSnapshot,
   type IndexHealthSnapshot,
 } from "./index-health.js";
+import {
+  detectLanguageProfile,
+  INDEXABLE_TEXT_EXTENSIONS,
+  isSupportedTextPath,
+  languageForPath,
+} from "./language-profile.js";
 
 export type RepoIndexSymbolKind =
   | "function"
@@ -175,36 +181,18 @@ const DEFAULT_EXCLUDED_DIRECTORIES = new Set([
   ".next",
   ".turbo",
   ".wormhole",
+  "bin",
   "build",
   "coverage",
   "dist",
   "graphify-out",
   "node_modules",
+  "obj",
   "out",
+  "target",
 ]);
 
-const LANGUAGE_BY_EXTENSION: Record<string, string> = {
-  ".cjs": "javascript",
-  ".css": "css",
-  ".html": "html",
-  ".js": "javascript",
-  ".json": "json",
-  ".jsx": "javascript",
-  ".md": "markdown",
-  ".mdx": "markdown",
-  ".mjs": "javascript",
-  ".ps1": "powershell",
-  ".py": "python",
-  ".sh": "shell",
-  ".sql": "sql",
-  ".ts": "typescript",
-  ".tsx": "typescript",
-  ".txt": "text",
-  ".yaml": "yaml",
-  ".yml": "yaml",
-};
-
-const LOCAL_RESOLUTION_EXTENSIONS = Object.keys(LANGUAGE_BY_EXTENSION);
+const LOCAL_RESOLUTION_EXTENSIONS = INDEXABLE_TEXT_EXTENSIONS;
 
 export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
   const repoRoot = path.resolve(options.repoRoot);
@@ -353,6 +341,10 @@ export function summarizeRepoIndex(index: RepoIndex): RepoIndexSummary {
 }
 
 export function createRepoIndexHealth(index: RepoIndex): IndexHealthSnapshot {
+  const languageProfile = detectLanguageProfile({
+    repoRoot: index.repoRoot,
+    indexedFiles: index.files.map((file) => file.path),
+  });
   return createIndexHealthSnapshot({
     source: "repo_index",
     present: true,
@@ -361,6 +353,8 @@ export function createRepoIndexHealth(index: RepoIndex): IndexHealthSnapshot {
     fingerprint: index.fingerprint,
     fileCount: index.files.length,
     skippedFiles: index.skippedFiles,
+    languageCoverage: languageProfile.languages,
+    reasons: languageProfile.health.reasons,
   });
 }
 
@@ -684,6 +678,31 @@ function extractSymbols(
     addRegexMatches(content, /^([A-Z][A-Z0-9_]*)\s*=/gm, "constant", add);
   }
 
+  if (language === "rust") {
+    addRegexMatches(
+      content,
+      /\b(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_][\w]*)\s*\(/g,
+      "function",
+      add,
+    );
+    addRegexMatches(content, /\b(?:pub(?:\([^)]*\))?\s+)?struct\s+([A-Za-z_][\w]*)\b/g, "class", add);
+    addRegexMatches(content, /\b(?:pub(?:\([^)]*\))?\s+)?enum\s+([A-Za-z_][\w]*)\b/g, "type", add);
+    addRegexMatches(content, /\b(?:pub(?:\([^)]*\))?\s+)?trait\s+([A-Za-z_][\w]*)\b/g, "interface", add);
+    addRegexMatches(content, /\b(?:pub(?:\([^)]*\))?\s+)?(?:const|static)\s+([A-Za-z_][\w]*)\s*:/g, "constant", add);
+  }
+
+  if (language === "csharp") {
+    addRegexMatches(content, /\b(?:public|private|protected|internal)?\s*(?:sealed\s+|abstract\s+|static\s+|partial\s+)*class\s+([A-Za-z_][\w]*)\b/g, "class", add);
+    addRegexMatches(content, /\b(?:public|private|protected|internal)?\s*(?:partial\s+)?interface\s+([A-Za-z_][\w]*)\b/g, "interface", add);
+    addRegexMatches(content, /\b(?:public|private|protected|internal)?\s*(?:readonly\s+)?(?:record|struct|enum)\s+([A-Za-z_][\w]*)\b/g, "type", add);
+    addRegexMatches(
+      content,
+      /\b(?:public|private|protected|internal)\s+(?:static\s+|async\s+|virtual\s+|override\s+|sealed\s+|new\s+|partial\s+)*[A-Za-z_][\w<>,\[\]?]*(?:\s+[A-Za-z_][\w<>,\[\]?]*)?\s+([A-Za-z_][\w]*)\s*\(/g,
+      "function",
+      add,
+    );
+  }
+
   return symbols;
 }
 
@@ -737,6 +756,15 @@ function extractEdgeDrafts(
   if (language === "python") {
     for (const match of content.matchAll(/^\s*from\s+(\.+[A-Za-z0-9_.]*)\s+import\s+/gm)) {
       add("imports", normalizePythonRelativeSpecifier(match[1] ?? ""), match.index ?? 0);
+    }
+  }
+
+  if (language === "rust") {
+    for (const match of content.matchAll(/^\s*(?:pub\s+)?mod\s+([A-Za-z_][\w]*)\s*;/gm)) {
+      add("imports", `./${match[1] ?? ""}`, match.index ?? 0);
+    }
+    for (const match of content.matchAll(/^\s*use\s+crate::([A-Za-z_][\w:]*)/gm)) {
+      add("imports", normalizeRustCrateSpecifier(relativePath, match[1] ?? ""), match.index ?? 0);
     }
   }
 
@@ -1070,15 +1098,6 @@ function matchesPattern(relativePath: string, pattern: string): boolean {
     );
 }
 
-function isSupportedTextPath(relativePath: string): boolean {
-  return languageForPath(relativePath) !== "unknown";
-}
-
-function languageForPath(relativePath: string): string {
-  const extension = path.extname(relativePath).toLowerCase();
-  return LANGUAGE_BY_EXTENSION[extension] ?? "unknown";
-}
-
 function normalizePythonRelativeSpecifier(specifier: string): string {
   const dots = specifier.match(/^\.+/)?.[0] ?? "";
   const rest = specifier.slice(dots.length).replace(/\./g, "/");
@@ -1086,6 +1105,12 @@ function normalizePythonRelativeSpecifier(specifier: string): string {
     return `./${rest}`;
   }
   return `${"../".repeat(dots.length - 1)}${rest}`;
+}
+
+function normalizeRustCrateSpecifier(relativePath: string, modulePath: string): string {
+  const targetPath = path.posix.join("src", modulePath.replace(/::/g, "/"));
+  const relativeTarget = path.posix.relative(path.posix.dirname(relativePath), targetPath);
+  return relativeTarget.startsWith(".") ? relativeTarget : `./${relativeTarget}`;
 }
 
 function cleanCodeSymbolName(name: string): string {

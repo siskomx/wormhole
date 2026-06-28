@@ -2824,6 +2824,42 @@ export function createWormholeMcpServer(
     async (input) => jsonResult(tools.behaviorMinimalityReview(input)),
   );
 
+  server.registerTool(
+    "runtime_behavior_audit",
+    {
+      description:
+        "Compare recommended Wormhole tool usage against observed runtime calls and report missing, failed, skipped, or out-of-order guidance.",
+      inputSchema: {
+        recommendedTools: z.array(
+          z.object({
+            toolName: z.string(),
+            recommendationId: z.string().optional(),
+            phase: z.string().optional(),
+            priority: z.number().optional(),
+            required: z.boolean().optional(),
+            minCalls: z.number().optional(),
+            after: z.array(z.string()).optional(),
+            reason: z.string().optional(),
+          }),
+        ),
+        observedToolCalls: z.array(
+          z.object({
+            toolName: z.string(),
+            recommendationId: z.string().optional(),
+            calledAt: z.string().optional(),
+            status: z.enum(["ran", "skipped", "failed"]).optional(),
+            reason: z.string().optional(),
+          }),
+        ),
+        requiredTools: z.array(z.string()).optional(),
+        knownToolNames: z.array(z.string()).optional(),
+        ignoredToolNames: z.array(z.string()).optional(),
+        scope: z.enum(["wormhole", "all"]).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.runtimeBehaviorAudit(input)),
+  );
+
   const policyOutcomeSchema = z.object({
     testsPassed: z.boolean(),
     evidenceCount: z.number(),

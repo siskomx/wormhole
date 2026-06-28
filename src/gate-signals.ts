@@ -128,6 +128,16 @@ function gateFindingForIndexHealth(
   health: IndexHealthSnapshot,
   enforce: boolean,
 ): GateSignalFinding | undefined {
+  const blockingCoverageReasons = (health.languageCoverage ?? [])
+    .filter((coverage) => coverage.status === "blocker")
+    .flatMap((coverage) => coverage.reasons);
+  if (blockingCoverageReasons.length > 0) {
+    return {
+      ruleId: "index-health:language-coverage",
+      severity: enforce ? "block" : "warn",
+      message: blockingCoverageReasons.join(" "),
+    };
+  }
   if (health.status === "fresh") {
     return undefined;
   }

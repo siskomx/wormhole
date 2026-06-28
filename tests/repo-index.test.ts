@@ -375,6 +375,104 @@ describe("repo index", () => {
     }
   });
 
+  it("indexes Rust and C# source files with basic symbols and local edges", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-index-rust-csharp-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    mkdirSync(path.join(repoRoot, "Services"), { recursive: true });
+    writeFileSync(
+      path.join(repoRoot, "Cargo.toml"),
+      ["[package]", 'name = "agent-browser"', 'version = "0.1.0"', ""].join("\n"),
+    );
+    writeFileSync(
+      path.join(repoRoot, "src", "lib.rs"),
+      [
+        "mod router;",
+        "pub struct DesktopAgent;",
+        "pub fn agent_query() {",
+        "    route_query();",
+        "}",
+      ].join("\n"),
+    );
+    writeFileSync(path.join(repoRoot, "src", "router.rs"), "pub fn route_query() {}\n");
+    writeFileSync(
+      path.join(repoRoot, "Services", "PlaybackService.cs"),
+      [
+        "namespace Jellyfin.Services;",
+        "public interface ISessionManager {}",
+        "public sealed class PlaybackService",
+        "{",
+        "    public void StartPlayback() {}",
+        "}",
+      ].join("\n"),
+    );
+
+    try {
+      const index = buildRepoIndex({ repoRoot });
+      const summary = summarizeRepoIndex(index);
+
+      expect(index.files.map((file) => [file.path, file.language])).toEqual(
+        expect.arrayContaining([
+          ["src/lib.rs", "rust"],
+          ["src/router.rs", "rust"],
+          ["Services/PlaybackService.cs", "csharp"],
+          ["Cargo.toml", "toml"],
+        ]),
+      );
+      expect(index.symbols.map((symbol) => symbol.name)).toEqual(
+        expect.arrayContaining([
+          "DesktopAgent",
+          "agent_query",
+          "route_query",
+          "ISessionManager",
+          "PlaybackService",
+          "StartPlayback",
+        ]),
+      );
+      expect(index.edges).toContainEqual(
+        expect.objectContaining({
+          from: "src/lib.rs",
+          to: "src/router.rs",
+          kind: "imports",
+        }),
+      );
+      expect(summary.indexHealth.languageCoverage).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ language: "rust", indexedFileCount: 2, totalFileCount: 2 }),
+          expect.objectContaining({ language: "csharp", indexedFileCount: 1, totalFileCount: 1 }),
+        ]),
+      );
+      expect(summary.indexHealth.status).not.toBe("degraded");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("marks health degraded when supported dominant language files are excluded from the index", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-index-language-gap-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "Cargo.toml"), "[package]\nname = \"gap\"\nversion = \"0.1.0\"\n");
+    writeFileSync(path.join(repoRoot, "src", "lib.rs"), "pub fn missing_from_index() {}\n");
+    writeFileSync(path.join(repoRoot, "README.md"), "# Gap\n");
+
+    try {
+      const index = buildRepoIndex({ repoRoot, include: ["README.md"] });
+      const summary = summarizeRepoIndex(index);
+
+      expect(summary.indexHealth.status).toBe("degraded");
+      expect(summary.indexHealth.languageCoverage).toContainEqual(
+        expect.objectContaining({
+          language: "rust",
+          totalFileCount: 1,
+          indexedFileCount: 0,
+          status: "blocker",
+        }),
+      );
+      expect(summary.indexHealth.reasons.join("\n")).toContain("Language coverage missing for Rust");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("generates a graph report from the native index", () => {
     const repoRoot = createFixtureRepo();
 

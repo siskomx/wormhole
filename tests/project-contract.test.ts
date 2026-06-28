@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -53,6 +53,96 @@ describe("project contract detection", () => {
       expect(() => detectProjectContract({ repoRoot: path.join(repoRoot, "missing") })).toThrow(
         /does not exist/i,
       );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("detects Cargo, Tauri, and Rust language requirements", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-contract-rust-"));
+    try {
+      mkdirSync(path.join(repoRoot, "src-tauri", "src"), { recursive: true });
+      writeFileSync(
+        path.join(repoRoot, "Cargo.toml"),
+        ["[workspace]", 'members = ["src-tauri"]', ""].join("\n"),
+      );
+      writeFileSync(
+        path.join(repoRoot, "src-tauri", "Cargo.toml"),
+        [
+          "[package]",
+          'name = "ai-browser"',
+          'version = "0.1.0"',
+          "[dependencies]",
+          'tauri = "2.0.0"',
+          "",
+        ].join("\n"),
+      );
+      writeFileSync(path.join(repoRoot, "src-tauri", "src", "lib.rs"), "pub fn agent_query() {}\n");
+      writeFileSync(path.join(repoRoot, "src-tauri", "tauri.conf.json"), "{}\n");
+
+      const contract = detectProjectContract({ repoRoot });
+
+      expect(contract.packageManager).toBe("cargo");
+      expect(contract.lockfiles).toEqual([]);
+      expect(contract.scripts).toEqual(
+        expect.arrayContaining([
+          { name: "build", command: "cargo build" },
+          { name: "test", command: "cargo test" },
+        ]),
+      );
+      expect(contract.languages).toContainEqual(
+        expect.objectContaining({
+          language: "rust",
+          totalFileCount: 1,
+          supportLevel: "supported",
+        }),
+      );
+      expect(contract.frameworks).toEqual(expect.arrayContaining(["cargo", "tauri"]));
+      expect(contract.languageProfile.health.status).toBe("ok");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("detects .NET and C# language requirements", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-contract-dotnet-"));
+    try {
+      mkdirSync(path.join(repoRoot, "Api"), { recursive: true });
+      writeFileSync(path.join(repoRoot, "Jellyfin.sln"), "\nMicrosoft Visual Studio Solution File\n");
+      writeFileSync(
+        path.join(repoRoot, "Api", "Api.csproj"),
+        [
+          '<Project Sdk="Microsoft.NET.Sdk.Web">',
+          "  <PropertyGroup>",
+          "    <TargetFramework>net8.0</TargetFramework>",
+          "  </PropertyGroup>",
+          "</Project>",
+        ].join("\n"),
+      );
+      writeFileSync(
+        path.join(repoRoot, "Api", "PlaybackController.cs"),
+        "namespace Api; public sealed class PlaybackController { public void StartPlayback() {} }\n",
+      );
+
+      const contract = detectProjectContract({ repoRoot });
+
+      expect(contract.packageManager).toBe("dotnet");
+      expect(contract.lockfiles).toEqual(["Jellyfin.sln", "Api/Api.csproj"]);
+      expect(contract.scripts).toEqual(
+        expect.arrayContaining([
+          { name: "build", command: "dotnet build" },
+          { name: "test", command: "dotnet test" },
+        ]),
+      );
+      expect(contract.languages).toContainEqual(
+        expect.objectContaining({
+          language: "csharp",
+          totalFileCount: 1,
+          supportLevel: "supported",
+        }),
+      );
+      expect(contract.frameworks).toEqual(expect.arrayContaining(["dotnet", "aspnetcore"]));
+      expect(contract.languageProfile.health.status).toBe("ok");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-06-28
+
+- Added language-profile detection and coverage reporting so repo indexes, project contracts, project intelligence, gate signals, agent routing, and verification plans can surface language-specific guidance and gaps.
+- Added `runtime_behavior_audit` as a pure audit primitive plus MCP/tool-handler/registry wiring to compare recommended Wormhole tools against observed runtime calls.
+- Wired prepared agent contexts to include machine-readable runtime audit input with required evidence, verification, and gate tools plus full registry scope for unexpected Wormhole tool detection.
+- Added call-level runtime behavior coverage for repeated recommendations, failed/skipped calls, required tools outside the route, ordering violations, and non-Wormhole tool noise.
+
 ## 0.4.1 - 2026-06-28
 
 - Seeded agent context preparation from fresh durable repo-index query results so ctx packs can start with persisted large-repo evidence.

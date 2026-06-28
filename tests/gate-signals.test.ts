@@ -85,4 +85,41 @@ describe("gate index health signals", () => {
       }),
     );
   });
+
+  it("blocks enforced gates when target language coverage is missing even if the index ran", () => {
+    const indexHealth = createIndexHealthSnapshot({
+      source: "repo_index",
+      present: true,
+      fresh: true,
+      languageCoverage: [
+        {
+          language: "rust",
+          displayName: "Rust",
+          supportLevel: "supported",
+          totalFileCount: 34,
+          indexedFileCount: 0,
+          coverage: 0,
+          status: "blocker",
+          reasons: ["Language coverage missing for Rust: 34 files detected, 0 indexed."],
+        },
+      ],
+    });
+
+    expect(indexHealth.status).toBe("degraded");
+    expect(evaluateGateSignals({ freshness: { indexHealth } })[0]).toEqual(
+      expect.objectContaining({
+        ruleId: "index-health:language-coverage",
+        severity: "warn",
+      }),
+    );
+    expect(evaluateGateSignals({ freshness: { indexHealth }, enforce: true })[0]).toEqual(
+      expect.objectContaining({
+        ruleId: "index-health:language-coverage",
+        severity: "block",
+      }),
+    );
+    expect(blockingGateSignalMessages({ freshness: { indexHealth } })).toContain(
+      "Language coverage missing for Rust: 34 files detected, 0 indexed.",
+    );
+  });
 });

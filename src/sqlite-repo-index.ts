@@ -120,6 +120,8 @@ export function readSqliteRepoIndexStatus(repoRootInput: string): SqliteRepoInde
       indexPath,
       fileCount: summary.fileCount,
       skippedFiles,
+      languageCoverage: summary.indexHealth?.languageCoverage ?? [],
+      reasons: summary.indexHealth?.languageCoverage?.flatMap((coverage) => coverage.reasons) ?? [],
     });
     return {
       indexPath,

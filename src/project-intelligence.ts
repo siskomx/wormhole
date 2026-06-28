@@ -931,15 +931,38 @@ function selectContextSources(
   preferredSources: string[],
   blast: BlastRadiusAnalysis | undefined,
 ): string[] {
-  const selected = new Set<string>(changedFiles.map(toRepoPath));
+  const selected = new Set<string>();
+  const ordered: string[] = [];
+  function add(source: string): void {
+    const normalized = toRepoPath(source);
+    if (selected.has(normalized)) {
+      return;
+    }
+    selected.add(normalized);
+    ordered.push(normalized);
+  }
+  for (const source of changedFiles) {
+    add(source);
+  }
+  const changedSet = new Set(changedFiles.map(toRepoPath));
+  for (const edge of model.index.edges) {
+    const fromPath = fileForNode(edge.from);
+    const toPath = fileForNode(edge.to);
+    if (!fromPath || !toPath || !changedSet.has(fromPath) || fromPath === toPath) {
+      continue;
+    }
+    if (edge.kind === "imports" || edge.kind === "calls" || edge.kind === "references") {
+      add(toPath);
+    }
+  }
   for (const source of preferredSources) {
-    selected.add(source);
+    add(source);
   }
   for (const file of blast?.impactedFiles ?? []) {
-    selected.add(file.path);
+    add(file.path);
   }
   for (const test of blast?.verification.likelyTests ?? []) {
-    selected.add(test.path);
+    add(test.path);
   }
   const queryTokens = tokenize(query);
   const scored = model.index.files
@@ -969,11 +992,10 @@ function selectContextSources(
     })
     .slice(0, 6);
   for (const file of scored) {
-    selected.add(file.path);
+    add(file.path);
   }
-  return uniqueSorted(
-    [...selected].filter((source) => model.index.files.some((file) => file.path === source)),
-  ).slice(0, 10);
+  const knownFiles = new Set(model.index.files.map((file) => file.path));
+  return ordered.filter((source) => knownFiles.has(source)).slice(0, 10);
 }
 
 function renderProjectContextPack(input: {
@@ -1012,6 +1034,7 @@ function renderProjectContextPack(input: {
     `- action: ${input.indexHealth.recommendedAction}`,
     `- truncated: ${input.indexHealth.truncated}`,
     `- skipped files: ${input.indexHealth.skippedFileCount}`,
+    ...languageCoverageLines(input.indexHealth),
   ];
   return [
     "# Context Pack",
@@ -1034,6 +1057,19 @@ function renderProjectContextPack(input: {
     ...fileLines,
     "",
   ].join("\n");
+}
+
+function languageCoverageLines(indexHealth: IndexHealthSnapshot): string[] {
+  if ((indexHealth.languageCoverage ?? []).length === 0) {
+    return [];
+  }
+  return [
+    "- language coverage:",
+    ...(indexHealth.languageCoverage ?? []).map(
+      (coverage) =>
+        `  - ${coverage.displayName}: ${coverage.indexedFileCount}/${coverage.totalFileCount} indexed (${coverage.status})`,
+    ),
+  ];
 }
 
 function fencedSnippet(content: string): string {
