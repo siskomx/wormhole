@@ -19,6 +19,7 @@ export type CapabilityRelationGapKind =
   | "capability_no_relation"
   | "capability_no_tool"
   | "relation_tool_missing"
+  | "relation_test_file_missing"
   | "workflow_tool_missing"
   | "tool_no_capability"
   | "tool_no_test"
@@ -143,6 +144,17 @@ export function auditCapabilityRelations(input: CapabilityRelationAuditInput): C
           severity: "warning",
           resolution: "add_test",
           message: `${relation.capabilityId} maps ${toolName}, but the relation entry declares no test files.`,
+        });
+      }
+    }
+    for (const testFile of relation.testFiles ?? []) {
+      if (!testFiles.has(testFile) && testFiles.size > 0) {
+        rawGaps.push({
+          subject: `test:${testFile}`,
+          kind: "relation_test_file_missing",
+          severity: "warning",
+          resolution: "wire_relation",
+          message: `${relation.capabilityId} declares ${testFile}, but that file was not found in the current test inventory.`,
         });
       }
     }

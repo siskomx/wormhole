@@ -232,7 +232,29 @@ export const CAPABILITY_RELATIONS: CapabilityRelation[] = [
       "context_pack_generate",
       "project_intelligence_snapshot",
     ],
-    testFiles: ["tests/project-intelligence.test.ts", "tests/project-intelligence-tools.test.ts"],
+    testFiles: ["tests/project-intelligence-spine.test.ts", "tests/project-intelligence-tools.test.ts"],
+  },
+  {
+    capabilityId: "orchestration.repo-native-coverage-pack",
+    primaryTools: ["repo_native_pack_build", "feature_slice_query"],
+    supportingTools: [
+      "project_onboard",
+      "agent_context_prepare",
+      "mission_delta_replan",
+      "source_conflicts_analyze",
+      "capability_relation_audit",
+      "test_impact_analyze_v2",
+      "test_plan_select",
+    ],
+    artifactKinds: ["repo_native_pack", "feature_slice"],
+    stateOwners: ["repo-native-pack"],
+    freshnessChecks: ["repo-native-pack-fingerprint", "relation-test-file-exists"],
+    conflictChecks: ["source-conflicts", "coverage-gaps"],
+    testFiles: [
+      "tests/repo-native-pack.test.ts",
+      "tests/repo-native-pack-tools.test.ts",
+      "tests/capability-relation-audit.test.ts",
+    ],
   },
   {
     capabilityId: "orchestration.repo-blueprint-compiler",
@@ -287,7 +309,7 @@ export const CAPABILITY_RELATIONS: CapabilityRelation[] = [
     capabilityId: "orchestration.lsp-feedback-replanning",
     primaryTools: ["lsp_feedback_replan"],
     supportingTools: ["diagnostics_from_lsp", "diagnostics_record"],
-    testFiles: ["tests/lsp-feedback-replan.test.ts"],
+    testFiles: ["tests/mission-delta-tools.test.ts"],
   },
   {
     capabilityId: "orchestration.agent-workspace-memory",
@@ -446,7 +468,7 @@ export const CAPABILITY_RELATIONS: CapabilityRelation[] = [
   {
     capabilityId: "adaptive.native-media-ingestion",
     primaryTools: ["media_dependency_report", "media_ingest_pdf", "media_ingest_image"],
-    testFiles: ["tests/media-ingestion.test.ts", "tests/media-ingestion-tools.test.ts"],
+    testFiles: ["tests/media-ingestion.test.ts"],
   },
   {
     capabilityId: "adaptive.shell-hook-manager",
@@ -458,7 +480,7 @@ export const CAPABILITY_RELATIONS: CapabilityRelation[] = [
       "shell_hook_verify",
     ],
     artifactKinds: ["shell_hook_plan"],
-    testFiles: ["tests/shell-hooks.test.ts", "tests/shell-hook-tools.test.ts"],
+    testFiles: ["tests/shell-hooks.test.ts"],
   },
   {
     capabilityId: "adaptive.discovery-tool-generation",

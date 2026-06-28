@@ -6,6 +6,7 @@ import {
 } from "./project-intelligence.js";
 import type { DiagnosticRecord, DiagnosticSeverity } from "./diagnostics.js";
 import type { SourceType } from "./kernel.js";
+import { buildRepoNativePack, type RepoNativeFeatureSlice } from "./repo-native-pack.js";
 
 export type MissionDeltaEvidenceRecord = {
   evidenceId: string;
@@ -49,6 +50,12 @@ export type MissionDeltaReplanReport = {
     files: string[];
   };
   staleEvidence: StaleEvidenceWarning[];
+  repoNative: {
+    featureSlices: RepoNativeFeatureSlice[];
+    schemaChanged: boolean;
+    coverageGapCount: number;
+    verificationGateIds: string[];
+  };
   contextPack: ProjectContextPack;
   gateRecommendation: {
     open: boolean;
@@ -66,12 +73,23 @@ export function createMissionDeltaReplan(input: MissionDeltaReplanInput): Missio
   const blastRadius = analyzeBlastRadius({
     repoRoot: input.repoRoot,
     changedFiles,
+      diffText: input.diffText,
+    });
+  const contextQuery = contextQueryFor(input.objective, changedFiles, diagnostics);
+  const repoNativePack = buildRepoNativePack({
+    repoRoot: input.repoRoot,
+    objective: input.objective,
+    query: contextQuery,
+    changedFiles,
     diffText: input.diffText,
   });
+  const schemaChanged = changedFiles.some((file) =>
+    repoNativePack.schema.migrationFiles.includes(file) || repoNativePack.schema.schemaFiles.includes(file),
+  );
   const contextPack = generateProjectContextPack({
     repoRoot: input.repoRoot,
     objective: input.objective,
-    query: contextQueryFor(input.objective, changedFiles, diagnostics),
+    query: contextQuery,
     changedFiles,
     maxChars: input.maxContextChars ?? 6_000,
   });
@@ -81,12 +99,14 @@ export function createMissionDeltaReplan(input: MissionDeltaReplanInput): Missio
     changedFiles,
     diagnosticsSummary,
     staleEvidence,
+    schemaChanged,
   });
   const planRevision = createPlanRevision({
     changedFiles,
     blastRadius,
     diagnosticsSummary,
     staleEvidence,
+    schemaChanged,
   });
   return {
     missionId: input.missionId,
@@ -104,6 +124,12 @@ export function createMissionDeltaReplan(input: MissionDeltaReplanInput): Missio
     },
     diagnosticsSummary,
     staleEvidence,
+    repoNative: {
+      featureSlices: repoNativePack.featureSlices,
+      schemaChanged,
+      coverageGapCount: repoNativePack.coverage.gaps.length,
+      verificationGateIds: repoNativePack.verificationGates.map((gate) => gate.gateId),
+    },
     contextPack,
     gateRecommendation: {
       open: gateReasons.length === 0,
@@ -178,10 +204,14 @@ function createGateReasons(input: {
   changedFiles: string[];
   diagnosticsSummary: MissionDeltaReplanReport["diagnosticsSummary"];
   staleEvidence: StaleEvidenceWarning[];
+  schemaChanged: boolean;
 }): string[] {
   const reasons: string[] = [];
   if (input.changedFiles.length > 0) {
     reasons.push("Changed files require fresh evidence before reusing the prior plan.");
+  }
+  if (input.schemaChanged) {
+    reasons.push("Repo-native schema or migration files changed.");
   }
   if (input.staleEvidence.length > 0) {
     reasons.push("Existing evidence references changed or impacted files.");
@@ -197,10 +227,14 @@ function createPlanRevision(input: {
   blastRadius: BlastRadiusAnalysis;
   diagnosticsSummary: MissionDeltaReplanReport["diagnosticsSummary"];
   staleEvidence: StaleEvidenceWarning[];
+  schemaChanged: boolean;
 }): MissionDeltaReplanReport["planRevision"] {
   const requiredSteps: string[] = [];
   if (input.changedFiles.length > 0) {
     requiredSteps.push(`Record fresh evidence for changed files: ${input.changedFiles.join(", ")}.`);
+  }
+  if (input.schemaChanged) {
+    requiredSteps.push("Review repo-native schema and migration verification gates before reusing the prior plan.");
   }
   if (input.blastRadius.impactedEntrypoints.length > 0) {
     requiredSteps.push(

@@ -191,6 +191,31 @@ describe("tool registry conformance", () => {
     );
   });
 
+  it("advertises repo-native coverage tools as read-only large-repo guidance", () => {
+    const catalog = queryToolCatalog({
+      toolNames: ["repo_native_pack_build", "feature_slice_query"],
+    });
+
+    expect(catalog.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "repo_native_pack_build",
+          plane: "project",
+          phase: "orient",
+          pack: "large-repo",
+          risk: "read",
+        }),
+        expect.objectContaining({
+          name: "feature_slice_query",
+          plane: "project",
+          phase: "gather",
+          pack: "large-repo",
+          risk: "read",
+        }),
+      ]),
+    );
+  });
+
   it("requires Claude manifest coverage or an explicit compact-manifest policy", () => {
     const manifest = readJson<{
       tools: Array<{ name: string }>;

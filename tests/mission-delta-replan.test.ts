@@ -119,4 +119,37 @@ describe("mission delta replan", () => {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
+
+  it("reports repo-native slice and schema changes in mission delta replans", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-mission-delta-native-"));
+    try {
+      mkdirSync(path.join(repoRoot, "backend", "src", "modules", "tickets"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "migrations"), { recursive: true });
+      writeFileSync(path.join(repoRoot, "package.json"), JSON.stringify({ scripts: { test: "vitest run tests" } }));
+      writeFileSync(path.join(repoRoot, "package-lock.json"), JSON.stringify({ packages: {} }));
+      writeFileSync(path.join(repoRoot, "backend", "src", "modules", "tickets", "TicketRoutes.ts"), "export function registerTicketRoutes() {}\n");
+      writeFileSync(path.join(repoRoot, "migrations", "001_create_ticket_tables.sql"), "create table ticket_messages(id text);\n");
+
+      const report = createMissionDeltaReplan({
+        repoRoot,
+        objective: "Fix tickets",
+        changedFiles: ["migrations/001_create_ticket_tables.sql"],
+        evidenceRecords: [
+          {
+            evidenceId: "ev-ticket-schema",
+            sourceType: "file",
+            sourcePath: "migrations/001_create_ticket_tables.sql",
+            summary: "Ticket table migration.",
+          },
+        ],
+      });
+
+      expect(report.repoNative.featureSlices.map((slice) => slice.featureId)).toContain("tickets");
+      expect(report.repoNative.schemaChanged).toBe(true);
+      expect(report.repoNative.coverageGapCount).toBeGreaterThanOrEqual(0);
+      expect(report.gateRecommendation.reasons).toContain("Repo-native schema or migration files changed.");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
 });

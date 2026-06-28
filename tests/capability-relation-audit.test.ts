@@ -119,6 +119,21 @@ describe("capability relation audit", () => {
         artifactKinds: expect.arrayContaining(["app-process", "roadmap", "backlog", "lifecycle"]),
       }),
     );
+    expect(CAPABILITY_RELATIONS).toContainEqual(
+      expect.objectContaining({
+        capabilityId: "orchestration.repo-native-coverage-pack",
+        primaryTools: expect.arrayContaining(["repo_native_pack_build", "feature_slice_query"]),
+        supportingTools: expect.arrayContaining([
+          "project_onboard",
+          "agent_context_prepare",
+          "mission_delta_replan",
+          "source_conflicts_analyze",
+          "capability_relation_audit",
+        ]),
+        artifactKinds: expect.arrayContaining(["repo_native_pack", "feature_slice"]),
+        freshnessChecks: expect.arrayContaining(["repo-native-pack-fingerprint", "relation-test-file-exists"]),
+      }),
+    );
   });
 
   it("warns when workflow artifact writers omit artifact freshness metadata", () => {
@@ -149,6 +164,42 @@ describe("capability relation audit", () => {
       expect.objectContaining({
         kind: "artifact_metadata_missing",
         subject: "tool:workflow_write_artifacts",
+        severity: "warning",
+        resolution: "wire_relation",
+      }),
+    );
+  });
+
+  it("warns when relation test file metadata points at missing files", () => {
+    const audit = auditCapabilityRelations({
+      manifest: {
+        ...createDefaultCapabilityManifest(),
+        capabilities: [
+          {
+            id: "core.test-file-missing",
+            area: "core",
+            status: "implemented",
+            description: "Implemented with stale relation test metadata.",
+          },
+        ],
+      },
+      relations: [
+        {
+          capabilityId: "core.test-file-missing",
+          primaryTools: ["known_tool"],
+          testFiles: ["tests/missing-relation-test.test.ts"],
+        },
+      ],
+      registryToolNames: ["known_tool"],
+      runtimeToolNames: ["known_tool"],
+      workflowToolNames: [],
+      testFiles: ["tests/known-tool.test.ts"],
+    });
+
+    expect(audit.gaps).toContainEqual(
+      expect.objectContaining({
+        kind: "relation_test_file_missing",
+        subject: "test:tests/missing-relation-test.test.ts",
         severity: "warning",
         resolution: "wire_relation",
       }),

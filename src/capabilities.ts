@@ -260,6 +260,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Native architecture maps, entrypoint flow discovery, blast-radius analysis, and task-scoped project context packs built from typed repo observations with provenance.",
       },
       {
+        id: "orchestration.repo-native-coverage-pack",
+        area: "orchestration",
+        status: "implemented",
+        description: "Read-only repo-native coverage packs and feature-slice queries over existing feature indexes, repo-local scripts, conventions, schema evidence, verification gates, source conflicts, and coverage gaps.",
+      },
+      {
         id: "orchestration.repo-blueprint-compiler",
         area: "orchestration",
         status: "implemented",

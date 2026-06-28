@@ -136,6 +136,11 @@ import {
 } from "./optimization-adapter.js";
 import { projectOnboard } from "./project-onboard.js";
 import {
+  buildRepoNativePack,
+  queryFeatureSlice,
+  type RepoNativePackInput,
+} from "./repo-native-pack.js";
+import {
   analyzeBlastRadius,
   createArchitectureMap,
   createProjectModelCache,
@@ -1884,6 +1889,16 @@ export function createToolHandlers(
     projectOnboard(input: Parameters<typeof projectOnboard>[0]) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return projectOnboard({ ...input, repoRoot });
+    },
+
+    repoNativePackBuild(input: RepoNativePackInput) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return buildRepoNativePack({ ...input, repoRoot });
+    },
+
+    featureSliceQuery(input: RepoNativePackInput) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return queryFeatureSlice({ ...input, repoRoot });
     },
 
     blueprintCompileRepo(input: { repoRoot: string; objective: string; progressive?: boolean }) {

@@ -3,6 +3,7 @@ import { createDependencySecurityReport, type DependencySecurityReport } from ".
 import { refreshDurableRepoIndex, refreshDurableSemanticIndex, searchDurableSemanticIndex } from "./durable-index-store.js";
 import { lspProbe, type LspProbeResult } from "./lsp-ground-truth.js";
 import { detectProjectContract, type ProjectContract } from "./project-contract.js";
+import { buildRepoNativePack, type RepoNativePack } from "./repo-native-pack.js";
 import { scanRepoForSecrets, type RepoSecretScanResult } from "./safety-scan.js";
 import type { SemanticRecordInput, SemanticSearchResult } from "./semantic-search.js";
 import { analyzeTestImpactV2, type TestImpactV2Result } from "./test-impact-v2.js";
@@ -24,6 +25,7 @@ export type ProjectOnboardReport = {
   verificationPlan: VerificationPlan;
   dependencySecurity: DependencySecurityReport;
   actionPolicy: ActionPolicyReview;
+  repoNativePack: RepoNativePack;
   semantic?: SemanticSearchResult;
   recommendations: string[];
 };
@@ -56,6 +58,13 @@ export function projectOnboard(input: {
   });
   const dependencySecurity = createDependencySecurityReport({ repoRoot: input.repoRoot });
   const actionPolicy = reviewActionPolicy(input.action ?? { operations: [] });
+  const repoNativePack = buildRepoNativePack({
+    repoRoot: input.repoRoot,
+    objective: input.semanticQuery ?? "Project onboarding",
+    query: input.semanticQuery,
+    changedFiles: input.changedFiles ?? [],
+    diffText: input.diffText,
+  });
 
   let semantic: SemanticSearchResult | undefined;
   if (input.semanticRecords && input.semanticRecords.length > 0) {
@@ -80,6 +89,7 @@ export function projectOnboard(input: {
     verificationPlan,
     dependencySecurity,
     actionPolicy,
+    repoNativePack,
     semantic,
     recommendations: createRecommendations({
       impact,

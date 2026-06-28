@@ -282,6 +282,33 @@ describe("agent-facing routing tools", () => {
     }
   });
 
+  it("includes repo-native feature slice sources in prepared agent context", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-agent-context-native-"));
+    try {
+      mkdirSync(path.join(repoRoot, "src", "features", "tickets"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "backend", "src", "modules", "tickets"), { recursive: true });
+      writeFileSync(
+        path.join(repoRoot, "package.json"),
+        JSON.stringify({ scripts: { test: "vitest run tests" }, dependencies: { typescript: "^6.0.0" } }),
+      );
+      writeFileSync(path.join(repoRoot, "package-lock.json"), JSON.stringify({ packages: {} }));
+      writeFileSync(path.join(repoRoot, "src", "features", "tickets", "TicketView.tsx"), "export function TicketView() { return null; }\n");
+      writeFileSync(path.join(repoRoot, "backend", "src", "modules", "tickets", "TicketRoutes.ts"), "export function registerTicketRoutes() {}\n");
+
+      const prepared = prepareAgentContext({
+        repoRoot,
+        objective: "Fix ticket creation",
+        query: "tickets",
+        preferredSources: ["backend/src/modules/tickets/TicketRoutes.ts"],
+      });
+
+      expect(prepared.contextPack.sources).toContain("backend/src/modules/tickets/TicketRoutes.ts");
+      expect(prepared.agentInstructions).toContain("Repo-native feature slices seeded this context pack.");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("prioritizes detected language source in prepared context for Rust tasks", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-agent-routing-rust-"));
     try {

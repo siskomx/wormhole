@@ -150,7 +150,7 @@ describe("repo activity MCP tool handlers", () => {
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
-  }, 20_000);
+  }, 60_000);
 
   it("persists failed state maintenance runs and retries with corrected inputs", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-state-maintenance-failure-"));

@@ -40,6 +40,10 @@ describe("project onboarding orchestration", () => {
       expect(report.dependencySecurity.directDependencies).toBeGreaterThanOrEqual(2);
       expect(report.actionPolicy.riskLevel).toBe("low");
       expect(report.semantic?.results[0]?.id).toBe("user");
+      expect(report.repoNativePack.schemaVersion).toBe("repo-native-pack.v0");
+      expect(report.repoNativePack.reusedTools).toContain("createFeatureIndex");
+      expect(report.repoNativePack.capabilities.scripts.map((script) => script.name)).toContain("test");
+      expect(report.repoNativePack.coverage.gaps).toEqual(expect.any(Array));
       expect(report.recommendations).toContain("Run focused verification before editing impacted files.");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });

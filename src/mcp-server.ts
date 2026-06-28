@@ -319,6 +319,14 @@ export function createWormholeMcpServer(
     diffText: z.string().optional(),
     diagnosticSource: z.string().optional(),
   };
+  const repoNativePackInputSchema = {
+    repoRoot: z.string(),
+    objective: z.string().optional(),
+    query: z.string().optional(),
+    changedFiles: z.array(z.string()).optional(),
+    diffText: z.string().optional(),
+    limit: z.number().optional(),
+  };
 
   server.registerTool(
     "mission_start",
@@ -1764,6 +1772,24 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.projectOnboard(input)),
+  );
+
+  server.registerTool(
+    "repo_native_pack_build",
+    {
+      description: "Build a read-only repo-native coverage pack from existing project intelligence, feature slices, schema evidence, conventions, scripts, verification gates, and coverage gaps.",
+      inputSchema: repoNativePackInputSchema,
+    },
+    async (input) => jsonResult(tools.repoNativePackBuild(input)),
+  );
+
+  server.registerTool(
+    "feature_slice_query",
+    {
+      description: "Query repo-native feature slices derived from the existing feature index, source conflicts, schema evidence, and changed files.",
+      inputSchema: repoNativePackInputSchema,
+    },
+    async (input) => jsonResult(tools.featureSliceQuery(input)),
   );
 
   server.registerTool(

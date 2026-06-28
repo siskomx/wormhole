@@ -12,6 +12,7 @@ import {
 } from "./project-intelligence.js";
 import type { IndexHealthSnapshot } from "./index-health.js";
 import type { RepoIndexBuildOptions, RepoIndexSearchResult } from "./repo-index.js";
+import { buildRepoNativePack, type RepoNativePack } from "./repo-native-pack.js";
 import type { RuntimeRecommendedTool } from "./runtime-behavior-audit.js";
 import { TOOL_REGISTRY } from "./tool-registry.js";
 
@@ -128,6 +129,7 @@ export type AgentRoutingInput = {
   indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">;
   preferredSources?: string[];
   durableRetrieval?: AgentDurableRetrieval;
+  repoNativePack?: RepoNativePack;
   projectModelCache?: ProjectModelCache;
   projectIntelligenceSnapshot?: ProjectIntelligenceSnapshot;
 };
@@ -328,6 +330,26 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
   const cachedInput = { ...input, projectModelCache };
   const snapshot = createProjectIntelligenceSnapshot(cachedInput);
   const route = recommendMissionRoute({ ...cachedInput, projectIntelligenceSnapshot: snapshot });
+  const repoNativePack = input.repoNativePack ?? buildRepoNativePack({
+    repoRoot: input.repoRoot,
+    objective: input.objective,
+    query: input.query,
+    changedFiles,
+    diffText: input.diffText,
+  });
+  const repoNativeSources = uniqueSorted(
+    repoNativePack.featureSlices.flatMap((slice) => [
+      ...slice.keyFiles,
+      ...slice.routes,
+      ...slice.hooks,
+      ...slice.schemaFiles,
+      ...slice.tests,
+    ]),
+  );
+  const preferredSources = uniqueSorted([
+    ...(input.preferredSources ?? []),
+    ...repoNativeSources,
+  ]);
   const contextPack = generateProjectContextPack({
     repoRoot: input.repoRoot,
     objective: input.objective,
@@ -336,7 +358,7 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     maxChars: input.maxChars ?? DEFAULT_CONTEXT_CHARS,
     projectModelCache,
     indexOptions: input.indexOptions,
-    preferredSources: input.preferredSources,
+    preferredSources,
   });
   const effectiveIndexHealth = selectPreparedIndexHealth(contextPack.indexHealth, input.durableRetrieval?.indexHealth);
   const effectiveContextPack = {
@@ -364,6 +386,7 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     "Use durable_repo_index_query, ctx_pack_refresh, and workflow_write_artifacts for durable handoff and resume paths.",
     "Refresh index state before trusting degraded or stale context.",
     ...(input.durableRetrieval ? ["A durable repo index retrieval seeded this context pack."] : []),
+    ...(repoNativePack.featureSlices.length > 0 ? ["Repo-native feature slices seeded this context pack."] : []),
     "Continue into implementation and verification for coding tasks.",
     "Record source-backed evidence before making implementation claims.",
     "Run focused verification before requesting the gate.",
@@ -637,5 +660,10 @@ function toolCall(
 
 function normalizeChangedFiles(changedFiles: string[] | undefined): string[] {
   return [...new Set((changedFiles ?? []).map((file) => file.replace(/\\/g, "/").replace(/^\.\//, "")))]
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.replace(/\\/g, "/").replace(/^\.\//, "")).filter(Boolean))]
     .sort((left, right) => left.localeCompare(right));
 }
