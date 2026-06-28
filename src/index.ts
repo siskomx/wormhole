@@ -23,6 +23,7 @@ export * from "./context-store.js";
 export * from "./optimization-stats.js";
 export * from "./printing-press.js";
 export * from "./repo-index.js";
+export * from "./index-health.js";
 export * from "./runtime-state.js";
 export * from "./tool-factory.js";
 export * from "./tool-registry.js";

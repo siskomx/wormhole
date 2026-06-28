@@ -631,6 +631,23 @@ export function createToolHandlers(
     };
   }
 
+  function markIncrementalCompatibility<T extends ReturnType<typeof refreshRepoGraphForChangedFiles>>(
+    result: T,
+  ): T & {
+    incremental: false;
+    compatibilityAlias: true;
+    warnings: string[];
+  } {
+    return {
+      ...result,
+      incremental: false,
+      compatibilityAlias: true,
+      warnings: [
+        "repo_graph_refresh_incremental performed a full rebuild; partial graph mutation is not implemented yet.",
+      ],
+    };
+  }
+
   function runStateMaintenance(input: StateMaintenanceRunInput, retryOf?: string) {
     const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
     const query = input.query ?? input.objective;
@@ -734,11 +751,13 @@ export function createToolHandlers(
       if (input.refreshGraph || (input.refreshGraph !== false && changedFiles.length > 0)) {
         currentToolName = "repo_graph_refresh_incremental";
         if (changedFiles.length > 0) {
-          graph = refreshRepoGraphForChangedFiles({
-            repoRoot,
-            changedFiles,
-            diffText: input.diffText,
-          });
+          graph = markIncrementalCompatibility(
+            refreshRepoGraphForChangedFiles({
+              repoRoot,
+              changedFiles,
+              diffText: input.diffText,
+            }),
+          );
           addAction({ toolName: "repo_graph_refresh_incremental", status: "ran" });
         } else {
           addAction({
@@ -1621,7 +1640,7 @@ export function createToolHandlers(
       changedFiles: string[];
       diffText?: string;
     }) {
-      return refreshRepoGraphForChangedFiles(input);
+      return markIncrementalCompatibility(refreshRepoGraphForChangedFiles(input));
     },
 
     repoGraphRefreshFull(input: {

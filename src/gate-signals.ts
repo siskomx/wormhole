@@ -1,4 +1,5 @@
 import type { SourceConflict } from "./source-authority.js";
+import type { IndexHealthSnapshot } from "./index-health.js";
 
 export type GateSourceConflictsInput = SourceConflict[] | { conflicts: SourceConflict[] };
 
@@ -10,14 +11,21 @@ export type GateArtifactFreshness = {
 };
 
 export type GateFreshnessInput = {
+  indexHealth?: IndexHealthSnapshot;
   durableIndex?: {
     repoIndex?: {
       fresh: boolean;
+      indexHealth?: IndexHealthSnapshot;
+    };
+    sqliteIndex?: {
+      fresh: boolean;
+      indexHealth?: IndexHealthSnapshot;
     };
   };
   durableIndexManifest?: {
     manifest?: {
       fresh: boolean;
+      indexHealth?: IndexHealthSnapshot;
     };
   };
   artifacts?: GateArtifactFreshness[];
@@ -64,7 +72,17 @@ export function evaluateGateSignals(input: GateSignalInput): GateSignalFinding[]
     });
   }
 
-  if (input.freshness?.durableIndex?.repoIndex?.fresh === false) {
+  for (const health of indexHealthInputs(input.freshness)) {
+    const finding = gateFindingForIndexHealth(health, enforce);
+    if (finding) {
+      findings.push(finding);
+    }
+  }
+
+  if (
+    !input.freshness?.durableIndex?.repoIndex?.indexHealth &&
+    input.freshness?.durableIndex?.repoIndex?.fresh === false
+  ) {
     findings.push({
       ruleId: "freshness:durable-index-stale",
       severity: enforce ? "block" : "warn",
@@ -72,7 +90,10 @@ export function evaluateGateSignals(input: GateSignalInput): GateSignalFinding[]
     });
   }
 
-  if (input.freshness?.durableIndexManifest?.manifest?.fresh === false) {
+  if (
+    !input.freshness?.durableIndexManifest?.manifest?.indexHealth &&
+    input.freshness?.durableIndexManifest?.manifest?.fresh === false
+  ) {
     findings.push({
       ruleId: "freshness:durable-index-manifest-stale",
       severity: enforce ? "block" : "warn",
@@ -92,6 +113,47 @@ export function evaluateGateSignals(input: GateSignalInput): GateSignalFinding[]
   }
 
   return uniqueFindings(findings);
+}
+
+function indexHealthInputs(freshness: GateFreshnessInput | undefined): IndexHealthSnapshot[] {
+  return [
+    freshness?.indexHealth,
+    freshness?.durableIndex?.repoIndex?.indexHealth,
+    freshness?.durableIndex?.sqliteIndex?.indexHealth,
+    freshness?.durableIndexManifest?.manifest?.indexHealth,
+  ].filter((health): health is IndexHealthSnapshot => Boolean(health));
+}
+
+function gateFindingForIndexHealth(
+  health: IndexHealthSnapshot,
+  enforce: boolean,
+): GateSignalFinding | undefined {
+  if (health.status === "fresh") {
+    return undefined;
+  }
+  if (health.status === "degraded") {
+    return {
+      ruleId: "index-health:degraded",
+      severity: "warn",
+      message: indexHealthMessage(health),
+    };
+  }
+  if (health.status === "stale" || health.status === "missing") {
+    return {
+      ruleId: `index-health:${health.status}`,
+      severity: enforce ? "block" : "warn",
+      message: indexHealthMessage(health),
+    };
+  }
+  return {
+    ruleId: "index-health:unknown",
+    severity: "warn",
+    message: indexHealthMessage(health),
+  };
+}
+
+function indexHealthMessage(health: IndexHealthSnapshot): string {
+  return `Index health is ${health.status} for ${health.source}; recommended action: ${health.recommendedAction}.`;
 }
 
 export function blockingGateSignalMessages(input: GateSignalInput): string[] {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export type JsonRuntimeStateStore<T extends object> = {
@@ -27,6 +27,7 @@ export function createJsonRuntimeStateStore<T extends object>(input: {
         ...(JSON.parse(readFileSync(statePath, "utf8")) as Partial<T>),
       };
     } catch {
+      preserveCorruptState(statePath);
       return clone(input.defaultState);
     }
   }
@@ -47,4 +48,16 @@ export function createJsonRuntimeStateStore<T extends object>(input: {
       return write(mutator(read()));
     },
   };
+}
+
+function preserveCorruptState(statePath: string): void {
+  if (!existsSync(statePath)) {
+    return;
+  }
+  try {
+    const corruptPath = `${statePath}.${Date.now()}.corrupt`;
+    copyFileSync(statePath, corruptPath);
+  } catch {
+    // Returning defaults is still safer than failing startup on corrupt persisted state.
+  }
 }

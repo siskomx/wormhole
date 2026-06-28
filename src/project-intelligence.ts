@@ -4,12 +4,14 @@ import { detectProjectContract, type ProjectContract } from "./project-contract.
 import {
   buildRepoIndex,
   createRepoIndexCacheKey,
+  createRepoIndexHealth,
   isRepoIndexFresh,
   type RepoIndex,
   type RepoIndexBuildOptions,
   type RepoIndexEdge,
   type RepoIndexSymbol,
 } from "./repo-index.js";
+import type { IndexHealthSnapshot } from "./index-health.js";
 import { classifySourceProvenance } from "./source-authority.js";
 import { analyzeTestImpactV2, type TestImpactV2Result } from "./test-impact-v2.js";
 
@@ -47,6 +49,7 @@ export type ArchitectureMap = {
   repoRoot: string;
   generatedAt: string;
   fingerprint: string;
+  indexHealth: IndexHealthSnapshot;
   summary: {
     moduleCount: number;
     fileCount: number;
@@ -88,6 +91,7 @@ export type BlastRadiusAnalysis = {
   repoRoot: string;
   generatedAt: string;
   fingerprint: string;
+  indexHealth: IndexHealthSnapshot;
   changedFiles: string[];
   changedSymbols: RepoIndexSymbol[];
   impactedFiles: BlastRadiusFile[];
@@ -106,6 +110,7 @@ export type ProjectContextPack = {
   repoRoot: string;
   objective: string;
   query: string;
+  indexHealth: IndexHealthSnapshot;
   sources: string[];
   rendered: string;
   stats: {
@@ -378,6 +383,7 @@ function createArchitectureMapFromModel(model: ProjectModel): ArchitectureMap {
     repoRoot: model.repoRoot,
     generatedAt: new Date().toISOString(),
     fingerprint: model.index.fingerprint,
+    indexHealth: createRepoIndexHealth(model.index),
     summary: {
       moduleCount: sortedModules.length,
       fileCount: model.index.files.length,
@@ -498,6 +504,7 @@ function analyzeBlastRadiusFromModel(
     repoRoot: model.repoRoot,
     generatedAt: new Date().toISOString(),
     fingerprint: model.index.fingerprint,
+    indexHealth: createRepoIndexHealth(model.index),
     changedFiles,
     changedSymbols: impact.changedSymbols,
     impactedFiles,
@@ -595,6 +602,7 @@ function generateProjectContextPackFromModel(
     renderProjectContextPack({
       objective: input.objective,
       query: input.query,
+      indexHealth: createRepoIndexHealth(model.index),
       architecture,
       entrypoints,
       blast,
@@ -616,6 +624,7 @@ function generateProjectContextPackFromModel(
     repoRoot: model.repoRoot,
     objective: input.objective,
     query: input.query,
+    indexHealth: createRepoIndexHealth(model.index),
     sources,
     rendered,
     stats: {
@@ -954,6 +963,7 @@ function selectContextSources(
 function renderProjectContextPack(input: {
   objective: string;
   query: string;
+  indexHealth: IndexHealthSnapshot;
   architecture: ArchitectureMap;
   entrypoints: EntrypointFlowDiscovery;
   blast?: BlastRadiusAnalysis;
@@ -980,11 +990,20 @@ function renderProjectContextPack(input: {
     `## File: ${file.path}`,
     fencedSnippet(file.content),
   ]);
+  const healthLines = [
+    "## Index Health",
+    `- status: ${input.indexHealth.status}`,
+    `- action: ${input.indexHealth.recommendedAction}`,
+    `- truncated: ${input.indexHealth.truncated}`,
+    `- skipped files: ${input.indexHealth.skippedFileCount}`,
+  ];
   return [
     "# Context Pack",
     "",
     `Objective: ${input.objective}`,
     `Query: ${input.query}`,
+    "",
+    ...healthLines,
     "",
     "## Architecture Modules",
     ...moduleLines,

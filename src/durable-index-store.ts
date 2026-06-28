@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import {
+  createIndexHealthSnapshot,
+  type IndexHealthSnapshot,
+} from "./index-health.js";
 import { classifyProjectLane, PROJECT_LANES, type ProjectLane } from "./project-lanes.js";
 import {
   buildRepoIndex,
@@ -24,6 +28,7 @@ import {
   querySqliteRepoIndex,
   readSqliteRepoIndexStatus,
   writeSqliteRepoIndex,
+  type SqliteRepoIndexRetrievalMode,
   type SqliteRepoIndexStatus,
 } from "./sqlite-repo-index.js";
 
@@ -46,6 +51,7 @@ export type DurableIndexStatus = {
     indexPath: string;
     fresh: boolean;
     summary: RepoIndexSummary;
+    indexHealth: IndexHealthSnapshot;
   };
   sqliteIndex?: SqliteRepoIndexStatus;
   semanticIndex?: {
@@ -107,6 +113,10 @@ export type DurableShardedRepoIndexQueryResult = RepoIndexQueryResult & {
   indexPaths: string[];
   shardCount: number;
   usedSqlite: boolean;
+  retrievalMode?: SqliteRepoIndexRetrievalMode | "json" | "manifest_json" | "refused";
+  indexHealth: IndexHealthSnapshot;
+  warnings: string[];
+  refused?: boolean;
 };
 
 export function refreshDurableRepoIndex(input: RepoIndexBuildOptions): DurableRepoIndexResult {
@@ -193,14 +203,21 @@ export function durableIndexStatus(input: { repoRoot: string }): DurableIndexSta
   const repoIndex = readJson<RepoIndex>(repoIndexPath(repoRoot));
   const sqliteIndex = readSqliteRepoIndexStatus(repoRoot);
   const semanticIndex = readJson<SemanticIndex>(semanticIndexPath(repoRoot));
+  const repoIndexFresh = repoIndex ? isRepoIndexFresh(repoIndex) : undefined;
+  const repoIndexSummary = repoIndex ? summarizeRepoIndex(repoIndex) : undefined;
   return {
     repoRoot,
-    ...(repoIndex
+    ...(repoIndex && repoIndexSummary && repoIndexFresh !== undefined
       ? {
           repoIndex: {
             indexPath: repoIndexPath(repoRoot),
-            fresh: isRepoIndexFresh(repoIndex),
-            summary: summarizeRepoIndex(repoIndex),
+            fresh: repoIndexFresh,
+            summary: repoIndexSummary,
+            indexHealth: createDurableRepoIndexHealth({
+              indexPath: repoIndexPath(repoRoot),
+              fresh: repoIndexFresh,
+              summary: repoIndexSummary,
+            }),
           },
         }
       : {}),
@@ -257,9 +274,39 @@ export function queryDurableShardedRepoIndex(input: {
   query: string;
   lanes?: ProjectLane[];
   limit?: number;
+  requireFresh?: boolean;
 }): DurableShardedRepoIndexQueryResult {
   const repoRoot = path.resolve(input.repoRoot);
   const limit = input.limit ?? 10;
+  const status = durableIndexStatus({ repoRoot });
+  const statusHealth = status.sqliteIndex?.indexHealth ?? status.repoIndex?.indexHealth;
+  const indexHealth =
+    statusHealth ??
+    createIndexHealthSnapshot({
+      source: "durable_repo_index",
+      present: false,
+    });
+  const warnings = durableIndexWarnings(indexHealth);
+  const knownIndexPaths = [
+    ...(status.sqliteIndex ? [status.sqliteIndex.indexPath] : []),
+    ...(status.repoIndex ? [status.repoIndex.indexPath] : []),
+  ];
+  if (input.requireFresh && (indexHealth.status === "stale" || indexHealth.status === "missing")) {
+    return {
+      query: input.query,
+      results: [],
+      repoRoot,
+      usedManifest: false,
+      usedSqlite: false,
+      queriedLanes: input.lanes ?? [],
+      indexPaths: knownIndexPaths,
+      shardCount: knownIndexPaths.length,
+      indexHealth,
+      warnings,
+      retrievalMode: "refused",
+      refused: true,
+    };
+  }
   const sqlite = querySqliteRepoIndex({
     repoRoot,
     query: input.query,
@@ -276,13 +323,23 @@ export function queryDurableShardedRepoIndex(input: {
       queriedLanes: sqlite.queriedLanes,
       indexPaths: [sqlite.indexPath],
       shardCount: 1,
+      retrievalMode: sqlite.retrievalMode,
+      indexHealth: status.sqliteIndex?.indexHealth ?? indexHealth,
+      warnings,
     };
   }
 
   const manifest = readJson<DurableIndexManifest>(indexManifestPath(repoRoot));
   if (!manifest) {
     const fullIndex = readJson<RepoIndex>(repoIndexPath(repoRoot));
-    const fallback = fullIndex ? queryRepoIndex(fullIndex, { query: input.query, limit }) : { query: input.query, results: [] };
+    const fallback = fullIndex
+      ? queryRepoIndex(fullIndex, { query: input.query, limit })
+      : {
+          query: input.query,
+          results: [],
+          indexHealth,
+        };
+    const fallbackHealth = status.repoIndex?.indexHealth ?? fallback.indexHealth ?? indexHealth;
     return {
       ...fallback,
       repoRoot,
@@ -291,6 +348,9 @@ export function queryDurableShardedRepoIndex(input: {
       queriedLanes: [],
       indexPaths: fullIndex ? [repoIndexPath(repoRoot)] : [],
       shardCount: fullIndex ? 1 : 0,
+      retrievalMode: "json",
+      indexHealth: fallbackHealth,
+      warnings: durableIndexWarnings(fallbackHealth),
     };
   }
 
@@ -330,6 +390,9 @@ export function queryDurableShardedRepoIndex(input: {
     queriedLanes,
     indexPaths,
     shardCount: indexPaths.length,
+    retrievalMode: "manifest_json",
+    indexHealth,
+    warnings,
   };
 }
 
@@ -477,6 +540,39 @@ function createManifestEntry(
     truncated: index.truncated,
     skippedFiles: [...index.skippedFiles],
   };
+}
+
+function createDurableRepoIndexHealth(input: {
+  indexPath: string;
+  fresh: boolean;
+  summary: RepoIndexSummary;
+}): IndexHealthSnapshot {
+  return createIndexHealthSnapshot({
+    source: "durable_repo_index",
+    present: true,
+    fresh: input.fresh,
+    truncated: input.summary.truncated,
+    builtAt: input.summary.builtAt,
+    indexPath: input.indexPath,
+    fileCount: input.summary.fileCount,
+    skippedFiles: input.summary.skippedFiles,
+  });
+}
+
+function durableIndexWarnings(health: IndexHealthSnapshot): string[] {
+  if (health.status === "stale") {
+    return ["Durable repo index is stale; refresh before relying on generated repo guidance."];
+  }
+  if (health.status === "missing") {
+    return ["Durable repo index is missing; build it before relying on generated repo guidance."];
+  }
+  if (health.status === "degraded") {
+    return ["Durable repo index is degraded; inspect index limits before treating coverage as complete."];
+  }
+  if (health.status === "unknown") {
+    return ["Durable repo index freshness is unknown."];
+  }
+  return [];
 }
 
 function byteLengthForIndex(index: RepoIndex): number {

@@ -559,6 +559,14 @@ const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
     summary: "Persist verification command evidence for app-process completion gates.",
     inputs: ["repoRoot", "command", "args", "status", "evidencePath", "summary"],
   },
+  repo_index_build: {
+    plane: "project",
+    phase: "maintain",
+    pack: "large-repo",
+    risk: "write",
+    summary: "Build an in-memory repo graph with explicit default or large-repo indexing caps.",
+    inputs: ["repoRoot", "preset", "include", "exclude", "maxFiles", "maxFileBytes", "maxTotalBytes"],
+  },
   architecture_map: { plane: "project", phase: "orient", pack: "large-repo", risk: "read" },
   source_conflicts_analyze: {
     plane: "project",
@@ -602,13 +610,21 @@ const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
     summary: "Run the explicit full durable repo graph rebuild and report impact context for changed files.",
     inputs: ["repoRoot", "changedFiles", "diffText"],
   },
+  durable_repo_index_refresh: {
+    plane: "project",
+    phase: "maintain",
+    pack: "large-repo",
+    risk: "write",
+    summary: "Refresh the durable SQLite repo index and JSON compatibility export with explicit default or large-repo caps.",
+    inputs: ["repoRoot", "preset", "include", "exclude", "maxFiles", "maxFileBytes", "maxTotalBytes"],
+  },
   durable_index_manifest_refresh: {
     plane: "project",
     phase: "maintain",
     pack: "large-repo",
     risk: "write",
     summary: "Refresh the durable SQLite repo index plus index-of-indexes manifest and root/lane shard files for scalable repo queries.",
-    inputs: ["repoRoot", "include", "exclude", "maxFiles", "maxFileBytes", "maxTotalBytes"],
+    inputs: ["repoRoot", "preset", "include", "exclude", "maxFiles", "maxFileBytes", "maxTotalBytes"],
   },
   durable_index_manifest_status: {
     plane: "project",
@@ -624,7 +640,7 @@ const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
     pack: "large-repo",
     risk: "read",
     summary: "Query the durable SQLite repo index by lane, with manifest shard and full JSON fallback.",
-    inputs: ["repoRoot", "query", "lanes", "limit"],
+    inputs: ["repoRoot", "query", "lanes", "limit", "requireFresh"],
   },
   lsp_feedback_replan: {
     plane: "project",

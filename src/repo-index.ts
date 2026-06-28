@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import {
+  createIndexHealthSnapshot,
+  type IndexHealthSnapshot,
+} from "./index-health.js";
 
 export type RepoIndexSymbolKind =
   | "function"
@@ -42,7 +46,10 @@ export type RepoIndexFile = {
   content: string;
 };
 
+export type RepoIndexSizePreset = "default" | "large_repo";
+
 export type NormalizedRepoIndexBuildOptions = {
+  preset: RepoIndexSizePreset;
   include?: string[];
   exclude?: string[];
   maxFiles: number;
@@ -64,6 +71,7 @@ export type RepoIndex = {
 
 export type RepoIndexBuildOptions = {
   repoRoot: string;
+  preset?: RepoIndexSizePreset;
   include?: string[];
   exclude?: string[];
   maxFiles?: number;
@@ -80,6 +88,7 @@ export type RepoIndexSummary = {
   languages: Record<string, number>;
   truncated: boolean;
   skippedFiles: string[];
+  indexHealth: IndexHealthSnapshot;
 };
 
 export type RepoGraphReport = {
@@ -87,6 +96,7 @@ export type RepoGraphReport = {
   edgeCountsByProvenance: Record<RepoIndexEdgeProvenance, number>;
   topFiles: Array<{ path: string; edgeCount: number }>;
   markdown: string;
+  indexHealth: IndexHealthSnapshot;
 };
 
 export type RepoIndexQueryInput = {
@@ -106,6 +116,7 @@ export type RepoIndexSearchResult = {
 export type RepoIndexQueryResult = {
   query: string;
   results: RepoIndexSearchResult[];
+  indexHealth: IndexHealthSnapshot;
 };
 
 export type RepoIndexExplainInput = {
@@ -127,6 +138,7 @@ export type RepoIndexExplanation = {
   symbols: RepoIndexSymbol[];
   inboundEdges: RepoIndexEdge[];
   outboundEdges: RepoIndexEdge[];
+  indexHealth: IndexHealthSnapshot;
 };
 
 export type RepoIndexPathInput = {
@@ -140,6 +152,7 @@ export type RepoIndexPathResult = {
   to: string;
   found: boolean;
   path: string[];
+  indexHealth: IndexHealthSnapshot;
 };
 
 type EdgeDraft = {
@@ -152,6 +165,9 @@ type EdgeDraft = {
 const DEFAULT_MAX_FILES = 1_000;
 const DEFAULT_MAX_FILE_BYTES = 512 * 1024;
 const DEFAULT_MAX_TOTAL_BYTES = 10 * 1024 * 1024;
+const LARGE_REPO_MAX_FILES = 50_000;
+const LARGE_REPO_MAX_FILE_BYTES = 1024 * 1024;
+const LARGE_REPO_MAX_TOTAL_BYTES = 512 * 1024 * 1024;
 const MAX_INFERRED_REFERENCES_PER_FILE = 200;
 const MAX_SYMBOLS_PER_REFERENCE_NAME = 25;
 const DEFAULT_EXCLUDED_DIRECTORIES = new Set([
@@ -279,12 +295,26 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
 export function normalizeRepoIndexBuildOptions(
   options: RepoIndexBuildOptions | NormalizedRepoIndexBuildOptions,
 ): NormalizedRepoIndexBuildOptions {
+  const preset = options.preset ?? "default";
+  const presetLimits =
+    preset === "large_repo"
+      ? {
+          maxFiles: LARGE_REPO_MAX_FILES,
+          maxFileBytes: LARGE_REPO_MAX_FILE_BYTES,
+          maxTotalBytes: LARGE_REPO_MAX_TOTAL_BYTES,
+        }
+      : {
+          maxFiles: DEFAULT_MAX_FILES,
+          maxFileBytes: DEFAULT_MAX_FILE_BYTES,
+          maxTotalBytes: DEFAULT_MAX_TOTAL_BYTES,
+        };
   return {
+    preset,
     include: normalizePatternList(options.include),
     exclude: normalizePatternList(options.exclude),
-    maxFiles: options.maxFiles ?? DEFAULT_MAX_FILES,
-    maxFileBytes: options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
-    maxTotalBytes: options.maxTotalBytes ?? DEFAULT_MAX_TOTAL_BYTES,
+    maxFiles: options.maxFiles ?? presetLimits.maxFiles,
+    maxFileBytes: options.maxFileBytes ?? presetLimits.maxFileBytes,
+    maxTotalBytes: options.maxTotalBytes ?? presetLimits.maxTotalBytes,
   };
 }
 
@@ -318,7 +348,20 @@ export function summarizeRepoIndex(index: RepoIndex): RepoIndexSummary {
     languages,
     truncated: index.truncated,
     skippedFiles: [...index.skippedFiles],
+    indexHealth: createRepoIndexHealth(index),
   };
+}
+
+export function createRepoIndexHealth(index: RepoIndex): IndexHealthSnapshot {
+  return createIndexHealthSnapshot({
+    source: "repo_index",
+    present: true,
+    truncated: index.truncated,
+    builtAt: index.builtAt,
+    fingerprint: index.fingerprint,
+    fileCount: index.files.length,
+    skippedFiles: index.skippedFiles,
+  });
 }
 
 export function getRepoGraphReport(index: RepoIndex): RepoGraphReport {
@@ -362,6 +405,7 @@ export function getRepoGraphReport(index: RepoIndex): RepoGraphReport {
     edgeCountsByProvenance,
     topFiles,
     markdown,
+    indexHealth: createRepoIndexHealth(index),
   };
 }
 
@@ -372,7 +416,7 @@ export function queryRepoIndex(
   const limit = input.limit ?? 10;
   const tokens = tokenize(input.query);
   if (tokens.length === 0 || limit <= 0) {
-    return { query: input.query, results: [] };
+    return { query: input.query, results: [], indexHealth: createRepoIndexHealth(index) };
   }
 
   const queryLower = input.query.toLowerCase();
@@ -445,6 +489,7 @@ export function queryRepoIndex(
         return (left.line ?? 0) - (right.line ?? 0);
       })
       .slice(0, limit),
+    indexHealth: createRepoIndexHealth(index),
   };
 }
 
@@ -460,6 +505,7 @@ export function explainRepoIndex(
       symbols: [],
       inboundEdges: [],
       outboundEdges: [],
+      indexHealth: createRepoIndexHealth(index),
     };
   }
 
@@ -478,6 +524,7 @@ export function explainRepoIndex(
     outboundEdges: index.edges
       .filter((edge) => relatedNodeIds.has(edge.from))
       .slice(0, limit),
+    indexHealth: createRepoIndexHealth(index),
   };
 }
 
@@ -490,7 +537,13 @@ export function findRepoIndexPath(
   const goals = new Set(resolveCandidateNodeIds(index, input.to));
 
   if (starts.length === 0 || goals.size === 0) {
-    return { from: input.from, to: input.to, found: false, path: [] };
+    return {
+      from: input.from,
+      to: input.to,
+      found: false,
+      path: [],
+      indexHealth: createRepoIndexHealth(index),
+    };
   }
 
   const adjacency = createAdjacency(index);
@@ -511,6 +564,7 @@ export function findRepoIndexPath(
         to: input.to,
         found: true,
         path: current.path.map((node) => labelNode(index, node)),
+        indexHealth: createRepoIndexHealth(index),
       };
     }
     if (current.path.length > maxDepth) {
@@ -526,7 +580,13 @@ export function findRepoIndexPath(
     }
   }
 
-  return { from: input.from, to: input.to, found: false, path: [] };
+  return {
+    from: input.from,
+    to: input.to,
+    found: false,
+    path: [],
+    indexHealth: createRepoIndexHealth(index),
+  };
 }
 
 function listCandidateFiles(

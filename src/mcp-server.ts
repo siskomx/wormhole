@@ -303,6 +303,7 @@ export function createWormholeMcpServer(
   const toolRiskSchema = z.enum(TOOL_RISKS);
   const toolExposureModeSchema = z.enum(TOOL_EXPOSURE_MODES);
   const projectLaneSchema = z.enum(PROJECT_LANES);
+  const repoIndexPresetSchema = z.enum(["default", "large_repo"]);
   const workflowKindSchema = z.enum([
     "workflow_start_feature",
     "workflow_fix_bug",
@@ -857,6 +858,7 @@ export function createWormholeMcpServer(
       description: "Build a deterministic local repo graph for graph-first codebase search.",
       inputSchema: {
         repoRoot: z.string(),
+        preset: repoIndexPresetSchema.optional(),
         include: z.array(z.string()).optional(),
         exclude: z.array(z.string()).optional(),
         maxFiles: z.number().optional(),
@@ -2273,6 +2275,7 @@ export function createWormholeMcpServer(
       description: "Refresh and persist the SQLite-backed repo index and JSON compatibility export under .wormhole/indexes.",
       inputSchema: {
         repoRoot: z.string(),
+        preset: repoIndexPresetSchema.optional(),
         include: z.array(z.string()).optional(),
         exclude: z.array(z.string()).optional(),
         maxFiles: z.number().optional(),
@@ -2300,6 +2303,7 @@ export function createWormholeMcpServer(
       description: "Refresh the durable SQLite repo index, JSON export, manifest, and lane/root shard indexes.",
       inputSchema: {
         repoRoot: z.string(),
+        preset: repoIndexPresetSchema.optional(),
         include: z.array(z.string()).optional(),
         exclude: z.array(z.string()).optional(),
         maxFiles: z.number().optional(),
@@ -2330,6 +2334,7 @@ export function createWormholeMcpServer(
         query: z.string(),
         lanes: z.array(projectLaneSchema).optional(),
         limit: z.number().optional(),
+        requireFresh: z.boolean().optional(),
       },
     },
     async (input) => jsonResult(tools.durableRepoIndexQuery(input)),

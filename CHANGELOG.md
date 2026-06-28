@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.4.0 - 2026-06-28
+
+- Added shared `indexHealth` metadata across repo index summaries/queries, durable index status/query results, project intelligence, context packs, and agent routing.
+- Added gate signal handling for index health: stale/missing indexes can block under enforcement, while degraded/truncated indexes remain warning-only.
+- Made `repo_graph_refresh_incremental` explicitly report that it is a full-rebuild compatibility alias, not a partial graph mutation engine.
+- Added durable repo-index `requireFresh` behavior for callers that want stale/missing durable results refused instead of warning-only.
+- Added opt-in repo-index `preset: "large_repo"` caps for native and durable index builds while preserving existing default caps.
+- Added SQLite FTS-backed durable repo-index retrieval when available, plus `ftsAvailable`, `retrievalModes`, and query `retrievalMode` metadata with LIKE/JSON fallback paths.
+- Bounded Python sidecar output capture with truncation metadata, preserved corrupt runtime-state JSON, and added opt-in tolerant trailing-corruption replay for JSONL event logs.
+
 ## 0.3.0 - 2026-06-28
 
 - Added a first-class app lifecycle lane covering environment, data migration, CI, deployment, and release readiness.

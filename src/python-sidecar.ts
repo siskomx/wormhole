@@ -29,6 +29,8 @@ export type PythonSidecarJobResult = {
   exitCode: number | null;
   stdout: string;
   stderr: string;
+  stdoutTruncated: boolean;
+  stderrTruncated: boolean;
   durationMs: number;
   evidenceHash: string;
 };
@@ -233,8 +235,8 @@ export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSid
           env: buildEnv(resolved),
         });
 
-        let stdout = "";
-        let stderr = "";
+        const stdoutCapture = createCapturedOutput();
+        const stderrCapture = createCapturedOutput();
         let settled = false;
         let timedOut = false;
 
@@ -245,11 +247,17 @@ export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSid
           settled = true;
           clearTimeout(timer);
           const durationMs = Date.now() - startedAt;
+          const stdout = stdoutCapture.value();
+          const stderr = stderrCapture.value();
+          const stdoutTruncated = stdoutCapture.truncated();
+          const stderrTruncated = stderrCapture.truncated();
           const evidenceHash = sha256(
             JSON.stringify({
               input,
               stdout,
               stderr,
+              stdoutTruncated,
+              stderrTruncated,
               exitCode,
               timedOut,
             }),
@@ -264,6 +272,8 @@ export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSid
               exitCode,
               stdout,
               stderr,
+              stdoutTruncated,
+              stderrTruncated,
               durationMs,
               evidenceHash,
             });
@@ -279,6 +289,8 @@ export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSid
               exitCode,
               stdout,
               stderr,
+              stdoutTruncated,
+              stderrTruncated,
               durationMs,
               evidenceHash,
             });
@@ -301,6 +313,8 @@ export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSid
               exitCode,
               stdout,
               stderr,
+              stdoutTruncated,
+              stderrTruncated,
               durationMs,
               evidenceHash,
             });
@@ -313,6 +327,8 @@ export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSid
               exitCode,
               stdout,
               stderr,
+              stdoutTruncated,
+              stderrTruncated,
               durationMs,
               evidenceHash,
             });
@@ -327,23 +343,52 @@ export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSid
         child.stdout.setEncoding("utf8");
         child.stderr.setEncoding("utf8");
         child.stdout.on("data", (chunk: string) => {
-          if (stdout.length < MAX_CAPTURED_OUTPUT_CHARS) {
-            stdout = (stdout + chunk).slice(0, MAX_CAPTURED_OUTPUT_CHARS);
-          }
+          stdoutCapture.append(chunk);
         });
         child.stderr.on("data", (chunk: string) => {
-          if (stderr.length < MAX_CAPTURED_OUTPUT_CHARS) {
-            stderr = (stderr + chunk).slice(0, MAX_CAPTURED_OUTPUT_CHARS);
-          }
+          stderrCapture.append(chunk);
         });
         child.on("error", (error) => {
-          stderr += error.message;
+          stderrCapture.append(error.message);
           finalize(null);
         });
         child.on("close", (code) => {
           finalize(code);
         });
       });
+    },
+  };
+}
+
+function createCapturedOutput(): {
+  append(chunk: string): void;
+  value(): string;
+  truncated(): boolean;
+} {
+  const chunks: string[] = [];
+  let capturedChars = 0;
+  let truncated = false;
+  return {
+    append(chunk) {
+      const remaining = MAX_CAPTURED_OUTPUT_CHARS - capturedChars;
+      if (remaining <= 0) {
+        truncated = true;
+        return;
+      }
+      if (chunk.length > remaining) {
+        chunks.push(chunk.slice(0, remaining));
+        capturedChars += remaining;
+        truncated = true;
+        return;
+      }
+      chunks.push(chunk);
+      capturedChars += chunk.length;
+    },
+    value() {
+      return chunks.join("");
+    },
+    truncated() {
+      return truncated;
     },
   };
 }

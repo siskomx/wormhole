@@ -75,6 +75,7 @@ describe("agent-facing routing tools", () => {
       });
 
       expect(snapshot.summary.recommendedPath).toBe("balanced");
+      expect(snapshot.indexHealth.source).toBe("repo_index");
       expect(snapshot.summary.moduleCount).toBeGreaterThanOrEqual(3);
       expect(snapshot.orientation.topEntrypoints.map((entrypoint) => entrypoint.path)).toContain("src/api/users.ts");
       expect(snapshot.toolSequence.map((call) => call.toolName)).toEqual(
@@ -168,6 +169,9 @@ describe("agent-facing routing tools", () => {
       });
 
       expect(prepared.contextPack.rendered).toContain("Context Pack");
+      expect(prepared.indexHealth.source).toBe("repo_index");
+      expect(prepared.snapshot.indexHealth.source).toBe("repo_index");
+      expect(prepared.contextPack.indexHealth.source).toBe("repo_index");
       expect(prepared.contextPack.sources).toEqual(
         expect.arrayContaining(["src/services/user-service.ts", "src/api/users.ts", "tests/user-service.test.ts"]),
       );
@@ -187,6 +191,7 @@ describe("agent-facing routing tools", () => {
       expect(prepared.agentInstructions).toContain(
         "Use durable_repo_index_query, ctx_pack_refresh, and workflow_write_artifacts for durable handoff and resume paths.",
       );
+      expect(prepared.agentInstructions).toContain("Refresh index state before trusting degraded or stale context.");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

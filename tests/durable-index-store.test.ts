@@ -31,7 +31,11 @@ describe("durable index store", () => {
       expect(existsSync(repo.sqliteIndexPath)).toBe(true);
       expect(semantic.index.provider).toBe("deterministic-token-overlap");
       expect(status.repoIndex?.fresh).toBe(true);
+      expect(status.repoIndex?.indexHealth.status).toBe("fresh");
       expect(status.sqliteIndex?.fresh).toBe(true);
+      expect(status.sqliteIndex?.ftsAvailable).toEqual(expect.any(Boolean));
+      expect(status.sqliteIndex?.retrievalModes).toEqual(expect.arrayContaining(["sqlite_like"]));
+      expect(status.sqliteIndex?.indexHealth.status).toBe("fresh");
       expect(status.sqliteIndex?.summary.fileCount).toBe(1);
       expect(search.results[0]?.id).toBe("db");
     } finally {
@@ -51,6 +55,7 @@ describe("durable index store", () => {
 
     try {
       refreshDurableRepoIndex({ repoRoot });
+      const status = durableIndexStatus({ repoRoot });
 
       const result = queryDurableShardedRepoIndex({
         repoRoot,
@@ -60,11 +65,50 @@ describe("durable index store", () => {
       });
 
       expect(result.usedSqlite).toBe(true);
+      expect(result.retrievalMode).toBe(
+        status.sqliteIndex?.ftsAvailable ? "sqlite_fts" : "sqlite_like",
+      );
+      expect(result.indexHealth.status).toBe("fresh");
+      expect(result.warnings).toEqual([]);
       expect(result.usedManifest).toBe(false);
       expect(result.indexPaths).toEqual([path.join(repoRoot, ".wormhole", "indexes", "repo-index.sqlite")]);
       expect(result.queriedLanes).toEqual(["runtime"]);
       expect(result.results.map((candidate) => candidate.path)).toContain("src/db.ts");
       expect(result.results.map((candidate) => candidate.path)).not.toContain("docs/usage.md");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("surfaces stale durable index health and only refuses results when freshness is required", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-durable-stale-index-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    const filePath = path.join(repoRoot, "src", "service.ts");
+    writeFileSync(filePath, "export function loadService() { return 'old durable value'; }\n");
+
+    try {
+      refreshDurableRepoIndex({ repoRoot });
+      writeFileSync(filePath, "export function loadService() { return 'new durable value'; }\n");
+
+      const stale = queryDurableShardedRepoIndex({
+        repoRoot,
+        query: "old durable value",
+        limit: 5,
+      });
+      const refused = queryDurableShardedRepoIndex({
+        repoRoot,
+        query: "old durable value",
+        limit: 5,
+        requireFresh: true,
+      });
+
+      expect(stale.indexHealth.status).toBe("stale");
+      expect(stale.warnings).toContain("Durable repo index is stale; refresh before relying on generated repo guidance.");
+      expect(stale.results.map((candidate) => candidate.path)).toContain("src/service.ts");
+      expect(refused.refused).toBe(true);
+      expect(refused.results).toEqual([]);
+      expect(refused.indexHealth.status).toBe("stale");
+      expect(refused.indexHealth.recommendedAction).toBe("refresh_index");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

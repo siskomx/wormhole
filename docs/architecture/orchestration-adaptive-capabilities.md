@@ -118,7 +118,7 @@ The tools are:
 
 Edges carry explicit provenance and confidence: source-backed definitions/imports/links are `extracted` with confidence `1`, while text references are `inferred` with lower confidence. This is not a replacement for source evidence. Query results are discovery hints; important claims still need `record_evidence` entries with source paths and line ranges before the gate opens. The capability model also declares a `graphify` connector target so a full external Graphify graph or MCP server can be registered later without changing the Wormhole mission loop.
 
-The MCP-exposed repo index tools are confined to allowed workspace roots. By default, the only allowed root is the server working directory. Hosts can set `WORMHOLE_ALLOWED_REPO_ROOTS` to a comma- or semicolon-separated allowlist when they need multiple repo roots. Index caches are keyed by repo root plus build options and refreshed from a content fingerprint before query, explain, or path operations. `include` and `exclude` are path patterns: plain names match path segments, slash-containing values match exact paths or descendants, and `*`/`**`/`?` provide glob-style matching.
+The MCP-exposed repo index tools are confined to allowed workspace roots. By default, the only allowed root is the server working directory. Hosts can set `WORMHOLE_ALLOWED_REPO_ROOTS` to a comma- or semicolon-separated allowlist when they need multiple repo roots. Index caches are keyed by repo root plus build options and refreshed from a content fingerprint before query, explain, or path operations. `include` and `exclude` are path patterns: plain names match path segments, slash-containing values match exact paths or descendants, and `*`/`**`/`?` provide glob-style matching. Default index caps remain conservative at 1,000 files, 512 KiB per file, and 10 MiB total indexed bytes; callers can pass `preset: "large_repo"` to `repo_index_build`, `durable_repo_index_refresh`, or `durable_index_manifest_refresh` for explicit 50,000-file, 1 MiB per-file, and 512 MiB total caps, with explicit max options still taking precedence.
 
 ## Project Ground Truth Suite
 
@@ -148,7 +148,7 @@ Project intelligence sequencing composes the ground-truth tools into a higher-le
 - `app_process_gate_check` blocks implementation or completion claims until provisional app-process drafts are accepted and required verification is reported.
 - `app_process_status` reads durable app-process run state, blocked gates, accepted sections, verification records, next action, and missing artifacts.
 - `app_process_accept_section`, `app_process_continue`, and `app_process_record_verification` persist the minimal run-controller loop: accept drafted sections, prepare one bounded story, and feed verification evidence back into the app-process gate.
-- `durable_repo_index_refresh`, `durable_index_status`, `durable_semantic_index_refresh`, and `durable_semantic_search` persist index data under `.wormhole/indexes`. Repo indexes are mirrored into `repo-index.sqlite` for large-repo query performance while retaining JSON exports and manifests for compatibility, inspection, and sharded fallback.
+- `durable_repo_index_refresh`, `durable_index_status`, `durable_semantic_index_refresh`, and `durable_semantic_search` persist index data under `.wormhole/indexes`. Repo indexes are mirrored into `repo-index.sqlite` for large-repo query performance while retaining JSON exports and manifests for compatibility, inspection, and sharded fallback. Fresh SQLite writes create FTS tables when the runtime supports them; status exposes `ftsAvailable` and `retrievalModes`, and durable queries expose `retrievalMode` so agents can distinguish FTS, LIKE, full JSON, manifest JSON, and refused stale-result paths.
 - `test_impact_analyze_v2` maps unified diff hunks to changed symbols and confidence-scored test recommendations.
 - `mission_delta_replan` and `lsp_feedback_replan` re-scope missions from changed files, diagnostics, stale evidence, and LSP/typecheck feedback.
 - `dependency_security_report` summarizes package/lockfile metadata, direct and transitive counts, license data, and local-only vulnerability-provider status.
@@ -170,7 +170,7 @@ Wormhole now has native coordination tools for the mid-session states that usual
 - `state_maintenance_status` reads completed and failed maintenance records after reconnects or handoffs.
 - `state_maintenance_retry` reruns a previous maintenance input with optional corrected overrides.
 - `repo_graph_refresh_full` is the explicit full durable repo-index rebuild.
-- `repo_graph_refresh_incremental` is retained as a compatibility alias that currently performs the same full rebuild and returns `refreshMode: "full_rebuild"` while using changed files for impact analysis and activity metadata. It is not a partial graph-mutation engine yet.
+- `repo_graph_refresh_incremental` is retained as a compatibility alias that currently performs the same full rebuild and returns `refreshMode: "full_rebuild"`, `incremental: false`, `compatibilityAlias: true`, and a warning while using changed files for impact analysis and activity metadata. It is not a partial graph-mutation engine yet.
 - `lsp_feedback_replan` normalizes LSP diagnostics, records them in runtime diagnostics, infers repo-relative changed files, and feeds `mission_delta_replan`.
 - `agent_workspace_create`, `agent_workspace_write`, `agent_workspace_read`, and `agent_workspace_merge` provide shared mission workspace memory for concurrent agents, with run attribution, provenance, snapshot persistence, and conflict detection.
 - `orchestration_policy_live_feedback` records live outcomes and returns bounded advisory hints. It does not train or activate learned policies; activation remains replay-gated through `orchestration_policy_evaluate` and `orchestration_policy_activate`.
@@ -185,6 +185,8 @@ The tools are:
 - `entrypoint_flow_discover`: detects API, CLI, worker, and package-script entrypoints and links them to downstream repo files through the native repo graph.
 - `blast_radius_analyze`: maps changed files and diff hunks to changed symbols, impacted files, impacted modules, impacted entrypoints, and confidence-scored likely tests.
 - `context_pack_generate`: renders a task-scoped context pack from architecture, entrypoints, blast radius, and relevant source snippets within a caller-supplied character budget.
+
+Repo-index summaries, durable index status/query results, architecture maps, blast-radius reports, context packs, and agent routing outputs carry shared `indexHealth` metadata. Stale and missing index health can block enforced gates; degraded/truncated health remains warning-only so large repos can continue in an explicit degraded mode instead of silently pretending coverage is complete.
 
 External tools can still sync observations into future versions of this model, but Wormhole's native tools remain the default source of project intelligence. Imported observations should carry provenance, confidence, source tool identity, and repo fingerprint metadata before they influence gates or context packs.
 

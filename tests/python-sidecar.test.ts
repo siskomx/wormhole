@@ -134,6 +134,32 @@ describe("Python sidecar bridge", () => {
     }
   });
 
+  it("reports bounded stdout capture truncation", async () => {
+    const tempRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-python-sidecar-large-output-"));
+    const scriptPath = path.join(tempRoot, "large-output-sidecar.mjs");
+    writeFakeSidecar(scriptPath, "process.stdout.write('x'.repeat(2_000_050));");
+
+    try {
+      const sidecar = createPythonSidecar({
+        command: process.execPath,
+        args: [scriptPath],
+        timeoutMs: 2_000,
+      });
+
+      const result = await sidecar.run({
+        job: "trace_summary",
+        payload: {},
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.stdout.length).toBe(2_000_000);
+      expect(result.stdoutTruncated).toBe(true);
+      expect(result.stderrTruncated).toBe(false);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it("requires a working Python runtime during startup probes", async () => {
     const tempRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-python-required-"));
     const scriptPath = path.join(tempRoot, "required-sidecar.mjs");

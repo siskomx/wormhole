@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -62,5 +62,33 @@ describe("JSONL event log", () => {
     expect(status.roundsStarted).toBe(1);
     expect(status.evidenceCount).toBe(1);
     expect(status.gate?.open).toBe(true);
+  });
+
+  it("strictly rejects corrupt JSONL but can tolerate trailing corruption with a report", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "wormhole-event-log-corrupt-"));
+    const logPath = path.join(tempDir, "events.jsonl");
+    writeFileSync(
+      logPath,
+      [
+        JSON.stringify({
+          eventId: "event-1",
+          type: "mission.started",
+          timestamp: new Date().toISOString(),
+          payload: {},
+        }),
+        "{trailing",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => readJsonlEvents(logPath)).toThrow("Invalid JSONL event at line 2");
+
+    const replay = readJsonlEvents(logPath, {
+      tolerateTrailingCorruption: true,
+      report: true,
+    });
+
+    expect(replay.events).toHaveLength(1);
+    expect(replay.skippedLineCount).toBe(1);
   });
 });

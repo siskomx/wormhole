@@ -10,6 +10,7 @@ import {
   type ProjectModelCache,
   type ProjectContextPack,
 } from "./project-intelligence.js";
+import type { IndexHealthSnapshot } from "./index-health.js";
 
 export type AgentRoute = "fast" | "balanced" | "deep";
 
@@ -37,6 +38,7 @@ export type ProjectIntelligenceSnapshot = {
     changedFileCount: number;
     riskLevel: "low" | "medium" | "high";
   };
+  indexHealth: IndexHealthSnapshot;
   orientation: {
     topModules: ArchitectureMap["modules"];
     topEntrypoints: EntrypointFlowDiscovery["entrypoints"];
@@ -96,6 +98,7 @@ export type PreparedAgentContext = {
   snapshot: ProjectIntelligenceSnapshot;
   route: MissionRouteRecommendation;
   contextPack: ProjectContextPack;
+  indexHealth: IndexHealthSnapshot;
   nextToolCalls: AgentToolCall[];
   recommendedDiscovery: AgentToolCall[];
   stateMaintenance: StateMaintenanceAdvice;
@@ -153,6 +156,7 @@ export function createProjectIntelligenceSnapshot(
       changedFileCount: changedFiles.length,
       riskLevel: blastRadius?.verification.riskLevel ?? "low",
     },
+    indexHealth: architecture.indexHealth,
     orientation: {
       topModules: rankModules(architecture).slice(0, 8),
       topEntrypoints: entrypoints.entrypoints.slice(0, 8),
@@ -296,6 +300,7 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     snapshot,
     route,
     contextPack,
+    indexHealth: contextPack.indexHealth,
     recommendedDiscovery: createDiscoveryToolCalls(),
     stateMaintenance: createStateMaintenanceAdvice(),
     nextToolCalls: [
@@ -318,6 +323,7 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
       "Prefer the recommended route over browsing the full MCP tool surface.",
       "Refresh graph and context state only through the stateMaintenance owner tools.",
       "Use durable_repo_index_query, ctx_pack_refresh, and workflow_write_artifacts for durable handoff and resume paths.",
+      "Refresh index state before trusting degraded or stale context.",
       "Continue into implementation and verification for coding tasks.",
       "Record source-backed evidence before making implementation claims.",
       "Run focused verification before requesting the gate.",
@@ -357,7 +363,7 @@ function createStateMaintenanceAdvice(): StateMaintenanceAdvice {
     },
     graph: {
       ownerTools: ["durable_repo_index_refresh", "repo_graph_refresh_incremental", "durable_index_status"],
-      refreshWhen: ["repo changes are known", "watch sessions detect changed files", "index status is stale"],
+      refreshWhen: ["repo changes are known", "watch sessions detect changed files", "index status is stale or degraded"],
     },
     context: {
       ownerTools: ["ctx_pack_budget_review", "ctx_pack_refresh", "context_pack_generate"],

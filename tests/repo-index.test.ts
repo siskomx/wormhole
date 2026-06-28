@@ -7,6 +7,7 @@ import {
   explainRepoIndex,
   findRepoIndexPath,
   getRepoGraphReport,
+  normalizeRepoIndexBuildOptions,
   queryRepoIndex,
   summarizeRepoIndex,
 } from "../src/repo-index.js";
@@ -52,6 +53,15 @@ describe("repo index", () => {
       expect(summary.fileCount).toBe(3);
       expect(summary.symbolCount).toBeGreaterThanOrEqual(4);
       expect(summary.edgeCount).toBeGreaterThanOrEqual(1);
+      expect(summary.indexHealth).toEqual(
+        expect.objectContaining({
+          schemaVersion: 1,
+          source: "repo_index",
+          status: "unknown",
+          truncated: false,
+          recommendedAction: "refresh_index",
+        }),
+      );
       expect(index.symbols.map((symbol) => symbol.name)).toEqual(
         expect.arrayContaining(["startServer", "HttpServer", "connectDatabase"]),
       );
@@ -84,6 +94,7 @@ describe("repo index", () => {
           path: expect.stringMatching(/^(README\.md|src\/db\.ts)$/),
         }),
       );
+      expect(result.indexHealth.status).toBe("unknown");
       expect(result.results.map((entry) => entry.excerpt).join("\n")).toContain("database pool");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
@@ -107,6 +118,7 @@ describe("repo index", () => {
           path: "src/server.ts",
         }),
       );
+      expect(explanation.indexHealth.source).toBe("repo_index");
       expect(explanation.outboundEdges).toContainEqual(
         expect.objectContaining({
           to: "src/db.ts",
@@ -115,6 +127,7 @@ describe("repo index", () => {
       );
       expect(dependencyPath.found).toBe(true);
       expect(dependencyPath.path).toEqual(["src/server.ts", "src/db.ts"]);
+      expect(dependencyPath.indexHealth.source).toBe("repo_index");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
@@ -163,6 +176,71 @@ describe("repo index", () => {
     }
   });
 
+  it("keeps default index caps unchanged and applies the opt-in large-repo preset", () => {
+    const defaults = normalizeRepoIndexBuildOptions({ repoRoot: "/repo" });
+    const large = normalizeRepoIndexBuildOptions({
+      repoRoot: "/repo",
+      preset: "large_repo",
+    });
+    const overridden = normalizeRepoIndexBuildOptions({
+      repoRoot: "/repo",
+      preset: "large_repo",
+      maxFiles: 123,
+      maxFileBytes: 456,
+      maxTotalBytes: 789,
+    });
+
+    expect(defaults).toEqual(
+      expect.objectContaining({
+        preset: "default",
+        maxFiles: 1_000,
+        maxFileBytes: 512 * 1024,
+        maxTotalBytes: 10 * 1024 * 1024,
+      }),
+    );
+    expect(large).toEqual(
+      expect.objectContaining({
+        preset: "large_repo",
+        maxFiles: 50_000,
+        maxFileBytes: 1024 * 1024,
+        maxTotalBytes: 512 * 1024 * 1024,
+      }),
+    );
+    expect(overridden).toEqual(
+      expect.objectContaining({
+        preset: "large_repo",
+        maxFiles: 123,
+        maxFileBytes: 456,
+        maxTotalBytes: 789,
+      }),
+    );
+  });
+
+  it("records the selected build preset on constructed indexes", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-index-preset-"));
+    const fileCount = 3;
+    for (let index = 0; index < fileCount; index += 1) {
+      writeFileSync(
+        path.join(repoRoot, `module-${String(index).padStart(4, "0")}.ts`),
+        `export const module${index} = ${index};\n`,
+      );
+    }
+
+    try {
+      const defaultIndex = buildRepoIndex({ repoRoot });
+      const largeIndex = buildRepoIndex({ repoRoot, preset: "large_repo" });
+
+      expect(defaultIndex.files).toHaveLength(fileCount);
+      expect(defaultIndex.truncated).toBe(false);
+      expect(defaultIndex.buildOptions.preset).toBe("default");
+      expect(largeIndex.files).toHaveLength(fileCount);
+      expect(largeIndex.truncated).toBe(false);
+      expect(largeIndex.buildOptions.preset).toBe("large_repo");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("marks the index incomplete when files are skipped for size", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-index-skip-"));
     writeFileSync(path.join(repoRoot, "small.ts"), "export const small = true;\n");
@@ -177,6 +255,13 @@ describe("repo index", () => {
 
       expect(summary.truncated).toBe(true);
       expect(summary.skippedFiles).toContain("large.ts");
+      expect(summary.indexHealth).toEqual(
+        expect.objectContaining({
+          status: "degraded",
+          recommendedAction: "inspect_index_limits",
+          skippedFileCount: 2,
+        }),
+      );
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
@@ -298,6 +383,7 @@ describe("repo index", () => {
       const report = getRepoGraphReport(index);
 
       expect(report.summary).toContain("3 files");
+      expect(report.indexHealth.source).toBe("repo_index");
       expect(report.edgeCountsByProvenance.extracted).toBeGreaterThan(0);
       expect(report.markdown).toContain("## Native Repo Graph Report");
       expect(report.topFiles[0]).toEqual(

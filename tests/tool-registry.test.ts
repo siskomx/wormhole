@@ -144,6 +144,23 @@ describe("tool registry conformance", () => {
     );
   });
 
+  it("advertises large-repo preset and freshness inputs in index tool metadata", () => {
+    const catalog = queryToolCatalog({
+      toolNames: [
+        "repo_index_build",
+        "durable_repo_index_refresh",
+        "durable_index_manifest_refresh",
+        "durable_repo_index_query",
+      ],
+    });
+    const inputsByName = new Map(catalog.tools.map((tool) => [tool.name, tool.inputs]));
+
+    expect(inputsByName.get("repo_index_build")).toContain("preset");
+    expect(inputsByName.get("durable_repo_index_refresh")).toContain("preset");
+    expect(inputsByName.get("durable_index_manifest_refresh")).toContain("preset");
+    expect(inputsByName.get("durable_repo_index_query")).toContain("requireFresh");
+  });
+
   it("requires Claude manifest coverage or an explicit compact-manifest policy", () => {
     const manifest = readJson<{
       tools: Array<{ name: string }>;

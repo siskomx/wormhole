@@ -94,6 +94,7 @@ describe("native project intelligence spine", () => {
     try {
       const map = createArchitectureMap({ repoRoot });
 
+      expect(map.indexHealth.source).toBe("repo_index");
       expect(map.summary.moduleCount).toBeGreaterThanOrEqual(3);
       expect(map.modules.map((module) => module.rootPath)).toContain("src/services");
       expect(map.modules.find((module) => module.rootPath === "src/services")?.owners).toContain("@backend");
@@ -131,6 +132,7 @@ describe("native project intelligence spine", () => {
           "@@ -2,3 +2,3 @@\n-export function loadUser(id: string): User {\n+export function loadUser(id: string): User {\n",
       });
 
+      expect(radius.indexHealth.source).toBe("repo_index");
       expect(radius.changedSymbols.map((symbol) => symbol.name)).toContain("loadUser");
       expect(radius.impactedFiles.map((file) => file.path)).toEqual(
         expect.arrayContaining(["src/api/users.ts", "src/cli.ts", "src/worker.ts", "tests/user-service.test.ts"]),
@@ -155,6 +157,7 @@ describe("native project intelligence spine", () => {
         maxChars: 4_000,
       });
 
+      expect(pack.indexHealth.source).toBe("repo_index");
       expect(pack.sources).toEqual(
         expect.arrayContaining([
           "src/services/user-service.ts",
@@ -165,6 +168,28 @@ describe("native project intelligence spine", () => {
       expect(pack.rendered).toContain("Architecture Modules");
       expect(pack.rendered).toContain("Blast Radius");
       expect(pack.stats.renderedChars).toBeLessThanOrEqual(4_000);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("renders degraded index health in task context packs", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      const pack = generateProjectContextPack({
+        repoRoot,
+        objective: "Change user loading behavior",
+        query: "load user API tests",
+        maxChars: 4_000,
+        indexOptions: {
+          maxFiles: 1,
+        },
+      });
+
+      expect(pack.indexHealth.status).toBe("degraded");
+      expect(pack.rendered).toContain("Index Health");
+      expect(pack.rendered).toContain("degraded");
+      expect(pack.rendered).toContain("inspect_index_limits");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
@@ -204,7 +229,7 @@ describe("native project intelligence spine", () => {
     try {
       const tools = createToolHandlers(createInMemoryKernel(), { allowedRepoRoots: [repoRoot] });
 
-      expect(tools.architectureMap({ repoRoot }).modules.length).toBeGreaterThan(0);
+      expect(tools.architectureMap({ repoRoot }).indexHealth.source).toBe("repo_index");
       expect(tools.entrypointFlowDiscover({ repoRoot }).entrypoints.length).toBeGreaterThan(0);
       expect(tools.blastRadiusAnalyze({ repoRoot, changedFiles: ["src/services/user-service.ts"] }).impactedFiles.length).toBeGreaterThan(0);
       expect(

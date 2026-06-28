@@ -593,7 +593,7 @@ The orchestration area implemented:
 - Connector registry and capability-based connector selection
 - External agent registration, dispatch, status, interrupt, and completion records
 - Printing Press generated CLI registration, capability selection, structural verification, native execution, evidence capture, and agent conversion
-- Graph-first repo indexing with provenance, confidence, query, explain, report, and dependency-path tools
+- Graph-first repo indexing with provenance, confidence, query, explain, report, dependency-path tools, opt-in large-repo caps, and SQLite FTS/LIKE durable retrieval metadata
 - Adapter-free local orchestration planning and deterministic execution
 - Claude Desktop MCPB-compatible extension metadata
 

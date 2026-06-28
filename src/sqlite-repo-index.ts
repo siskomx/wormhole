@@ -3,6 +3,10 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { classifyProjectLane, PROJECT_LANES, type ProjectLane } from "./project-lanes.js";
 import {
+  createIndexHealthSnapshot,
+  type IndexHealthSnapshot,
+} from "./index-health.js";
+import {
   isRepoIndexFresh,
   summarizeRepoIndex,
   type RepoIndex,
@@ -29,7 +33,16 @@ type SqliteModule = {
 export type SqliteRepoIndexStatus = {
   indexPath: string;
   fresh: boolean;
+  ftsAvailable: boolean;
+  retrievalModes: SqliteRepoIndexRetrievalMode[];
   summary: RepoIndexSummary;
+  indexHealth: IndexHealthSnapshot;
+};
+
+export type SqliteRepoIndexRetrievalMode = "sqlite_fts" | "sqlite_like";
+
+type SqliteRepoIndexSchema = {
+  ftsAvailable: boolean;
 };
 
 const require = createRequire(import.meta.url);
@@ -47,11 +60,11 @@ export function writeSqliteRepoIndex(index: RepoIndex): string {
   const db = new DatabaseSync(tempPath);
   let writeSucceeded = false;
   try {
-    createSchema(db);
+    const schema = createSchema(db);
     db.exec("BEGIN IMMEDIATE");
-    writeMetadata(db, index);
-    writeFiles(db, index);
-    writeSymbols(db, index);
+    writeMetadata(db, index, schema);
+    writeFiles(db, index, schema);
+    writeSymbols(db, index, schema);
     writeEdges(db, index);
     db.exec("COMMIT");
     writeSucceeded = true;
@@ -85,6 +98,7 @@ export function readSqliteRepoIndexStatus(repoRootInput: string): SqliteRepoInde
     const metadata = readMetadata(db);
     const buildOptions = JSON.parse(metadata.buildOptions ?? "{}") as NormalizedRepoIndexBuildOptions;
     const summary = JSON.parse(metadata.summary ?? "{}") as RepoIndexSummary;
+    const ftsAvailable = metadata.ftsAvailable === "true" && hasFtsTables(db);
     const fresh = isRepoIndexFresh({
       repoRoot,
       builtAt: metadata.builtAt ?? "",
@@ -96,7 +110,29 @@ export function readSqliteRepoIndexStatus(repoRootInput: string): SqliteRepoInde
       truncated: metadata.truncated === "true",
       skippedFiles: JSON.parse(metadata.skippedFiles ?? "[]") as string[],
     });
-    return { indexPath, fresh, summary };
+    const skippedFiles = Array.isArray(summary.skippedFiles) ? summary.skippedFiles : [];
+    const indexHealth = createIndexHealthSnapshot({
+      source: "durable_sqlite_index",
+      present: true,
+      fresh,
+      truncated: summary.truncated,
+      builtAt: summary.builtAt,
+      indexPath,
+      fileCount: summary.fileCount,
+      skippedFiles,
+    });
+    return {
+      indexPath,
+      fresh,
+      ftsAvailable,
+      retrievalModes: ftsAvailable ? ["sqlite_fts", "sqlite_like"] : ["sqlite_like"],
+      summary: {
+        ...summary,
+        skippedFiles,
+        indexHealth: summary.indexHealth ?? indexHealth,
+      },
+      indexHealth,
+    };
   } finally {
     db.close();
   }
@@ -110,12 +146,20 @@ export function querySqliteRepoIndex(input: {
 }): RepoIndexQueryResult & {
   queriedLanes: ProjectLane[];
   indexPath: string;
+  retrievalMode: SqliteRepoIndexRetrievalMode;
 } | undefined {
   const repoRoot = path.resolve(input.repoRoot);
   const indexPath = sqliteRepoIndexPath(repoRoot);
   if (!existsSync(indexPath)) {
     return undefined;
   }
+  const indexHealth =
+    readSqliteRepoIndexStatus(repoRoot)?.indexHealth ??
+    createIndexHealthSnapshot({
+      source: "durable_sqlite_index",
+      present: false,
+      indexPath,
+    });
   const limit = input.limit ?? 10;
   const tokens = tokenize(input.query);
   if (tokens.length === 0 || limit <= 0) {
@@ -124,6 +168,8 @@ export function querySqliteRepoIndex(input: {
       results: [],
       queriedLanes: input.lanes ?? [],
       indexPath,
+      retrievalMode: "sqlite_like",
+      indexHealth,
     };
   }
 
@@ -131,15 +177,14 @@ export function querySqliteRepoIndex(input: {
   const db = new DatabaseSync(indexPath);
   try {
     const lanes = input.lanes ?? readAvailableLanes(db);
-    const results = [
-      ...querySymbols(db, input.query, tokens, lanes),
-      ...queryFiles(db, input.query, tokens, lanes),
-    ];
+    const queryResult = querySqliteCandidates(db, input.query, tokens, lanes);
     return {
       query: input.query,
-      results: sortResults(results, limit),
+      results: sortResults(queryResult.results, limit),
       queriedLanes: lanes,
       indexPath,
+      retrievalMode: queryResult.retrievalMode,
+      indexHealth,
     };
   } finally {
     db.close();
@@ -177,7 +222,7 @@ function replaceFileWithBackup(sourcePath: string, targetPath: string): void {
   }
 }
 
-function createSchema(db: DatabaseSync): void {
+function createSchema(db: DatabaseSync): SqliteRepoIndexSchema {
   db.exec(`
     PRAGMA journal_mode = DELETE;
     PRAGMA synchronous = NORMAL;
@@ -228,13 +273,41 @@ function createSchema(db: DatabaseSync): void {
     CREATE INDEX idx_edges_from ON edges(from_node);
     CREATE INDEX idx_edges_to ON edges(to_node);
   `);
+  return { ftsAvailable: tryCreateFtsSchema(db) };
 }
 
-function writeMetadata(db: DatabaseSync, index: RepoIndex): void {
+function tryCreateFtsSchema(db: DatabaseSync): boolean {
+  try {
+    db.exec(`
+      CREATE VIRTUAL TABLE files_fts USING fts5(
+        path,
+        language,
+        lane UNINDEXED,
+        symbols_text,
+        content
+      );
+
+      CREATE VIRTUAL TABLE symbols_fts USING fts5(
+        id UNINDEXED,
+        name,
+        kind,
+        path,
+        lane UNINDEXED
+      );
+    `);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function writeMetadata(db: DatabaseSync, index: RepoIndex, schema: SqliteRepoIndexSchema): void {
   const insert = db.prepare("INSERT INTO metadata(key, value) VALUES (?, ?)");
   const summary = summarizeRepoIndex(index);
   const values: Record<string, string> = {
     version: "1",
+    schemaVersion: "2",
+    ftsAvailable: String(schema.ftsAvailable),
     repoRoot: index.repoRoot,
     builtAt: index.builtAt,
     buildOptions: JSON.stringify(index.buildOptions),
@@ -248,34 +321,51 @@ function writeMetadata(db: DatabaseSync, index: RepoIndex): void {
   }
 }
 
-function writeFiles(db: DatabaseSync, index: RepoIndex): void {
+function writeFiles(db: DatabaseSync, index: RepoIndex, schema: SqliteRepoIndexSchema): void {
   const insert = db.prepare(`
     INSERT INTO files(path, language, lane, shard_root, line_count, byte_length, mtime_ms, hash, content, symbols_text)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
+  const insertFts = schema.ftsAvailable
+    ? db.prepare(`
+        INSERT INTO files_fts(path, language, lane, symbols_text, content)
+        VALUES (?, ?, ?, ?, ?)
+      `)
+    : undefined;
   for (const file of index.files) {
+    const lane = classifyProjectLane(file.path);
+    const symbolsText = file.symbols.map((symbol) => symbol.name).join(" ");
     insert.run(
       file.path,
       file.language,
-      classifyProjectLane(file.path),
+      lane,
       shardRootForPath(file.path),
       file.lineCount,
       file.byteLength,
       file.mtimeMs,
       file.hash,
       file.content,
-      file.symbols.map((symbol) => symbol.name).join(" "),
+      symbolsText,
     );
+    insertFts?.run(file.path, file.language, lane, symbolsText, file.content);
   }
 }
 
-function writeSymbols(db: DatabaseSync, index: RepoIndex): void {
+function writeSymbols(db: DatabaseSync, index: RepoIndex, schema: SqliteRepoIndexSchema): void {
   const insert = db.prepare(`
     INSERT INTO symbols(id, name, kind, path, lane, line)
     VALUES (?, ?, ?, ?, ?, ?)
   `);
+  const insertFts = schema.ftsAvailable
+    ? db.prepare(`
+        INSERT INTO symbols_fts(id, name, kind, path, lane)
+        VALUES (?, ?, ?, ?, ?)
+      `)
+    : undefined;
   for (const symbol of index.symbols) {
-    insert.run(symbol.id, symbol.name, symbol.kind, symbol.path, classifyProjectLane(symbol.path), symbol.line);
+    const lane = classifyProjectLane(symbol.path);
+    insert.run(symbol.id, symbol.name, symbol.kind, symbol.path, lane, symbol.line);
+    insertFts?.run(symbol.id, symbol.name, symbol.kind, symbol.path, lane);
   }
 }
 
@@ -315,6 +405,43 @@ function readAvailableLanes(db: DatabaseSync): ProjectLane[] {
   return lanes;
 }
 
+function querySqliteCandidates(
+  db: DatabaseSync,
+  query: string,
+  tokens: string[],
+  lanes: ProjectLane[],
+): { results: RepoIndexSearchResult[]; retrievalMode: SqliteRepoIndexRetrievalMode } {
+  if (hasFtsTables(db)) {
+    try {
+      return {
+        retrievalMode: "sqlite_fts",
+        results: [
+          ...querySymbolsFts(db, query, tokens, lanes),
+          ...queryFilesFts(db, query, tokens, lanes),
+        ],
+      };
+    } catch {
+      // Older SQLite builds can create the regular tables but lack working FTS5 support.
+    }
+  }
+  return {
+    retrievalMode: "sqlite_like",
+    results: [
+      ...querySymbols(db, query, tokens, lanes),
+      ...queryFiles(db, query, tokens, lanes),
+    ],
+  };
+}
+
+function querySymbolsFts(
+  db: DatabaseSync,
+  query: string,
+  tokens: string[],
+  lanes: ProjectLane[],
+): RepoIndexSearchResult[] {
+  return searchSymbolRows(selectFtsRows(db, "symbols", tokens, lanes), query, tokens);
+}
+
 function querySymbols(
   db: DatabaseSync,
   query: string,
@@ -322,6 +449,14 @@ function querySymbols(
   lanes: ProjectLane[],
 ): RepoIndexSearchResult[] {
   const rows = selectCandidateRows(db, "symbols", "lower(name || ' ' || kind || ' ' || path)", tokens, lanes);
+  return searchSymbolRows(rows, query, tokens);
+}
+
+function searchSymbolRows(
+  rows: Record<string, unknown>[],
+  query: string,
+  tokens: string[],
+): RepoIndexSearchResult[] {
   const queryLower = query.toLowerCase();
   return rows.flatMap((row) => {
     const name = String(row.name);
@@ -346,6 +481,15 @@ function querySymbols(
   });
 }
 
+function queryFilesFts(
+  db: DatabaseSync,
+  query: string,
+  tokens: string[],
+  lanes: ProjectLane[],
+): RepoIndexSearchResult[] {
+  return searchFileRows(selectFtsRows(db, "files", tokens, lanes), query, tokens);
+}
+
 function queryFiles(
   db: DatabaseSync,
   query: string,
@@ -359,6 +503,14 @@ function queryFiles(
     tokens,
     lanes,
   );
+  return searchFileRows(rows, query, tokens);
+}
+
+function searchFileRows(
+  rows: Record<string, unknown>[],
+  query: string,
+  tokens: string[],
+): RepoIndexSearchResult[] {
   const queryLower = query.toLowerCase();
   const results: RepoIndexSearchResult[] = [];
   for (const row of rows) {
@@ -399,6 +551,27 @@ function queryFiles(
   return results;
 }
 
+function selectFtsRows(
+  db: DatabaseSync,
+  table: "files" | "symbols",
+  tokens: string[],
+  lanes: ProjectLane[],
+): Record<string, unknown>[] {
+  const ftsTable = `${table}_fts`;
+  const joinColumn = table === "files" ? "path" : "id";
+  const lanePlaceholders = lanes.map(() => "?").join(", ");
+  const clauses = [
+    lanes.length > 0 ? `${table}.lane IN (${lanePlaceholders})` : "",
+    `${ftsTable} MATCH ?`,
+  ].filter(Boolean);
+  const sql = [
+    `SELECT ${table}.* FROM ${table}`,
+    `JOIN ${ftsTable} ON ${ftsTable}.${joinColumn} = ${table}.${joinColumn}`,
+    `WHERE ${clauses.join(" AND ")}`,
+  ].join(" ");
+  return db.prepare(sql).all(...lanes, createFtsQuery(tokens));
+}
+
 function selectCandidateRows(
   db: DatabaseSync,
   table: "files" | "symbols",
@@ -416,6 +589,20 @@ function selectCandidateRows(
     tokens.length > 0 ? `(${tokenClauses})` : "",
   ].filter(Boolean).join(" ");
   return db.prepare(sql).all(...lanes, ...tokens.map((token) => `%${escapeLikeToken(token.toLowerCase())}%`));
+}
+
+function hasFtsTables(db: DatabaseSync): boolean {
+  const files = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'files_fts'")
+    .get();
+  const symbols = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'symbols_fts'")
+    .get();
+  return Boolean(files && symbols);
+}
+
+function createFtsQuery(tokens: string[]): string {
+  return tokens.map((token) => `"${token.replace(/"/g, '""')}"`).join(" OR ");
 }
 
 function sortResults(results: RepoIndexSearchResult[], limit: number): RepoIndexSearchResult[] {

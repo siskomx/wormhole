@@ -81,7 +81,11 @@ describe("repo activity MCP tool handlers", () => {
 
       expect(refresh.changedFiles).toEqual(["src/app.ts"]);
       expect(refresh.refreshMode).toBe("full_rebuild");
+      expect(refresh.incremental).toBe(false);
+      expect(refresh.compatibilityAlias).toBe(true);
+      expect(refresh.warnings).toContain("repo_graph_refresh_incremental performed a full rebuild; partial graph mutation is not implemented yet.");
       expect(fullRefresh.refreshMode).toBe("full_rebuild");
+      expect(fullRefresh).not.toHaveProperty("compatibilityAlias", true);
       expect(refresh.index.summary.fileCount).toBe(2);
       expect(refresh.testImpact.changedSymbols.map((symbol) => symbol.name)).toContain("runApp");
       expect(refresh.testImpact.likelyTests[0]?.path).toBe("src/app.test.ts");
@@ -209,6 +213,7 @@ describe("repo activity MCP tool handlers", () => {
         }),
       );
       expect(result.freshness?.durableIndex.repoIndex?.fresh).toBe(false);
+      expect(result.freshness?.durableIndex.repoIndex?.indexHealth.status).toBe("stale");
       expect(result.freshness?.durableIndexManifest.manifest?.fresh).toBe(false);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
