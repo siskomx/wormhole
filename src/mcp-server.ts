@@ -485,6 +485,8 @@ export function createWormholeMcpServer(
       description: "Evaluate whether the mission can produce its final response or requested artifact.",
       inputSchema: {
         missionId: z.string(),
+        sourceConflicts: z.any().optional(),
+        freshness: z.any().optional(),
       },
     },
     async (input) => jsonResult(tools.gateRequest(input)),
@@ -1792,6 +1794,8 @@ export function createWormholeMcpServer(
       description: "Check planned commands and completion claims against a Wormhole constraints manifest.",
       inputSchema: {
         constraints: z.any(),
+        sourceConflicts: z.any().optional(),
+        freshness: z.any().optional(),
         action: z.object({
           plannedCommands: z
             .array(
@@ -1858,6 +1862,9 @@ export function createWormholeMcpServer(
       description: "Block implementation or completion claims until app-process drafts are accepted and verification is reported.",
       inputSchema: {
         appProcess: z.any(),
+        sourceConflicts: z.any().optional(),
+        freshness: z.any().optional(),
+        artifactFreshness: z.array(z.any()).optional(),
         action: z.object({
           implementationClaim: z.boolean().optional(),
           completionClaim: z.boolean().optional(),

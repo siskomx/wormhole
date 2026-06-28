@@ -379,6 +379,17 @@ export const CAPABILITY_RELATIONS: CapabilityRelation[] = [
       "state_maintenance_status",
       "state_maintenance_retry",
     ],
+    supportingTools: [
+      "context_pack_generate",
+      "ctx_pack_budget_review",
+      "ctx_pack_refresh",
+      "durable_index_status",
+      "durable_index_manifest_status",
+      "durable_repo_index_query",
+    ],
+    stateOwners: ["context-store", "durable-index-store", "workflow-files"],
+    artifactKinds: ["context_pack", "workflow_state", "workflow_resume", "workflow_latest"],
+    freshnessChecks: ["durable-index-status", "workflow-artifact-freshness"],
     workflows: [
       "workflow_start_feature",
       "workflow_fix_bug",

@@ -77,6 +77,13 @@ describe("app process run files", () => {
           status: "missing",
         }),
       );
+      expect(staleBundle.status.status).toBe("blocked");
+      expect(staleBundle.status.blockedGates).toContainEqual(
+        expect.objectContaining({
+          ruleId: "artifact-freshness:missing",
+          severity: "block",
+        }),
+      );
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

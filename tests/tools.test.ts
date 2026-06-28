@@ -64,6 +64,58 @@ describe("Wormhole MCP tool handlers", () => {
     }
   });
 
+  it("closes the mission gate when supplied source conflicts include stale generated artifacts", () => {
+    const kernel = createInMemoryKernel();
+    const tools = createToolHandlers(kernel);
+    const mission = tools.missionStart({
+      objective: "Plan from current repo facts.",
+      repoRoot: process.cwd(),
+    });
+    tools.roundStart({ missionId: mission.missionId });
+    tools.recordEvidence({
+      missionId: mission.missionId,
+      sourceType: "file",
+      sourcePath: "docs/planning/wormhole-canonical-plan.md",
+      retrievalMethod: "read_file",
+      summary: "Canonical plan exists.",
+    });
+
+    const gate = tools.gateRequest({
+      missionId: mission.missionId,
+      sourceConflicts: [
+        {
+          subject: ".wormhole/workflows/latest.json#indexFingerprint",
+          authoritative: [
+            {
+              authority: "derived_code_fact",
+              freshness: "current",
+              authorityScore: 0.88,
+              sourcePath: "repo-index",
+              reason: "Current repo index fingerprint.",
+            },
+          ],
+          conflicting: [
+            {
+              authority: "generated_note",
+              freshness: "stale",
+              authorityScore: 0.2,
+              sourcePath: ".wormhole/workflows/latest.json",
+              reason: "Generated workflow pointer was built from an old repo index.",
+            },
+          ],
+          severity: "warning",
+          resolution: "needs_validation",
+          message: ".wormhole/workflows/latest.json was generated from a stale repo index fingerprint.",
+        },
+      ],
+    });
+
+    expect(gate.open).toBe(false);
+    expect(gate.reasons).toContain(
+      "Resolve stale generated artifact conflict for .wormhole/workflows/latest.json#indexFingerprint: .wormhole/workflows/latest.json was generated from a stale repo index fingerprint.",
+    );
+  });
+
   it("emits plans through the generic tool handlers", () => {
     const kernel = createInMemoryKernel();
     const tools = createToolHandlers(kernel);

@@ -3,6 +3,12 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import type { BlueprintCommand, BlueprintCompileResult } from "./blueprint.js";
 import type { RepoFeature, RepoFeatureIndex } from "./feature-index.js";
+import {
+  evaluateGateSignals,
+  type GateArtifactFreshness,
+  type GateFreshnessInput,
+  type GateSourceConflictsInput,
+} from "./gate-signals.js";
 
 export const APP_PROCESS_LANES = [
   "discovery",
@@ -196,6 +202,9 @@ export type AppProcessGateReportedVerification = {
 
 export type AppProcessGateInput = {
   appProcess: AppProcess;
+  sourceConflicts?: GateSourceConflictsInput;
+  freshness?: GateFreshnessInput;
+  artifactFreshness?: GateArtifactFreshness[];
   action: {
     implementationClaim?: boolean;
     completionClaim?: boolean;
@@ -439,6 +448,14 @@ export function checkAppProcessGate(input: AppProcessGateInput): AppProcessGateR
   const findings: AppProcessGateFinding[] = [];
   const acceptedDraftSections = new Set(input.action.acceptedDraftSections ?? []);
   const requiresProductConfirmation = input.action.implementationClaim || input.action.completionClaim;
+  findings.push(
+    ...evaluateGateSignals({
+      sourceConflicts: input.sourceConflicts,
+      freshness: input.freshness,
+      artifactFreshness: input.artifactFreshness,
+      enforce: requiresProductConfirmation === true,
+    }),
+  );
 
   if (requiresProductConfirmation) {
     for (const sectionName of ["productDefinition", "roadmap", "backlog", "ux", "security"] as const) {

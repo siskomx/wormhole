@@ -317,6 +317,7 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
       "Use tool_catalog_query when the route recommends a plane, phase, pack, risk, or exact tool name.",
       "Prefer the recommended route over browsing the full MCP tool surface.",
       "Refresh graph and context state only through the stateMaintenance owner tools.",
+      "Use durable_repo_index_query, ctx_pack_refresh, and workflow_write_artifacts for durable handoff and resume paths.",
       "Continue into implementation and verification for coding tasks.",
       "Record source-backed evidence before making implementation claims.",
       "Run focused verification before requesting the gate.",

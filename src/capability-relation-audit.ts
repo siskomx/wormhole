@@ -22,6 +22,7 @@ export type CapabilityRelationGapKind =
   | "workflow_tool_missing"
   | "tool_no_capability"
   | "tool_no_test"
+  | "artifact_metadata_missing"
   | "stale_allowlist";
 
 export type CapabilityRelationGapSeverity = "error" | "warning";
@@ -64,6 +65,15 @@ export type CapabilityRelationAudit = {
   warningCount: number;
   gaps: CapabilityRelationGap[];
 };
+
+const ARTIFACT_RELATION_REQUIREMENTS = [
+  {
+    toolName: "workflow_write_artifacts",
+    artifactKinds: ["workflow_state", "workflow_resume", "workflow_latest"],
+    stateOwners: ["workflow-files"],
+    freshnessChecks: ["workflow-artifact-freshness"],
+  },
+] as const;
 
 export function auditCapabilityRelations(input: CapabilityRelationAuditInput): CapabilityRelationAudit {
   const capabilitiesById = new Map(input.manifest.capabilities.map((capability) => [capability.id, capability]));
@@ -135,6 +145,32 @@ export function auditCapabilityRelations(input: CapabilityRelationAuditInput): C
           message: `${relation.capabilityId} maps ${toolName}, but the relation entry declares no test files.`,
         });
       }
+    }
+    for (const requirement of ARTIFACT_RELATION_REQUIREMENTS) {
+      if (!tools.includes(requirement.toolName)) {
+        continue;
+      }
+      const missingArtifactKinds = missingValues(requirement.artifactKinds, relation.artifactKinds);
+      const missingStateOwners = missingValues(requirement.stateOwners, relation.stateOwners);
+      const missingFreshnessChecks = missingValues(requirement.freshnessChecks, relation.freshnessChecks);
+      if (
+        missingArtifactKinds.length === 0 &&
+        missingStateOwners.length === 0 &&
+        missingFreshnessChecks.length === 0
+      ) {
+        continue;
+      }
+      rawGaps.push({
+        subject: `tool:${requirement.toolName}`,
+        kind: "artifact_metadata_missing",
+        severity: "warning",
+        resolution: "wire_relation",
+        message: `${relation.capabilityId} maps ${requirement.toolName}, but is missing artifact/freshness relation metadata: ${[
+          ...missingArtifactKinds.map((value) => `artifactKinds:${value}`),
+          ...missingStateOwners.map((value) => `stateOwners:${value}`),
+          ...missingFreshnessChecks.map((value) => `freshnessChecks:${value}`),
+        ].join(", ")}.`,
+      });
     }
   }
 
@@ -277,6 +313,11 @@ function uniqueGaps(gaps: CapabilityRelationGap[]): CapabilityRelationGap[] {
     }
     return left.subject.localeCompare(right.subject);
   });
+}
+
+function missingValues(required: readonly string[], actual: readonly string[] | undefined): string[] {
+  const actualValues = new Set(actual ?? []);
+  return required.filter((value) => !actualValues.has(value));
 }
 
 function uniqueSorted(values: string[]): string[] {

@@ -178,6 +178,7 @@ import {
   type WorkflowInput,
 } from "./workflows.js";
 import { writeWorkflowArtifacts } from "./workflow-files.js";
+import type { GateFreshnessInput, GateSourceConflictsInput } from "./gate-signals.js";
 import {
   createPatchTransactionStore,
   type PatchTransactionSnapshot,
@@ -930,8 +931,15 @@ export function createToolHandlers(
       return kernel.taskStatus(input.missionId, input.taskId);
     },
 
-    gateRequest(input: { missionId: string }) {
-      return kernel.requestGate(input.missionId);
+    gateRequest(input: {
+      missionId: string;
+      sourceConflicts?: GateSourceConflictsInput;
+      freshness?: GateFreshnessInput;
+    }) {
+      return kernel.requestGate(input.missionId, {
+        sourceConflicts: input.sourceConflicts,
+        freshness: input.freshness,
+      });
     },
 
     emitPlan(input: { missionId: string } & PlanInput) {

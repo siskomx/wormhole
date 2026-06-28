@@ -7,6 +7,11 @@ import {
   reviewMinimality,
   type OptimizationResult,
 } from "./optimization.js";
+import {
+  blockingGateSignalMessages,
+  type GateFreshnessInput,
+  type GateSourceConflictsInput,
+} from "./gate-signals.js";
 
 export type SourceType = "file" | "command_output" | "user_input" | "derived_note";
 
@@ -667,7 +672,13 @@ export function createInMemoryKernel(
       return question;
     },
 
-    requestGate(missionId: string): GateResult {
+    requestGate(
+      missionId: string,
+      input: {
+        sourceConflicts?: GateSourceConflictsInput;
+        freshness?: GateFreshnessInput;
+      } = {},
+    ): GateResult {
       const state = getMissionState(missionId);
       const reasons: string[] = [];
       if (state.evidence.length === 0) {
@@ -684,6 +695,7 @@ export function createInMemoryKernel(
       if (blockingWithoutFallback.length > 0) {
         reasons.push("Blocking questions require answers or assumption fallbacks");
       }
+      reasons.push(...blockingGateSignalMessages(input));
       const result: GateResult = {
         open: reasons.length === 0,
         reasons,

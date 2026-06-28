@@ -10,6 +10,11 @@ import type {
 import type { ProjectOnboardReport } from "./project-onboard.js";
 import { createVerificationPlan, type VerificationCommand } from "./verification-runner.js";
 import { createFeatureIndex, type RepoFeatureIndex } from "./feature-index.js";
+import {
+  evaluateGateSignals,
+  type GateFreshnessInput,
+  type GateSourceConflictsInput,
+} from "./gate-signals.js";
 
 export type BlueprintStatus =
   | "confirmed_from_repo"
@@ -175,6 +180,8 @@ export type BlueprintGateReportedVerification = BlueprintGateCommand & {
 
 export type BlueprintGateInput = {
   constraints: ConstraintManifest;
+  sourceConflicts?: GateSourceConflictsInput;
+  freshness?: GateFreshnessInput;
   action: {
     plannedCommands?: BlueprintGateCommand[];
     completionClaim?: boolean;
@@ -523,6 +530,13 @@ export function renderAgentContext(
 
 export function checkBlueprintGate(input: BlueprintGateInput): BlueprintGateResult {
   const findings: BlueprintGateFinding[] = [];
+  findings.push(
+    ...evaluateGateSignals({
+      sourceConflicts: input.sourceConflicts,
+      freshness: input.freshness,
+      enforce: input.action.completionClaim === true,
+    }),
+  );
   const expectedPackageManager = input.constraints.packageManager.value;
   if (expectedPackageManager !== "unknown") {
     for (const command of input.action.plannedCommands ?? []) {

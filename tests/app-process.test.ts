@@ -148,4 +148,41 @@ describe("app process compiler", () => {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
+
+  it("blocks implementation claims when required app-process artifacts are stale", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      const result = compileAppProcess({
+        repoRoot,
+        objective: "Build a client invoice dashboard.",
+        blueprint: compileBootstrapBlueprint({ repoRoot, objective: "Build a client invoice dashboard." }),
+      });
+
+      const gate = checkAppProcessGate({
+        appProcess: result.appProcess,
+        artifactFreshness: [
+          {
+            relativePath: ".wormhole/app-process.json",
+            status: "stale",
+            reason: "Artifact fingerprint no longer matches the current repo index.",
+          },
+        ],
+        action: {
+          implementationClaim: true,
+          acceptedDraftSections: ["productDefinition", "roadmap", "backlog", "ux", "security"],
+          reportedVerification: [{ command: "pnpm", args: ["run", "test"], status: "passed" }],
+        },
+      });
+
+      expect(gate.status).toBe("block");
+      expect(gate.findings).toContainEqual(
+        expect.objectContaining({
+          ruleId: "artifact-freshness:stale",
+          severity: "block",
+        }),
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
 });

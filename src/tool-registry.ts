@@ -343,6 +343,14 @@ const ENTRY_TOOLS = [
 ];
 
 const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
+  gate_request: {
+    plane: "mission",
+    phase: "gate",
+    pack: "core",
+    risk: "read",
+    summary: "Evaluate mission evidence, questions, source conflicts, and freshness signals before final claims.",
+    inputs: ["missionId", "sourceConflicts", "freshness"],
+  },
   tool_layer_map: {
     plane: "mission",
     phase: "orient",
@@ -484,8 +492,8 @@ const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
     phase: "gate",
     pack: "core",
     risk: "read",
-    summary: "Check planned commands and completion claims against a Wormhole constraints manifest.",
-    inputs: ["constraints", "action"],
+    summary: "Check planned commands, source conflicts, freshness, and completion claims against a Wormhole constraints manifest.",
+    inputs: ["constraints", "sourceConflicts", "freshness", "action"],
   },
   app_process_compile: {
     plane: "project",
@@ -516,8 +524,8 @@ const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
     phase: "gate",
     pack: "core",
     risk: "read",
-    summary: "Check implementation and completion claims against provisional app-process sections and required verification.",
-    inputs: ["appProcess", "action"],
+    summary: "Check implementation and completion claims against provisional app-process sections, source conflicts, artifact freshness, and required verification.",
+    inputs: ["appProcess", "sourceConflicts", "freshness", "artifactFreshness", "action"],
   },
   app_process_status: {
     plane: "project",

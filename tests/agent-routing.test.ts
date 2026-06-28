@@ -184,6 +184,9 @@ describe("agent-facing routing tools", () => {
       expect(prepared.agentInstructions).toContain("Start with tool_layer_map before browsing the full MCP surface.");
       expect(prepared.agentInstructions).toContain("Continue into implementation and verification for coding tasks.");
       expect(prepared.agentInstructions).toContain("Call emit_plan only when the user explicitly asks for a plan");
+      expect(prepared.agentInstructions).toContain(
+        "Use durable_repo_index_query, ctx_pack_refresh, and workflow_write_artifacts for durable handoff and resume paths.",
+      );
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

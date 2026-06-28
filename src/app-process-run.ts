@@ -171,6 +171,7 @@ export function createAppProcessRunStatus(input: {
   const reportedVerification = input.runState.verificationRecords.map(toReportedVerification);
   const gate = checkAppProcessGate({
     appProcess: input.appProcess,
+    artifactFreshness: input.artifacts,
     action: {
       completionClaim: true,
       acceptedDraftSections,

@@ -98,6 +98,54 @@ describe("capability relation audit", () => {
         primaryTools: expect.arrayContaining(["source_conflicts_analyze"]),
       }),
     );
+    expect(CAPABILITY_RELATIONS).toContainEqual(
+      expect.objectContaining({
+        capabilityId: "adaptive.agent-facing-routing",
+        supportingTools: expect.arrayContaining([
+          "ctx_pack_refresh",
+          "durable_repo_index_query",
+          "durable_index_manifest_status",
+          "context_pack_generate",
+        ]),
+        stateOwners: expect.arrayContaining(["context-store", "durable-index-store", "workflow-files"]),
+        artifactKinds: expect.arrayContaining(["context_pack", "workflow_state", "workflow_resume", "workflow_latest"]),
+        freshnessChecks: expect.arrayContaining(["durable-index-status", "workflow-artifact-freshness"]),
+      }),
+    );
+  });
+
+  it("warns when workflow artifact writers omit artifact freshness metadata", () => {
+    const audit = auditCapabilityRelations({
+      manifest: {
+        ...createDefaultCapabilityManifest(),
+        capabilities: [
+          {
+            id: "adaptive.agent-facing-routing",
+            area: "adaptive",
+            status: "implemented",
+            description: "Routes coding agents through workflow tools.",
+          },
+        ],
+      },
+      relations: [
+        {
+          capabilityId: "adaptive.agent-facing-routing",
+          primaryTools: ["workflow_write_artifacts"],
+          testFiles: ["tests/workflows.test.ts"],
+        },
+      ],
+      registryToolNames: ["workflow_write_artifacts"],
+      testFiles: ["tests/workflows.test.ts"],
+    });
+
+    expect(audit.gaps).toContainEqual(
+      expect.objectContaining({
+        kind: "artifact_metadata_missing",
+        subject: "tool:workflow_write_artifacts",
+        severity: "warning",
+        resolution: "wire_relation",
+      }),
+    );
   });
 
   it("exposes the relation audit through the public tool handler", () => {

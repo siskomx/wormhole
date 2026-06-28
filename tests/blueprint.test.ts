@@ -274,4 +274,55 @@ describe("blueprint compiler", () => {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
+
+  it("blocks completion claims when source conflicts point at stale generated artifacts", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      const result = compileFixture(repoRoot);
+      const gate = checkBlueprintGate({
+        constraints: result.constraints,
+        sourceConflicts: [
+          {
+            subject: ".wormhole/feature-index.json#indexFingerprint",
+            authoritative: [
+              {
+                authority: "derived_code_fact",
+                freshness: "current",
+                authorityScore: 0.88,
+                sourcePath: "repo-index",
+                reason: "Current repo index fingerprint.",
+              },
+            ],
+            conflicting: [
+              {
+                authority: "generated_note",
+                freshness: "stale",
+                authorityScore: 0.2,
+                sourcePath: ".wormhole/feature-index.json",
+                reason: "Feature index artifact was generated from an old repo index.",
+              },
+            ],
+            severity: "warning",
+            resolution: "needs_validation",
+            message: ".wormhole/feature-index.json was generated from a stale repo index fingerprint.",
+          },
+        ],
+        action: {
+          completionClaim: true,
+          plannedCommands: [{ command: "npm", args: ["test"] }],
+          reportedVerification: [{ command: "npm", args: ["test"], status: "passed" }],
+        },
+      });
+
+      expect(gate.status).toBe("block");
+      expect(gate.findings).toContainEqual(
+        expect.objectContaining({
+          ruleId: "source-conflict:stale-generated-artifact",
+          severity: "block",
+        }),
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
 });
