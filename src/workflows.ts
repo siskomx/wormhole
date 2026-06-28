@@ -1,4 +1,17 @@
+import { createHash } from "node:crypto";
 import type { AgentToolCall, AgentRoute, StateMaintenanceAdvice } from "./agent-routing.js";
+import {
+  createFeatureIndex,
+  type FeatureSideEffect,
+  type RepoFeature,
+  type RepoFeatureIndex,
+} from "./feature-index.js";
+import {
+  classifySourceProvenance,
+  compareSourceProvenance,
+  type SourceConflict,
+  type SourceProvenance,
+} from "./source-authority.js";
 
 export type WorkflowKind =
   | "workflow_start_feature"
@@ -26,11 +39,88 @@ export type WorkflowPhase = {
   };
 };
 
+export type WorkflowRunState = {
+  schemaVersion: "workflow-run.v0";
+  runId: string;
+  workflow: WorkflowKind;
+  repoRoot: string;
+  objective: string;
+  missionId?: string;
+  createdAt: string;
+  updatedAt: string;
+  status: "planned" | "blocked";
+  currentPhase: WorkflowPhaseName;
+  completedPhases: WorkflowPhaseName[];
+  featureIds: string[];
+};
+
+export type WorkflowFeatureBinding = {
+  featureId: string;
+  name: string;
+  featureIndexPath: string;
+  fileCount: number;
+  roots: string[];
+  keyFiles: string[];
+  routes: string[];
+  hooks: string[];
+  dbTables: string[];
+  tests: string[];
+  docs: string[];
+  sourceOfTruth: SourceProvenance[];
+  supportingDocs: SourceProvenance[];
+  conflicts: SourceConflict[];
+  sideEffects: FeatureSideEffect[];
+  evidence: string[];
+};
+
+export type WorkflowExactNextAction = AgentToolCall & {
+  phase: WorkflowPhaseName;
+};
+
+export type WorkflowVerificationContract = {
+  tier: "focused" | "standard" | "review" | "onboarding";
+  commandsSource: "test_plan_select";
+  requiredTools: string[];
+  changedFiles: string[];
+  featureIds: string[];
+  evidenceRequired: string[];
+};
+
+export type WorkflowArtifactRequirement = {
+  path: string;
+  kind: "workflow_state" | "workflow_resume" | "workflow_latest";
+  status: "required";
+  description: string;
+};
+
+export type WorkflowResume = {
+  artifactPath: string;
+  summary: string;
+  exactNextAction: string;
+  featureIds: string[];
+  sourceOfTruth: SourceProvenance[];
+  supportingDocs: SourceProvenance[];
+  conflicts: SourceConflict[];
+};
+
+export type WorkflowFeatureIndexSummary = {
+  path: ".wormhole/feature-index.json";
+  fingerprint: string;
+  featureCount: number;
+};
+
 export type WorkflowSequence = {
   workflow: WorkflowKind;
   repoRoot: string;
   objective: string;
   mode: AgentRoute;
+  run: WorkflowRunState;
+  featureIndex: WorkflowFeatureIndexSummary;
+  featureBindings: WorkflowFeatureBinding[];
+  exactNextAction: WorkflowExactNextAction;
+  verificationContract: WorkflowVerificationContract;
+  requiredArtifacts: WorkflowArtifactRequirement[];
+  resume: WorkflowResume;
   nextCalls: AgentToolCall[];
   phases: WorkflowPhase[];
   stateMaintenance: StateMaintenanceAdvice;
@@ -315,11 +405,69 @@ function workflow(input: {
   phases: WorkflowPhase[];
   stopRule: string;
 }): WorkflowSequence {
+  const now = new Date().toISOString();
+  const featureIndex = createFeatureIndex({
+    repoRoot: input.input.repoRoot,
+    generatedAt: now,
+  });
+  const featureBindings = bindWorkflowFeatures({
+    featureIndex,
+    objective: input.input.objective,
+    query: input.input.query,
+    changedFiles: input.input.changedFiles ?? [],
+    workflow: input.kind,
+  });
+  const exactNextAction = createExactNextAction(input.phases, input.nextCalls);
+  const runId = createWorkflowRunId({
+    workflow: input.kind,
+    repoRoot: input.input.repoRoot,
+    objective: input.input.objective,
+    missionId: input.input.missionId,
+    featureIds: featureBindings.map((feature) => feature.featureId),
+  });
+  const requiredArtifacts = createRequiredArtifacts(runId);
+  const verificationContract = createVerificationContract({
+    workflow: input.kind,
+    phases: input.phases,
+    changedFiles: input.input.changedFiles ?? [],
+    featureBindings,
+  });
+  const run: WorkflowRunState = {
+    schemaVersion: "workflow-run.v0",
+    runId,
+    workflow: input.kind,
+    repoRoot: input.input.repoRoot,
+    objective: input.input.objective,
+    ...(input.input.missionId ? { missionId: input.input.missionId } : {}),
+    createdAt: now,
+    updatedAt: now,
+    status: "planned",
+    currentPhase: exactNextAction.phase,
+    completedPhases: [],
+    featureIds: featureBindings.map((feature) => feature.featureId),
+  };
   return {
     workflow: input.kind,
     repoRoot: input.input.repoRoot,
     objective: input.input.objective,
     mode: input.mode,
+    run,
+    featureIndex: {
+      path: ".wormhole/feature-index.json",
+      fingerprint: featureIndex.fingerprint,
+      featureCount: featureIndex.featureCount,
+    },
+    featureBindings,
+    exactNextAction,
+    verificationContract,
+    requiredArtifacts,
+    resume: createWorkflowResume({
+      runId,
+      workflow: input.kind,
+      objective: input.input.objective,
+      exactNextAction,
+      featureBindings,
+    }),
     nextCalls: input.nextCalls,
     phases: input.phases,
     stateMaintenance: stateMaintenanceAdvice(),
@@ -383,6 +531,236 @@ function routeInput(input: WorkflowInput): AgentToolCall["input"] {
     changedFiles: input.changedFiles ?? [],
     ...(input.diffText ? { diffText: input.diffText } : {}),
   };
+}
+
+function bindWorkflowFeatures(input: {
+  featureIndex: RepoFeatureIndex;
+  objective: string;
+  query?: string;
+  changedFiles: string[];
+  workflow: WorkflowKind;
+}): WorkflowFeatureBinding[] {
+  const changedFiles = new Set(input.changedFiles.map(toRepoPath));
+  const objectiveText = normalizeLookup(`${input.objective} ${input.query ?? ""}`);
+  const scoredFeatures = input.featureIndex.features
+    .map((feature) => ({
+      feature,
+      score: scoreFeatureBinding({
+        feature,
+        changedFiles,
+        objectiveText,
+      }),
+    }))
+    .filter((entry) => entry.score > 0 || input.workflow === "workflow_onboard_repo")
+    .sort((left, right) => {
+      const scoreDelta = right.score - left.score;
+      return scoreDelta === 0 ? left.feature.featureId.localeCompare(right.feature.featureId) : scoreDelta;
+    })
+    .slice(0, input.workflow === "workflow_onboard_repo" ? 5 : 3);
+
+  return scoredFeatures.map(({ feature }) => toFeatureBinding(feature));
+}
+
+function scoreFeatureBinding(input: {
+  feature: RepoFeature;
+  changedFiles: Set<string>;
+  objectiveText: string;
+}): number {
+  let score = 0;
+  const featureText = normalizeLookup(input.feature.featureId);
+  const featureWords = normalizeLookup(input.feature.featureId.replace(/-/g, " "));
+  if (input.objectiveText.includes(featureText) || input.objectiveText.includes(featureWords)) {
+    score += 50 + input.feature.featureId.split("-").length * 20;
+  }
+  for (const file of input.feature.files) {
+    if (input.changedFiles.has(toRepoPath(file.path))) {
+      score += 100;
+    }
+  }
+  for (const root of input.feature.roots) {
+    const normalizedRoot = `${toRepoPath(root)}/`;
+    if (!normalizeLookup(root).includes(featureText)) {
+      continue;
+    }
+    if ([...input.changedFiles].some((file) => file.startsWith(normalizedRoot))) {
+      score += 25;
+    }
+  }
+  return score;
+}
+
+function toFeatureBinding(feature: RepoFeature): WorkflowFeatureBinding {
+  return {
+    featureId: feature.featureId,
+    name: feature.name,
+    featureIndexPath: ".wormhole/feature-index.json",
+    fileCount: feature.fileCount,
+    roots: feature.roots,
+    keyFiles: feature.files.slice(0, 20).map((file) => file.path),
+    routes: feature.routes,
+    hooks: feature.hooks,
+    dbTables: feature.dbTables,
+    tests: feature.tests,
+    docs: feature.docs,
+    sourceOfTruth: feature.sourceOfTruth,
+    supportingDocs: feature.supportingDocs,
+    conflicts: feature.conflicts,
+    sideEffects: feature.risk.sideEffects,
+    evidence: feature.evidence,
+  };
+}
+
+function createExactNextAction(
+  phases: WorkflowPhase[],
+  nextCalls: AgentToolCall[],
+): WorkflowExactNextAction {
+  const firstPhase = phases[0];
+  const firstCall = firstPhase?.calls[0] ?? nextCalls[0];
+  if (!firstPhase || !firstCall) {
+    throw new Error("Workflow requires at least one phase and one tool call");
+  }
+  return {
+    phase: firstPhase.name,
+    ...firstCall,
+  };
+}
+
+function createVerificationContract(input: {
+  workflow: WorkflowKind;
+  phases: WorkflowPhase[];
+  changedFiles: string[];
+  featureBindings: WorkflowFeatureBinding[];
+}): WorkflowVerificationContract {
+  const verifyPhase = input.phases.find((phaseItem) => phaseItem.name === "verify");
+  const requiredTools = [
+    ...new Set((verifyPhase?.calls ?? []).map((call) => call.toolName).filter((toolName) => toolName !== "secret_scan")),
+  ];
+  return {
+    tier: verificationTier(input.workflow, input.changedFiles),
+    commandsSource: "test_plan_select",
+    requiredTools,
+    changedFiles: input.changedFiles.map(toRepoPath),
+    featureIds: input.featureBindings.map((feature) => feature.featureId),
+    evidenceRequired: [
+      "test_plan_select selected commands",
+      "verification_run result",
+      "record_evidence ids",
+      "gate_request status",
+    ],
+  };
+}
+
+function verificationTier(
+  workflow: WorkflowKind,
+  changedFiles: string[],
+): WorkflowVerificationContract["tier"] {
+  if (workflow === "workflow_review_pr") {
+    return "review";
+  }
+  if (workflow === "workflow_onboard_repo") {
+    return "onboarding";
+  }
+  return changedFiles.length > 0 ? "focused" : "standard";
+}
+
+function createWorkflowRunId(input: {
+  workflow: WorkflowKind;
+  repoRoot: string;
+  objective: string;
+  missionId?: string;
+  featureIds: string[];
+}): string {
+  const hash = createHash("sha256")
+    .update([
+      input.workflow,
+      input.repoRoot,
+      input.objective,
+      input.missionId ?? "",
+      input.featureIds.join(","),
+    ].join("\n"))
+    .digest("hex")
+    .slice(0, 12);
+  return `${input.workflow.replace(/^workflow_/, "")}-${hash}`;
+}
+
+function createRequiredArtifacts(runId: string): WorkflowArtifactRequirement[] {
+  return [
+    {
+      path: `.wormhole/workflows/${runId}.json`,
+      kind: "workflow_state",
+      status: "required",
+      description: "Durable workflow run state for handoff and resume.",
+    },
+    {
+      path: `.wormhole/workflows/${runId}.md`,
+      kind: "workflow_resume",
+      status: "required",
+      description: "Human-readable workflow resume with exact next action.",
+    },
+    {
+      path: ".wormhole/workflows/latest.json",
+      kind: "workflow_latest",
+      status: "required",
+      description: "Pointer to the latest workflow run artifact.",
+    },
+  ];
+}
+
+function createWorkflowResume(input: {
+  runId: string;
+  workflow: WorkflowKind;
+  objective: string;
+  exactNextAction: WorkflowExactNextAction;
+  featureBindings: WorkflowFeatureBinding[];
+}): WorkflowResume {
+  const featureIds = input.featureBindings.map((feature) => feature.featureId);
+  const sourceOfTruth = [
+    classifySourceProvenance({
+      sourcePath: `.wormhole/workflows/${input.runId}.json`,
+      authority: "derived_code_fact",
+      freshness: "current",
+      reason: "Durable workflow state generated from current repo workflow planning.",
+    }),
+    classifySourceProvenance({
+      sourcePath: ".wormhole/feature-index.json",
+      authority: "derived_code_fact",
+      freshness: "current",
+      reason: "Feature index generated from current repo files.",
+    }),
+    classifySourceProvenance({
+      sourcePath: "workflow.verificationContract",
+      authority: "derived_code_fact",
+      freshness: "current",
+      reason: "Verification contract generated by the workflow planner.",
+    }),
+    ...input.featureBindings.flatMap((feature) => feature.sourceOfTruth),
+  ].sort(compareSourceProvenance);
+  const supportingDocs = input.featureBindings
+    .flatMap((feature) => feature.supportingDocs)
+    .sort(compareSourceProvenance);
+  const conflicts = input.featureBindings.flatMap((feature) => feature.conflicts);
+  return {
+    artifactPath: `.wormhole/workflows/${input.runId}.md`,
+    summary: `${input.workflow} planned for: ${input.objective}`,
+    exactNextAction: `${input.exactNextAction.toolName} (${input.exactNextAction.phase}): ${input.exactNextAction.reason}`,
+    featureIds,
+    sourceOfTruth,
+    supportingDocs,
+    conflicts,
+  };
+}
+
+function normalizeLookup(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+}
+
+function toRepoPath(value: string): string {
+  return value.replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
 function stateMaintenanceAdvice(): StateMaintenanceAdvice {

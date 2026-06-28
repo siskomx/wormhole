@@ -9,6 +9,7 @@ import type {
 } from "./project-intelligence.js";
 import type { ProjectOnboardReport } from "./project-onboard.js";
 import { createVerificationPlan, type VerificationCommand } from "./verification-runner.js";
+import { createFeatureIndex, type RepoFeatureIndex } from "./feature-index.js";
 
 export type BlueprintStatus =
   | "confirmed_from_repo"
@@ -128,6 +129,7 @@ export type RepoBlueprint = {
   };
   modules: BlueprintModule[];
   entrypoints: BlueprintEntrypoint[];
+  featureIndex: RepoFeatureIndex;
   approvalNeeded: BlueprintApprovalItem[];
 };
 
@@ -222,6 +224,7 @@ export function compileRepoBlueprint(input: BlueprintCompileInput): BlueprintCom
   const runtime = detectRuntime(dependencyNames, language.value);
   const framework = detectFramework(dependencyNames);
   const database = detectDatabase(dependencyNames, input.onboard.repoRoot);
+  const featureIndex = createFeatureIndex({ repoRoot: input.onboard.repoRoot, generatedAt });
   const requiredVerification = selectRequiredVerification(input.onboard.verificationPlan.commands);
   const verificationEvidence = requiredVerification.length > 0
     ? contractEvidence(
@@ -238,6 +241,7 @@ export function compileRepoBlueprint(input: BlueprintCompileInput): BlueprintCom
   const fingerprint = fingerprintBlueprint([
     input.architecture.fingerprint,
     input.entrypoints.fingerprint,
+    featureIndex.fingerprint,
     input.onboard.contract.packageManager,
     ...requiredVerification.map((command) => `${command.command} ${command.args.join(" ")}`),
   ]);
@@ -282,6 +286,7 @@ export function compileRepoBlueprint(input: BlueprintCompileInput): BlueprintCom
       moduleRoot: entrypoint.moduleRoot,
       evidence: entrypoint.evidence.map(toBlueprintEvidence),
     })),
+    featureIndex,
     approvalNeeded,
   };
   const constraints: ConstraintManifest = {
@@ -338,6 +343,7 @@ export function compileBootstrapBlueprint(input: {
   const runtime = detectRuntime(dependencyNames, language.value);
   const framework = detectFramework(dependencyNames);
   const database = detectDatabase(dependencyNames, contract.repoRoot);
+  const featureIndex = createFeatureIndex({ repoRoot: contract.repoRoot, generatedAt });
   const verificationPlan = createVerificationPlan({ contract });
   const requiredVerification = selectRequiredVerification(verificationPlan.commands);
   const verification = field(
@@ -357,6 +363,7 @@ export function compileBootstrapBlueprint(input: {
     runtime.value,
     framework.value,
     database.value,
+    featureIndex.fingerprint,
     ...contract.lockfiles,
     ...requiredVerification.map((command) => `${command.command} ${command.args.join(" ")}`),
   ]);
@@ -379,6 +386,7 @@ export function compileBootstrapBlueprint(input: {
     },
     modules: [],
     entrypoints: [],
+    featureIndex,
     approvalNeeded,
   };
   const constraints: ConstraintManifest = {
@@ -462,6 +470,17 @@ export function renderAgentContext(
         .slice(0, 12)
         .map((entrypoint) => `- ${entrypoint.kind} ${entrypoint.name} (${entrypoint.path})`)
     : ["- No entrypoints detected."];
+  const featureLines = blueprint.featureIndex.features.length > 0
+    ? blueprint.featureIndex.features
+        .slice(0, 12)
+        .map((feature) => {
+          const keyFiles = feature.files
+            .slice(0, 6)
+            .map((file) => file.path)
+            .join(", ");
+          return `- ${feature.featureId}: files=${feature.fileCount}, roots=${feature.roots.join(", ") || "none"}, key=${keyFiles}`;
+        })
+    : ["- No feature roots detected."];
   const progressive = input.progressive;
   const statusLines = progressive
     ? [
@@ -494,6 +513,10 @@ export function renderAgentContext(
     "",
     "## Entrypoints",
     ...entrypointLines,
+    "",
+    "## Feature Index",
+    "Path: .wormhole/feature-index.json",
+    ...featureLines,
     "",
   ].join("\n");
 }

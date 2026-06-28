@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import type { BlueprintCommand, BlueprintCompileResult } from "./blueprint.js";
+import type { RepoFeature, RepoFeatureIndex } from "./feature-index.js";
 
 export const APP_PROCESS_LANES = [
   "discovery",
@@ -130,6 +131,22 @@ export type AppProcessProgressiveState = {
   lanes: AppProcessLaneSummary[];
 };
 
+export type AppProcessFeatureSummary = {
+  featureId: string;
+  name: string;
+  fileCount: number;
+  roots: string[];
+  keyFiles: string[];
+  sideEffects: string[];
+};
+
+export type AppProcessRepoIntelligence = {
+  featureIndexPath: string;
+  featureIndexFingerprint: string;
+  featureCount: number;
+  features: AppProcessFeatureSummary[];
+};
+
 export type AppProcess = {
   schemaVersion: "app-process.v0";
   kind: "full_app_process";
@@ -149,6 +166,7 @@ export type AppProcess = {
   ux: AppProcessSection<AppProcessUx>;
   security: AppProcessSection<AppProcessSecurity>;
   verification: AppProcessSection<AppProcessVerification>;
+  repoIntelligence: AppProcessRepoIntelligence;
   progressive: AppProcessProgressiveState;
 };
 
@@ -160,6 +178,7 @@ export type AppProcessCompileInput = {
 
 export type AppProcessCompileResult = {
   appProcess: AppProcess;
+  featureIndex: RepoFeatureIndex;
   productMarkdown: string;
   appContextMarkdown: string;
 };
@@ -246,6 +265,7 @@ export function compileAppProcess(input: AppProcessCompileInput): AppProcessComp
   const verification = createVerification(input.blueprint);
   const security = createSecurity(product);
   const ux = createUx(product);
+  const repoIntelligence = createRepoIntelligence(input.blueprint.blueprint.featureIndex);
   const roadmap = createRoadmap({ product, architecture, verification });
   const backlog = {
     stories: roadmap.phases.flatMap((phase) => phase.stories),
@@ -262,6 +282,7 @@ export function compileAppProcess(input: AppProcessCompileInput): AppProcessComp
   const fingerprint = fingerprintAppProcess([
     objective,
     input.blueprint.blueprint.fingerprint,
+    input.blueprint.blueprint.featureIndex.fingerprint,
     product.keyEntities.join(","),
     backlog.stories.map((story) => story.storyId).join(","),
   ]);
@@ -290,10 +311,12 @@ export function compileAppProcess(input: AppProcessCompileInput): AppProcessComp
       blueprintEvidence,
     ]),
     verification: section(verification, "confirmed_from_repo", 0.85, [blueprintEvidence]),
+    repoIntelligence,
     progressive,
   };
   const result = {
     appProcess,
+    featureIndex: input.blueprint.blueprint.featureIndex,
     productMarkdown: "",
     appContextMarkdown: "",
   };
@@ -317,6 +340,11 @@ export function renderAppProcessContext(input: Pick<AppProcessCompileResult, "ap
   const storyLines = appProcess.backlog.value.stories
     .slice(0, 12)
     .map((story) => `- ${story.storyId} [${story.ownerLane}] ${story.title}`);
+  const featureLines = appProcess.repoIntelligence.features.length > 0
+    ? appProcess.repoIntelligence.features
+        .slice(0, 12)
+        .map((feature) => `- ${feature.featureId}: files=${feature.fileCount}, key=${feature.keyFiles.slice(0, 4).join(", ")}`)
+    : ["- No feature roots detected."];
 
   return [
     "# Wormhole App Process Context",
@@ -334,6 +362,10 @@ export function renderAppProcessContext(input: Pick<AppProcessCompileResult, "ap
     "",
     "## Architecture",
     `Stack: ${architecture.stack.language}, ${architecture.stack.runtime}, ${architecture.stack.framework}, ${architecture.stack.database}`,
+    "",
+    "## Repo Intelligence",
+    `Feature index: ${appProcess.repoIntelligence.featureIndexPath}`,
+    ...featureLines,
     "",
     "## Backlog",
     ...storyLines,
@@ -505,6 +537,35 @@ function createVerification(blueprint: BlueprintCompileResult): AppProcessVerifi
       "Every implementation story must link to a verification command or test lane.",
       "Completion claims must pass the blueprint verification gate.",
     ],
+  };
+}
+
+function createRepoIntelligence(featureIndex: RepoFeatureIndex): AppProcessRepoIntelligence {
+  return {
+    featureIndexPath: ".wormhole/feature-index.json",
+    featureIndexFingerprint: featureIndex.fingerprint,
+    featureCount: featureIndex.featureCount,
+    features: featureIndex.features.slice(0, 24).map(toAppProcessFeatureSummary),
+  };
+}
+
+function toAppProcessFeatureSummary(feature: RepoFeature): AppProcessFeatureSummary {
+  const keyFiles = [
+    ...feature.routes,
+    ...feature.hooks,
+    ...feature.tests.slice(0, 2),
+    ...feature.docs.slice(0, 2),
+    ...feature.files
+      .filter((file) => file.roles.includes("backend") || file.roles.includes("frontend") || file.roles.includes("db"))
+      .map((file) => file.path),
+  ];
+  return {
+    featureId: feature.featureId,
+    name: feature.name,
+    fileCount: feature.fileCount,
+    roots: feature.roots.slice(0, 8),
+    keyFiles: [...new Set(keyFiles)].slice(0, 12),
+    sideEffects: feature.risk.sideEffects,
   };
 }
 

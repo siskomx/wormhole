@@ -89,6 +89,7 @@ describe("Wormhole MCP server", () => {
         "workflow_fix_bug",
         "workflow_review_pr",
         "workflow_onboard_repo",
+        "workflow_write_artifacts",
         "patch_checkpoint",
         "patch_apply",
         "patch_status",

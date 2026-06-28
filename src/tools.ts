@@ -174,8 +174,10 @@ import {
   createFeatureWorkflow,
   createOnboardingWorkflow,
   createReviewWorkflow,
+  type WorkflowKind,
   type WorkflowInput,
 } from "./workflows.js";
+import { writeWorkflowArtifacts } from "./workflow-files.js";
 import {
   createPatchTransactionStore,
   type PatchTransactionSnapshot,
@@ -569,6 +571,19 @@ export function createToolHandlers(
       objective: input.objective,
       blueprint: compileBootstrapBlueprint({ repoRoot, objective: input.objective }),
     });
+  }
+
+  function createWorkflowByKind(workflow: WorkflowKind, input: WorkflowInput) {
+    switch (workflow) {
+      case "workflow_start_feature":
+        return createFeatureWorkflow(input);
+      case "workflow_fix_bug":
+        return createBugfixWorkflow(input);
+      case "workflow_review_pr":
+        return createReviewWorkflow(input);
+      case "workflow_onboard_repo":
+        return createOnboardingWorkflow(input);
+    }
   }
 
   function refreshRepoGraphForChangedFiles(input: {
@@ -1877,6 +1892,20 @@ export function createToolHandlers(
     workflowOnboardRepo(input: WorkflowInput) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return createOnboardingWorkflow({ ...input, repoRoot });
+    },
+
+    workflowWriteArtifacts(input: WorkflowInput & { workflow: WorkflowKind }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      assertPrivilegedAction({
+        toolName: "workflow_write_artifacts",
+        kind: "file_write",
+        operations: [{ kind: "file_write", path: path.join(repoRoot, ".wormhole/workflows") }],
+        target: { repoRoot, path: path.join(repoRoot, ".wormhole/workflows") },
+      });
+      return writeWorkflowArtifacts({
+        repoRoot,
+        workflow: createWorkflowByKind(input.workflow, { ...input, repoRoot }),
+      });
     },
 
     nextBestTool(input: Parameters<typeof recommendNextBestTool>[0]) {

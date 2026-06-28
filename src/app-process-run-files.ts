@@ -157,6 +157,7 @@ function collectArtifactFreshness(repoRoot: string, appProcess: AppProcess): App
     ".wormhole/app-context.md",
     ".wormhole/app-process.md",
     ".wormhole/app-process.json",
+    ".wormhole/feature-index.json",
     ".wormhole/backlog.json",
     ".wormhole/product-definition.md",
     ".wormhole/roadmap.json",

@@ -65,6 +65,8 @@ describe("blueprint artifact writer", () => {
         ".wormhole/agent-context.md",
         ".wormhole/blueprint.json",
         ".wormhole/constraints.json",
+        ".wormhole/feature-index.json",
+        ".wormhole/feature-index.md",
       ]);
       expect(existsSync(blueprintPath)).toBe(true);
       expect(existsSync(constraintsPath)).toBe(true);
@@ -89,13 +91,15 @@ describe("blueprint artifact writer", () => {
     const repoRoot = createFixtureRepo();
     try {
       mkdirSync(path.join(repoRoot, "backend", "src"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "backend", "src", "modules", "chat"), { recursive: true });
       mkdirSync(path.join(repoRoot, "backend", "src", ".claude", "refs"), { recursive: true });
-      mkdirSync(path.join(repoRoot, "src", "features"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "src", "features", "chat", "hooks"), { recursive: true });
       mkdirSync(path.join(repoRoot, ".claude", "skills"), { recursive: true });
       mkdirSync(path.join(repoRoot, "src", "generated"), { recursive: true });
       writeFileSync(path.join(repoRoot, "backend", "src", "server.ts"), "export function registerRoutes() {}\n");
+      writeFileSync(path.join(repoRoot, "backend", "src", "modules", "chat", "ChatRoutes.ts"), "export function registerChatRoutes() {}\n");
       writeFileSync(path.join(repoRoot, "backend", "src", ".claude", "refs", "testing.md"), "# Testing refs\n");
-      writeFileSync(path.join(repoRoot, "src", "features", "App.tsx"), "export function App() { return null; }\n");
+      writeFileSync(path.join(repoRoot, "src", "features", "chat", "hooks", "useChat.ts"), "export function useChat() { return {}; }\n");
       writeFileSync(path.join(repoRoot, ".claude", "skills", "SKILL.md"), "# Agent skill\n");
       writeFileSync(path.join(repoRoot, "src", "generated", "openapi.ts"), "export const generated = true;\n");
 
@@ -105,6 +109,7 @@ describe("blueprint artifact writer", () => {
       });
       const artifacts = writeProgressiveBlueprintArtifacts({ repoRoot, result });
       const blueprintPath = path.join(repoRoot, ".wormhole", "blueprint.json");
+      const featureIndexPath = path.join(repoRoot, ".wormhole", "feature-index.json");
       const frontendLanePath = path.join(repoRoot, ".wormhole", "lanes", "frontend.json");
       const agentMetaLanePath = path.join(repoRoot, ".wormhole", "lanes", "agent-meta.json");
       const generatedLanePath = path.join(repoRoot, ".wormhole", "lanes", "generated.json");
@@ -113,7 +118,11 @@ describe("blueprint artifact writer", () => {
         schemaVersion: string;
         status: string;
         lanes: Array<{ lane: string; status: string; fileCount: number; artifactPath: string }>;
+        featureIndexPath?: string;
         modules?: unknown[];
+      };
+      const featureIndex = JSON.parse(readFileSync(featureIndexPath, "utf8")) as {
+        features: Array<{ featureId: string; files: Array<{ path: string }> }>;
       };
       const frontendLane = JSON.parse(readFileSync(frontendLanePath, "utf8")) as {
         lane: string;
@@ -129,6 +138,7 @@ describe("blueprint artifact writer", () => {
         expect.arrayContaining([
           ".wormhole/blueprint.json",
           ".wormhole/constraints.json",
+          ".wormhole/feature-index.json",
           ".wormhole/agent-context.md",
           ".wormhole/lanes/backend.json",
           ".wormhole/lanes/frontend.json",
@@ -138,14 +148,19 @@ describe("blueprint artifact writer", () => {
       );
       expect(blueprint.schemaVersion).toBe("blueprint-progress.v0");
       expect(blueprint.status).toBe("partial");
+      expect(blueprint.featureIndexPath).toBe(".wormhole/feature-index.json");
       expect(blueprint.modules).toBeUndefined();
       expect(readFileSync(blueprintPath, "utf8").length).toBeLessThan(20_000);
       expect(blueprint.lanes.find((lane) => lane.lane === "frontend")?.status).toBe("pending");
-      expect(frontendLane.sampleFiles).toContain("src/features/App.tsx");
+      expect(featureIndex.features.find((feature) => feature.featureId === "chat")?.files.map((file) => file.path)).toEqual(
+        expect.arrayContaining(["src/features/chat/hooks/useChat.ts", "backend/src/modules/chat/ChatRoutes.ts"]),
+      );
+      expect(frontendLane.sampleFiles).toContain("src/features/chat/hooks/useChat.ts");
       expect(agentMetaLane.sampleFiles).toContain("backend/src/.claude/refs/testing.md");
       expect(existsSync(agentMetaLanePath)).toBe(true);
       expect(existsSync(generatedLanePath)).toBe(true);
       expect(markdown).toContain("Blueprint status: partial");
+      expect(markdown).toContain("chat");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

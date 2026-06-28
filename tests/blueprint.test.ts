@@ -95,6 +95,124 @@ describe("blueprint compiler", () => {
     }
   });
 
+  it("discovers feature file maps from frontend, backend, docs, migrations, and tests", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      mkdirSync(path.join(repoRoot, "src", "features", "chat", "hooks"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "backend", "src", "modules", "chat", "__tests__"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "docs", "discoveries", "features"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "migrations"), { recursive: true });
+      writeFileSync(
+        path.join(repoRoot, "src", "features", "chat", "hooks", "useChat.ts"),
+        "export function useChat() { return { sendMessage() {} }; }\n",
+      );
+      writeFileSync(
+        path.join(repoRoot, "backend", "src", "modules", "chat", "ChatRoutes.ts"),
+        "export function registerChatRoutes(app) { app.post('/sessions/:id/messages', () => {}); }\n",
+      );
+      writeFileSync(
+        path.join(repoRoot, "backend", "src", "modules", "chat", "ChatService.ts"),
+        "export class ChatService { sendMessage() { return 'ok'; } }\n",
+      );
+      writeFileSync(
+        path.join(repoRoot, "backend", "src", "modules", "chat", "__tests__", "chatResponseValidation.test.ts"),
+        "import '../ChatService.js';\n",
+      );
+      writeFileSync(path.join(repoRoot, "migrations", "all_030_create_chat_tables.sql"), "create table if not exists public.chat_sessions(id text);\n");
+      writeFileSync(
+        path.join(repoRoot, "docs", "discoveries", "features", "chat.md"),
+        "- chat uses src/features/chat and backend/src/modules/chat/ChatRoutes.ts\n",
+      );
+
+      const result = compileFixture(repoRoot);
+      const chat = result.blueprint.featureIndex.features.find((feature) => feature.featureId === "chat");
+
+      expect(chat?.files.map((file) => file.path)).toEqual(
+        expect.arrayContaining([
+          "src/features/chat/hooks/useChat.ts",
+          "backend/src/modules/chat/ChatRoutes.ts",
+          "backend/src/modules/chat/ChatService.ts",
+          "backend/src/modules/chat/__tests__/chatResponseValidation.test.ts",
+          "migrations/all_030_create_chat_tables.sql",
+          "docs/discoveries/features/chat.md",
+        ]),
+      );
+      expect(chat?.files.flatMap((file) => file.roles)).toEqual(
+        expect.arrayContaining(["frontend", "hook", "backend", "route", "test", "db", "doc"]),
+      );
+      expect(chat?.risk.sideEffects).toEqual(expect.arrayContaining(["http_mutation", "database_schema"]));
+      expect(chat?.dbTables).toContain("chat_sessions");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps generic buckets and agent scratch files out of feature maps", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      mkdirSync(path.join(repoRoot, "src", "features", "chat"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "src", "routes"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "src", "domain", "translations"), { recursive: true });
+      mkdirSync(path.join(repoRoot, ".superpowers", "brainstorm"), { recursive: true });
+      writeFileSync(path.join(repoRoot, "src", "features", "chat", "ChatView.tsx"), "export function ChatView() { return null; }\n");
+      writeFileSync(path.join(repoRoot, "src", "routes", "FeaturesPage.tsx"), "export function FeaturesPage() { return null; }\n");
+      writeFileSync(path.join(repoRoot, "src", "domain", "translations", "chatDictionary.ts"), "export const chat = {};\n");
+      writeFileSync(path.join(repoRoot, ".superpowers", "brainstorm", "ai-chat-notes.md"), "# scratch\n");
+
+      const result = compileFixture(repoRoot);
+      const featureIds = result.blueprint.featureIndex.features.map((feature) => feature.featureId);
+      const chat = result.blueprint.featureIndex.features.find((feature) => feature.featureId === "chat");
+
+      expect(featureIds).not.toContain("features");
+      expect(featureIds).not.toContain("domain");
+      expect(chat?.files.map((file) => file.path)).not.toContain(".superpowers/brainstorm/ai-chat-notes.md");
+      expect(chat?.files.map((file) => file.path)).toContain("src/features/chat/ChatView.tsx");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("creates compound feature maps for client-agent workflow files", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      mkdirSync(path.join(repoRoot, "backend", "tests", "workflows"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "backend", "src", "modules", "clients"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "backend", "src", "modules", "agents"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "docs", "workflows", "behavior"), { recursive: true });
+      writeFileSync(path.join(repoRoot, "backend", "src", "modules", "clients", "ClientRoutes.ts"), "export function registerClientRoutes() {}\n");
+      writeFileSync(path.join(repoRoot, "backend", "src", "modules", "agents", "AgentRoutes.ts"), "export function registerAgentRoutes() {}\n");
+      writeFileSync(
+        path.join(repoRoot, "backend", "tests", "workflows", "org-client-agent-bill-invoice-review.workflow.test.ts"),
+        "describe('client agent invoice review', () => {});\n",
+      );
+      writeFileSync(
+        path.join(repoRoot, "docs", "workflows", "behavior", "org-client-agent-bill-invoice-review.behavior.json"),
+        JSON.stringify({ id: "org-client-agent-bill-invoice-review" }),
+      );
+
+      const result = compileFixture(repoRoot);
+      const clientAgent = result.blueprint.featureIndex.features.find((feature) => feature.featureId === "client-agent");
+
+      expect(clientAgent?.files.map((file) => file.path)).toEqual(
+        expect.arrayContaining([
+          "backend/tests/workflows/org-client-agent-bill-invoice-review.workflow.test.ts",
+          "docs/workflows/behavior/org-client-agent-bill-invoice-review.behavior.json",
+        ]),
+      );
+      expect(clientAgent?.tests).toContain("backend/tests/workflows/org-client-agent-bill-invoice-review.workflow.test.ts");
+      expect(clientAgent?.docs).toContain("docs/workflows/behavior/org-client-agent-bill-invoice-review.behavior.json");
+      expect(clientAgent?.files.flatMap((file) => file.roles)).toEqual(expect.arrayContaining(["test", "doc"]));
+      expect(
+        result.blueprint.featureIndex.features.find((feature) => feature.featureId === "client")?.files.map((file) => file.path) ?? [],
+      ).not.toContain("backend/tests/workflows/org-client-agent-bill-invoice-review.workflow.test.ts");
+      expect(
+        result.blueprint.featureIndex.features.find((feature) => feature.featureId === "agent")?.files.map((file) => file.path) ?? [],
+      ).not.toContain("backend/tests/workflows/org-client-agent-bill-invoice-review.workflow.test.ts");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("renders concise Markdown context for coding agents", () => {
     const repoRoot = createFixtureRepo();
     try {

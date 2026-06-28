@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   createFeatureWorkflow,
@@ -7,6 +10,58 @@ import {
 } from "../src/workflows.js";
 
 describe("golden-path workflows", () => {
+  function createChatFixtureRepo(): string {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-workflow-"));
+    mkdirSync(path.join(repoRoot, "src", "features", "chat", "hooks"), { recursive: true });
+    mkdirSync(path.join(repoRoot, "src", "features", "agents", "hooks"), { recursive: true });
+    mkdirSync(path.join(repoRoot, "backend", "src", "modules", "chat"), { recursive: true });
+    mkdirSync(path.join(repoRoot, "backend", "src", "modules", "agents"), { recursive: true });
+    mkdirSync(path.join(repoRoot, "migrations"), { recursive: true });
+    mkdirSync(path.join(repoRoot, "tests"), { recursive: true });
+    writeFileSync(
+      path.join(repoRoot, "src", "features", "chat", "hooks", "useChat.ts"),
+      "export function useChat() { return { send: () => fetch('/chat', { method: 'POST' }) }; }\n",
+    );
+    writeFileSync(
+      path.join(repoRoot, "backend", "src", "modules", "chat", "ChatRoutes.ts"),
+      "export const ChatRoutes = { postMessage() { return 'ok'; } };\n",
+    );
+    writeFileSync(
+      path.join(repoRoot, "backend", "src", "modules", "agents", "AgentRoutes.ts"),
+      "export const AgentRoutes = {};\n",
+    );
+    writeFileSync(
+      path.join(repoRoot, "src", "features", "agents", "hooks", "useAiApprovalQueue.ts"),
+      "export function useAiApprovalQueue() { return []; }\n",
+    );
+    writeFileSync(
+      path.join(repoRoot, "migrations", "001_create_chat_messages.sql"),
+      "create table chat_messages (id text primary key, body text not null);\n",
+    );
+    writeFileSync(path.join(repoRoot, "tests", "chat.test.ts"), "import '../src/features/chat/hooks/useChat';\n");
+    return repoRoot;
+  }
+
+  function createClientAgentFixtureRepo(): string {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-workflow-compound-"));
+    mkdirSync(path.join(repoRoot, "backend", "src", "modules", "agents"), { recursive: true });
+    mkdirSync(path.join(repoRoot, "backend", "src", "modules", "clients"), { recursive: true });
+    mkdirSync(path.join(repoRoot, "backend", "tests", "workflows"), { recursive: true });
+    writeFileSync(
+      path.join(repoRoot, "backend", "src", "modules", "agents", "AgentRoutes.ts"),
+      "export const AgentRoutes = {};\n",
+    );
+    writeFileSync(
+      path.join(repoRoot, "backend", "src", "modules", "clients", "ClientRoutes.ts"),
+      "export const ClientRoutes = {};\n",
+    );
+    writeFileSync(
+      path.join(repoRoot, "backend", "tests", "workflows", "org-client-agent-invoice-review.workflow.test.ts"),
+      "test('client agent workflow', () => expect(true).toBe(true));\n",
+    );
+    return repoRoot;
+  }
+
   it("creates a start-feature workflow with exact next calls and evidence gates", () => {
     const workflow = createFeatureWorkflow({
       repoRoot: "/repo",
@@ -45,6 +100,89 @@ describe("golden-path workflows", () => {
     expect(workflow.phases.find((phase) => phase.name === "gate")?.calls.map((call) => call.toolName)).not.toContain(
       "emit_plan",
     );
+  });
+
+  it("binds feature workflows to repo features and exposes a resumable next action", () => {
+    const repoRoot = createChatFixtureRepo();
+    try {
+      const workflow = createFeatureWorkflow({
+        repoRoot,
+        objective: "Fix chat message sending",
+        missionId: "mission-chat",
+        changedFiles: ["src/features/chat/hooks/useChat.ts"],
+      });
+
+      expect(workflow.run).toMatchObject({
+        schemaVersion: "workflow-run.v0",
+        workflow: "workflow_start_feature",
+        missionId: "mission-chat",
+        currentPhase: "orient",
+        status: "planned",
+      });
+      expect(workflow.exactNextAction).toMatchObject({
+        phase: "orient",
+        toolName: "project_onboard",
+      });
+      expect(workflow.featureBindings.map((feature) => feature.featureId)).toEqual(["chat"]);
+      expect(workflow.featureBindings[0]).toMatchObject({
+        featureId: "chat",
+        fileCount: expect.any(Number),
+        featureIndexPath: ".wormhole/feature-index.json",
+      });
+      expect(workflow.featureBindings[0]?.routes).toContain("backend/src/modules/chat/ChatRoutes.ts");
+      expect(workflow.featureBindings[0]?.hooks).toContain("src/features/chat/hooks/useChat.ts");
+      expect(workflow.featureBindings[0]?.dbTables).toContain("chat_messages");
+      expect(workflow.featureBindings[0]?.tests).toContain("tests/chat.test.ts");
+      expect(workflow.featureBindings[0]?.sourceOfTruth.map((source) => source.sourcePath)).toEqual(
+        expect.arrayContaining([
+          "backend/src/modules/chat/ChatRoutes.ts",
+          "migrations/001_create_chat_messages.sql",
+          "src/features/chat/hooks/useChat.ts",
+          "tests/chat.test.ts",
+        ]),
+      );
+      expect(workflow.featureBindings[0]?.supportingDocs.map((source) => source.sourcePath)).toEqual([]);
+      expect(workflow.verificationContract).toMatchObject({
+        tier: "focused",
+        commandsSource: "test_plan_select",
+        changedFiles: ["src/features/chat/hooks/useChat.ts"],
+        featureIds: ["chat"],
+      });
+      expect(workflow.resume.exactNextAction).toContain("project_onboard");
+      expect(workflow.resume.sourceOfTruth.map((source) => source.sourcePath)).toEqual(
+        expect.arrayContaining([".wormhole/feature-index.json"]),
+      );
+      expect(workflow.requiredArtifacts.map((artifact) => artifact.path)).toEqual(
+        expect.arrayContaining([
+          `.wormhole/workflows/${workflow.run.runId}.json`,
+          `.wormhole/workflows/${workflow.run.runId}.md`,
+          ".wormhole/workflows/latest.json",
+        ]),
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("prefers compound workflow features over broad single-token feature matches", () => {
+    const repoRoot = createClientAgentFixtureRepo();
+    try {
+      const workflow = createFeatureWorkflow({
+        repoRoot,
+        objective: "Continue the client agent invoice review workflow",
+      });
+
+      expect(workflow.featureBindings.map((feature) => feature.featureId)).toEqual([
+        "client-agent",
+        "agent",
+        "client",
+      ]);
+      expect(workflow.featureBindings[0]?.sourceOfTruth.map((source) => source.sourcePath)).toContain(
+        "backend/tests/workflows/org-client-agent-invoice-review.workflow.test.ts",
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
   });
 
   it("prioritizes repro and focused verification for bug fixes", () => {

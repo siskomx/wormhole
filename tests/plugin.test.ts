@@ -110,6 +110,7 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("workflow_fix_bug");
     expect(manifest.tools.map((tool) => tool.name)).toContain("workflow_review_pr");
     expect(manifest.tools.map((tool) => tool.name)).toContain("workflow_onboard_repo");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("workflow_write_artifacts");
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_workspace_merge");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_plan_local");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_run_local");

@@ -50,3 +50,5 @@ export * from "./patch-transactions.js";
 export * from "./project-lanes.js";
 export * from "./privileged-action-gate.js";
 export * from "./workflows.js";
+export * from "./workflow-files.js";
+export * from "./source-authority.js";

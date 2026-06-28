@@ -7,6 +7,7 @@ import {
   type AppProcessCompileResult,
   type AppProcessStory,
 } from "./app-process.js";
+import { renderFeatureIndexMarkdown } from "./feature-index.js";
 
 export type AppProcessArtifactFile = {
   relativePath: string;
@@ -35,6 +36,8 @@ export function writeAppProcessArtifacts(input: WriteAppProcessArtifactsInput): 
     writeArtifact(repoRoot, ".wormhole/app-context.md", `${renderAppProcessContext(input.result).trimEnd()}\n`),
     writeArtifact(repoRoot, ".wormhole/app-process.md", `${renderAppProcessContext(input.result).trimEnd()}\n`),
     writeArtifact(repoRoot, ".wormhole/app-process.json", `${JSON.stringify(appProcess, null, 2)}\n`),
+    writeArtifact(repoRoot, ".wormhole/feature-index.json", `${JSON.stringify(input.result.featureIndex, null, 2)}\n`),
+    writeArtifact(repoRoot, ".wormhole/feature-index.md", `${renderFeatureIndexMarkdown(input.result.featureIndex).trimEnd()}\n`),
     ...appProcess.roadmap.value.phases.map((phase) =>
       writeArtifact(repoRoot, `.wormhole/app-process/phases/phase-${phase.phase}.json`, `${JSON.stringify(phase, null, 2)}\n`),
     ),
@@ -83,12 +86,28 @@ function renderBacklogLane(appProcess: AppProcess): string {
 }
 
 function renderDiscoveryLane(appProcess: AppProcess): string {
+  const featureLines = appProcess.repoIntelligence.features.length > 0
+    ? appProcess.repoIntelligence.features.flatMap((feature) => [
+        `## ${feature.name} (${feature.featureId})`,
+        "",
+        `Files: ${feature.fileCount}`,
+        `Roots: ${feature.roots.join(", ") || "none"}`,
+        `Side effects: ${feature.sideEffects.join(", ") || "none detected"}`,
+        "",
+        ...feature.keyFiles.map((file) => `- ${file}`),
+        "",
+      ])
+    : ["- No feature roots detected.", ""];
   return [
     "# Discovery Lane",
     "",
     "## Assumptions",
     ...appProcess.productDefinition.value.assumptions.map((item) => `- ${item}`),
     "",
+    "## Feature Index",
+    `Path: ${appProcess.repoIntelligence.featureIndexPath}`,
+    "",
+    ...featureLines,
   ].join("\n");
 }
 

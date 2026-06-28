@@ -170,6 +170,35 @@ describe("native project intelligence spine", () => {
     }
   });
 
+  it("prefers current code over equally matching docs in context source selection", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      mkdirSync(path.join(repoRoot, "docs"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "src", "current"), { recursive: true });
+      for (let index = 0; index < 6; index += 1) {
+        writeFileSync(
+          path.join(repoRoot, "docs", `accounting-${index}.md`),
+          "ledger close period reconciliation\n",
+        );
+      }
+      writeFileSync(
+        path.join(repoRoot, "src", "current", "state.ts"),
+        "export function closeLedgerPeriod() { return 'ledger close period reconciliation'; }\n",
+      );
+
+      const pack = generateProjectContextPack({
+        repoRoot,
+        objective: "Plan ledger close period work",
+        query: "ledger close period reconciliation",
+        maxChars: 4_000,
+      });
+
+      expect(pack.sources).toContain("src/current/state.ts");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("exposes the native project intelligence spine through tool handlers", () => {
     const repoRoot = createFixtureRepo();
     try {

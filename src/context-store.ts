@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { classifySourceProvenance, type SourceProvenance } from "./source-authority.js";
 
 export type ContextSourceType = "file" | "doc" | "command" | "user" | "derived";
 
@@ -7,9 +8,11 @@ export type ContextRecordInput = {
   sourceType: ContextSourceType;
   text: string;
   tags?: string[];
+  sourceAuthority?: SourceProvenance;
 };
 
-export type ContextRecord = ContextRecordInput & {
+export type ContextRecord = Omit<ContextRecordInput, "sourceAuthority"> & {
+  sourceAuthority: SourceProvenance;
   contextId: string;
   contentHash: string;
   recordedAt: string;
@@ -118,6 +121,10 @@ function scoreRecord(record: ContextRecord, query: string): number {
   return tokens.reduce((score, token) => score + (haystack.includes(token) ? 1 : 0), 0);
 }
 
+function authorityScore(record: ContextRecord): number {
+  return record.sourceAuthority.authorityScore;
+}
+
 function excerpt(text: string, maxChars = 180): string {
   const compacted = text.replace(/\s+/g, " ").trim();
   if (compacted.length <= maxChars) {
@@ -202,6 +209,10 @@ export function createContextStore(
         if (right.score !== left.score) {
           return right.score - left.score;
         }
+        const authorityDelta = authorityScore(right) - authorityScore(left);
+        if (authorityDelta !== 0) {
+          return authorityDelta;
+        }
         return left.source.localeCompare(right.source);
       })
       .slice(0, limit);
@@ -228,7 +239,12 @@ export function createContextStore(
         const stale = staleIds.has(record.contextId);
         const changed = sourceMatchesChangedFile(record.source, changedFiles);
         const queryScore = scoreRecord(record, query);
-        const priority = (pinned ? 1_000 : 0) + (changed ? 100 : 0) + queryScore * 10 - (stale ? 10_000 : 0);
+        const priority =
+          (pinned ? 1_000 : 0) +
+          (changed ? 100 : 0) +
+          queryScore * 10 +
+          authorityScore(record) -
+          (stale ? 10_000 : 0);
         const reason: ContextPackBudgetDecision["reason"] = stale
           ? "stale"
           : pinned
@@ -288,11 +304,19 @@ export function createContextStore(
 
   return {
     record(input: ContextRecordInput): ContextRecord {
+      const contentHash = sha256(input.text);
       const record: ContextRecord = {
         ...input,
         tags: input.tags ? [...input.tags].sort() : undefined,
         contextId: contextIdFor(input),
-        contentHash: sha256(input.text),
+        contentHash,
+        sourceAuthority:
+          input.sourceAuthority ??
+          classifySourceProvenance({
+            sourcePath: input.source,
+            sourceHash: contentHash,
+            authority: sourceAuthorityForContextSourceType(input.sourceType),
+          }),
         recordedAt: new Date().toISOString(),
         charCount: input.text.length,
       };
@@ -367,4 +391,14 @@ export function createContextStore(
 
     snapshot: snapshotState,
   };
+}
+
+function sourceAuthorityForContextSourceType(sourceType: ContextSourceType): SourceProvenance["authority"] | undefined {
+  if (sourceType === "doc") {
+    return "supporting_doc";
+  }
+  if (sourceType === "command" || sourceType === "derived") {
+    return "derived_code_fact";
+  }
+  return undefined;
 }

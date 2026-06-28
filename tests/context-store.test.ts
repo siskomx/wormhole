@@ -29,6 +29,28 @@ describe("native context store", () => {
     );
   });
 
+  it("ranks code context above doc context for equal query matches", () => {
+    const store = createContextStore();
+    const doc = store.record({
+      source: "docs/accounting.md",
+      sourceType: "doc",
+      text: "Accounting period closing uses ledger validation.",
+      tags: ["accounting"],
+    });
+    const code = store.record({
+      source: "src/features/accounting/AccountingService.ts",
+      sourceType: "file",
+      text: "Accounting period closing uses ledger validation.",
+      tags: ["accounting"],
+    });
+
+    const query = store.query({ query: "accounting period ledger", limit: 2 });
+
+    expect(query.results.map((record) => record.contextId)).toEqual([code.contextId, doc.contextId]);
+    expect(query.results[0]?.sourceAuthority?.authority).toBe("current_code");
+    expect(query.results[1]?.sourceAuthority?.authority).toBe("supporting_doc");
+  });
+
   it("creates and renders budgeted context packs with provenance", () => {
     const store = createContextStore();
     const first = store.record({

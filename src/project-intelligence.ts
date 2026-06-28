@@ -10,6 +10,7 @@ import {
   type RepoIndexEdge,
   type RepoIndexSymbol,
 } from "./repo-index.js";
+import { classifySourceProvenance } from "./source-authority.js";
 import { analyzeTestImpactV2, type TestImpactV2Result } from "./test-impact-v2.js";
 
 export type ProjectObservationKind =
@@ -917,20 +918,27 @@ function selectContextSources(
   }
   const queryTokens = tokenize(query);
   const scored = model.index.files
-    .map((file) => ({
-      path: file.path,
-      score: queryTokens.reduce(
+    .map((file) => {
+      const authority = classifySourceProvenance({ sourcePath: file.path });
+      return {
+        path: file.path,
+        authorityScore: authority.authorityScore,
+        score: queryTokens.reduce(
         (score, token) =>
           score +
           (file.path.toLowerCase().includes(token) ? 2 : 0) +
           (file.content.toLowerCase().includes(token) ? 1 : 0),
         0,
-      ),
-    }))
+        ),
+      };
+    })
     .filter((file) => file.score > 0)
     .sort((left, right) => {
       if (right.score !== left.score) {
         return right.score - left.score;
+      }
+      if (right.authorityScore !== left.authorityScore) {
+        return right.authorityScore - left.authorityScore;
       }
       return left.path.localeCompare(right.path);
     })

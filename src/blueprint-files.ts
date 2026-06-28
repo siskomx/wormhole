@@ -8,6 +8,7 @@ import {
   type BlueprintLaneArtifact,
   type BlueprintLaneSummary,
 } from "./blueprint.js";
+import { renderFeatureIndexMarkdown } from "./feature-index.js";
 
 export type BlueprintArtifactFile = {
   relativePath: string;
@@ -35,6 +36,8 @@ export function writeBlueprintArtifacts(input: WriteBlueprintArtifactsInput): Bl
     writeArtifact(repoRoot, ".wormhole/agent-context.md", `${markdown.trimEnd()}\n`),
     writeArtifact(repoRoot, ".wormhole/blueprint.json", `${JSON.stringify(input.result.blueprint, null, 2)}\n`),
     writeArtifact(repoRoot, ".wormhole/constraints.json", `${JSON.stringify(input.result.constraints, null, 2)}\n`),
+    writeArtifact(repoRoot, ".wormhole/feature-index.json", `${JSON.stringify(input.result.blueprint.featureIndex, null, 2)}\n`),
+    writeArtifact(repoRoot, ".wormhole/feature-index.md", `${renderFeatureIndexMarkdown(input.result.blueprint.featureIndex).trimEnd()}\n`),
   ];
 
   return {
@@ -77,6 +80,7 @@ export function writeProgressiveBlueprintArtifacts(
     approvalNeeded: input.result.approvalNeeded,
     constraintsPath: ".wormhole/constraints.json",
     agentContextPath: ".wormhole/agent-context.md",
+    featureIndexPath: ".wormhole/feature-index.json",
     lanes: laneSummaries,
   };
   const markdown = renderAgentContext({
@@ -88,6 +92,8 @@ export function writeProgressiveBlueprintArtifacts(
     writeArtifact(repoRoot, ".wormhole/agent-context.md", `${markdown.trimEnd()}\n`),
     writeArtifact(repoRoot, ".wormhole/blueprint.json", `${JSON.stringify(progressiveBlueprint, null, 2)}\n`),
     writeArtifact(repoRoot, ".wormhole/constraints.json", `${JSON.stringify(input.result.constraints, null, 2)}\n`),
+    writeArtifact(repoRoot, ".wormhole/feature-index.json", `${JSON.stringify(input.result.blueprint.featureIndex, null, 2)}\n`),
+    writeArtifact(repoRoot, ".wormhole/feature-index.md", `${renderFeatureIndexMarkdown(input.result.blueprint.featureIndex).trimEnd()}\n`),
     ...laneArtifacts.map((lane) =>
       writeArtifact(repoRoot, `.wormhole/lanes/${lane.lane}.json`, `${JSON.stringify(lane, null, 2)}\n`),
     ),

@@ -303,6 +303,12 @@ export function createWormholeMcpServer(
   const toolRiskSchema = z.enum(TOOL_RISKS);
   const toolExposureModeSchema = z.enum(TOOL_EXPOSURE_MODES);
   const projectLaneSchema = z.enum(PROJECT_LANES);
+  const workflowKindSchema = z.enum([
+    "workflow_start_feature",
+    "workflow_fix_bug",
+    "workflow_review_pr",
+    "workflow_onboard_repo",
+  ]);
   const workflowInputSchema = {
     repoRoot: z.string(),
     objective: z.string(),
@@ -2051,6 +2057,18 @@ export function createWormholeMcpServer(
       inputSchema: workflowInputSchema,
     },
     async (input) => jsonResult(tools.workflowOnboardRepo(input)),
+  );
+
+  server.registerTool(
+    "workflow_write_artifacts",
+    {
+      description: "Write durable .wormhole workflow run state, resume, and latest pointer for an existing workflow kind.",
+      inputSchema: {
+        workflow: workflowKindSchema,
+        ...workflowInputSchema,
+      },
+    },
+    async (input) => jsonResult(tools.workflowWriteArtifacts(input)),
   );
 
   server.registerTool(
