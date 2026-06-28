@@ -11,6 +11,7 @@ import {
   type ProjectContextPack,
 } from "./project-intelligence.js";
 import type { IndexHealthSnapshot } from "./index-health.js";
+import type { RepoIndexBuildOptions, RepoIndexSearchResult } from "./repo-index.js";
 
 export type AgentRoute = "fast" | "balanced" | "deep";
 
@@ -83,6 +84,14 @@ export type StateMaintenanceAdvice = {
   };
 };
 
+export type AgentDurableRetrieval = {
+  usedSqlite: boolean;
+  retrievalMode?: string;
+  results: RepoIndexSearchResult[];
+  warnings: string[];
+  indexHealth: IndexHealthSnapshot;
+};
+
 export type MissionRouteRecommendation = {
   repoRoot: string;
   objective: string;
@@ -102,6 +111,7 @@ export type PreparedAgentContext = {
   nextToolCalls: AgentToolCall[];
   recommendedDiscovery: AgentToolCall[];
   stateMaintenance: StateMaintenanceAdvice;
+  durableRetrieval?: AgentDurableRetrieval;
   agentInstructions: string;
 };
 
@@ -113,6 +123,9 @@ export type AgentRoutingInput = {
   diffText?: string;
   completedTools?: string[];
   maxChars?: number;
+  indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">;
+  preferredSources?: string[];
+  durableRetrieval?: AgentDurableRetrieval;
   projectModelCache?: ProjectModelCache;
   projectIntelligenceSnapshot?: ProjectIntelligenceSnapshot;
 };
@@ -126,10 +139,12 @@ export function createProjectIntelligenceSnapshot(
   const architecture = createArchitectureMap({
     repoRoot: input.repoRoot,
     projectModelCache: input.projectModelCache,
+    indexOptions: input.indexOptions,
   });
   const entrypoints = discoverEntrypointFlows({
     repoRoot: input.repoRoot,
     projectModelCache: input.projectModelCache,
+    indexOptions: input.indexOptions,
   });
   const blastRadius =
     changedFiles.length > 0
@@ -138,6 +153,7 @@ export function createProjectIntelligenceSnapshot(
           changedFiles,
           diffText: input.diffText,
           projectModelCache: input.projectModelCache,
+          indexOptions: input.indexOptions,
         })
       : undefined;
   const route = routeFor({
@@ -293,7 +309,23 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     changedFiles,
     maxChars: input.maxChars ?? DEFAULT_CONTEXT_CHARS,
     projectModelCache,
+    indexOptions: input.indexOptions,
+    preferredSources: input.preferredSources,
   });
+  const instructionParts = [
+    "Start with tool_layer_map before browsing the full MCP surface.",
+    "Use this context pack before broad file reads.",
+    "Use tool_catalog_query when the route recommends a plane, phase, pack, risk, or exact tool name.",
+    "Prefer the recommended route over browsing the full MCP tool surface.",
+    "Refresh graph and context state only through the stateMaintenance owner tools.",
+    "Use durable_repo_index_query, ctx_pack_refresh, and workflow_write_artifacts for durable handoff and resume paths.",
+    "Refresh index state before trusting degraded or stale context.",
+    ...(input.durableRetrieval ? ["A durable repo index retrieval seeded this context pack."] : []),
+    "Continue into implementation and verification for coding tasks.",
+    "Record source-backed evidence before making implementation claims.",
+    "Run focused verification before requesting the gate.",
+    "Call emit_plan only when the user explicitly asks for a plan, spec, design, or planning-only artifact.",
+  ];
   return {
     repoRoot: input.repoRoot,
     objective: input.objective,
@@ -303,6 +335,7 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     indexHealth: contextPack.indexHealth,
     recommendedDiscovery: createDiscoveryToolCalls(),
     stateMaintenance: createStateMaintenanceAdvice(),
+    ...(input.durableRetrieval ? { durableRetrieval: input.durableRetrieval } : {}),
     nextToolCalls: [
       toolCall("record_evidence", 90, "Record the context pack and key source files as evidence.", {}, [
         "missionId",
@@ -316,19 +349,7 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
         "missionId",
       ]),
     ],
-    agentInstructions: [
-      "Start with tool_layer_map before browsing the full MCP surface.",
-      "Use this context pack before broad file reads.",
-      "Use tool_catalog_query when the route recommends a plane, phase, pack, risk, or exact tool name.",
-      "Prefer the recommended route over browsing the full MCP tool surface.",
-      "Refresh graph and context state only through the stateMaintenance owner tools.",
-      "Use durable_repo_index_query, ctx_pack_refresh, and workflow_write_artifacts for durable handoff and resume paths.",
-      "Refresh index state before trusting degraded or stale context.",
-      "Continue into implementation and verification for coding tasks.",
-      "Record source-backed evidence before making implementation claims.",
-      "Run focused verification before requesting the gate.",
-      "Call emit_plan only when the user explicitly asks for a plan, spec, design, or planning-only artifact.",
-    ].join(" "),
+    agentInstructions: instructionParts.join(" "),
   };
 }
 

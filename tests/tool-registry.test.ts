@@ -161,6 +161,12 @@ describe("tool registry conformance", () => {
     expect(inputsByName.get("durable_repo_index_query")).toContain("requireFresh");
   });
 
+  it("advertises objective freshness input for app-process status", () => {
+    const catalog = queryToolCatalog({ toolNames: ["app_process_status"] });
+
+    expect(catalog.tools[0]?.inputs).toContain("objective");
+  });
+
   it("requires Claude manifest coverage or an explicit compact-manifest policy", () => {
     const manifest = readJson<{
       tools: Array<{ name: string }>;

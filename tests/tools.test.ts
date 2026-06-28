@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { createIndexHealthSnapshot } from "../src/index-health.js";
 import { createInMemoryKernel } from "../src/kernel.js";
 import { createToolHandlers } from "../src/tools.js";
 
@@ -114,6 +115,245 @@ describe("Wormhole MCP tool handlers", () => {
     expect(gate.reasons).toContain(
       "Resolve stale generated artifact conflict for .wormhole/workflows/latest.json#indexFingerprint: .wormhole/workflows/latest.json was generated from a stale repo index fingerprint.",
     );
+  });
+
+  it("closes the mission gate from stored state-maintenance source conflicts and freshness", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-gate-maintenance-signals-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    mkdirSync(path.join(repoRoot, ".wormhole", "workflows"), { recursive: true });
+    writeFileSync(
+      path.join(repoRoot, "package.json"),
+      JSON.stringify({ type: "module", scripts: { test: "vitest run tests" } }, null, 2),
+    );
+    writeFileSync(path.join(repoRoot, "package-lock.json"), JSON.stringify({ packages: {} }));
+    writeFileSync(path.join(repoRoot, "src", "app.ts"), "export const app = 1;\n");
+    writeFileSync(
+      path.join(repoRoot, ".wormhole", "workflows", "stale.json"),
+      `${JSON.stringify({ indexFingerprint: "old-fingerprint" }, null, 2)}\n`,
+    );
+
+    try {
+      const kernel = createInMemoryKernel();
+      const tools = createToolHandlers(kernel, { allowedRepoRoots: [repoRoot] });
+      const mission = tools.missionStart({
+        objective: "Use current lifecycle facts.",
+        repoRoot,
+      });
+      tools.roundStart({ missionId: mission.missionId });
+      tools.recordEvidence({
+        missionId: mission.missionId,
+        sourceType: "file",
+        sourcePath: "src/app.ts",
+        retrievalMethod: "read_file",
+        summary: "Current source file exists.",
+      });
+      tools.durableIndexManifestRefresh({ repoRoot });
+      writeFileSync(path.join(repoRoot, "src", "app.ts"), "export const app = 2;\n");
+
+      const maintenance = tools.stateMaintenanceRun({
+        repoRoot,
+        missionId: mission.missionId,
+        objective: "Use current lifecycle facts.",
+        changedFiles: ["src/app.ts"],
+        refreshGraph: false,
+        sourceConflicts: true,
+        freshness: true,
+      });
+      const gate = tools.gateRequest({ missionId: mission.missionId });
+
+      expect(maintenance.sourceConflicts?.conflicts.length).toBeGreaterThan(0);
+      expect(maintenance.freshness?.durableIndex.repoIndex?.fresh).toBe(false);
+      expect(gate.open).toBe(false);
+      expect(gate.reasons.join("\n")).toContain("stale generated artifact");
+      expect(gate.reasons.join("\n")).toContain("Index health is stale");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("filters stored maintenance signals by mission/status and lets caller signals override them", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-gate-maintenance-filter-"));
+    const runtimeStatePath = path.join(repoRoot, ".wormhole", "runtime-state.json");
+    mkdirSync(path.dirname(runtimeStatePath), { recursive: true });
+    writeFileSync(path.join(repoRoot, "evidence.md"), "fresh evidence\n");
+
+    try {
+      const kernel = createInMemoryKernel();
+      const mission = kernel.startMission({
+        objective: "Use stored maintenance signals.",
+        repoRoot,
+      });
+      kernel.startRound(mission.missionId);
+      kernel.recordEvidence(mission.missionId, {
+        sourceType: "file",
+        sourcePath: "evidence.md",
+        retrievalMethod: "read_file",
+        summary: "Evidence exists.",
+      });
+      const otherMission = kernel.startMission({
+        objective: "Other mission.",
+        repoRoot,
+      });
+      const freshHealth = createIndexHealthSnapshot({
+        source: "durable_repo_index",
+        present: true,
+        fresh: true,
+      });
+      const staleHealth = createIndexHealthSnapshot({
+        source: "durable_repo_index",
+        present: true,
+        fresh: false,
+      });
+      const storedConflict = {
+        subject: "stored-conflict",
+        authoritative: [],
+        conflicting: [],
+        severity: "blocking" as const,
+        resolution: "needs_validation" as const,
+        message: "Stored conflict blocks gate.",
+      };
+      const ignoredConflict = (subject: string) => ({
+        subject,
+        authoritative: [],
+        conflicting: [],
+        severity: "blocking" as const,
+        resolution: "needs_validation" as const,
+        message: `${subject} should be ignored.`,
+      });
+      const runBase = {
+        repoRoot,
+        objective: "Use stored maintenance signals.",
+        query: "stored signals",
+        input: {
+          repoRoot,
+          objective: "Use stored maintenance signals.",
+        },
+        changedFiles: [],
+        actions: [],
+        startedAt: "2026-06-28T00:00:00.000Z",
+      };
+      writeFileSync(
+        runtimeStatePath,
+        JSON.stringify(
+          {
+            stateMaintenance: {
+              runs: [
+                {
+                  ...runBase,
+                  runId: "old-source-conflicts",
+                  status: "completed",
+                  missionId: mission.missionId,
+                  updatedAt: "2026-06-28T00:00:01.000Z",
+                  sourceConflicts: { repoRoot, indexFingerprint: "old", conflicts: [storedConflict] },
+                },
+                {
+                  ...runBase,
+                  runId: "newer-freshness",
+                  status: "completed",
+                  missionId: mission.missionId,
+                  updatedAt: "2026-06-28T00:00:02.000Z",
+                  freshness: { indexHealth: staleHealth },
+                },
+                {
+                  ...runBase,
+                  runId: "newest-context-only",
+                  status: "completed",
+                  missionId: mission.missionId,
+                  updatedAt: "2026-06-28T00:00:03.000Z",
+                },
+                {
+                  ...runBase,
+                  runId: "failed-run",
+                  status: "failed",
+                  missionId: mission.missionId,
+                  updatedAt: "2026-06-28T00:00:04.000Z",
+                  sourceConflicts: { repoRoot, indexFingerprint: "failed", conflicts: [ignoredConflict("failed-conflict")] },
+                },
+                {
+                  ...runBase,
+                  runId: "running-run",
+                  status: "running",
+                  missionId: mission.missionId,
+                  updatedAt: "2026-06-28T00:00:05.000Z",
+                  sourceConflicts: { repoRoot, indexFingerprint: "running", conflicts: [ignoredConflict("running-conflict")] },
+                },
+                {
+                  ...runBase,
+                  runId: "other-mission-run",
+                  status: "completed",
+                  missionId: otherMission.missionId,
+                  updatedAt: "2026-06-28T00:00:06.000Z",
+                  sourceConflicts: { repoRoot, indexFingerprint: "other", conflicts: [ignoredConflict("other-mission-conflict")] },
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      const tools = createToolHandlers(kernel, {
+        allowedRepoRoots: [repoRoot],
+        runtimeStatePath,
+      });
+
+      const storedGate = tools.gateRequest({ missionId: mission.missionId });
+      expect(storedGate.open).toBe(false);
+      expect(storedGate.reasons.join("\n")).toContain("Stored conflict blocks gate.");
+      expect(storedGate.reasons.join("\n")).toContain("Index health is stale");
+      expect(storedGate.reasons.join("\n")).not.toContain("failed-conflict");
+      expect(storedGate.reasons.join("\n")).not.toContain("running-conflict");
+      expect(storedGate.reasons.join("\n")).not.toContain("other-mission-conflict");
+
+      const overrideGate = tools.gateRequest({
+        missionId: mission.missionId,
+        sourceConflicts: [],
+        freshness: { indexHealth: freshHealth },
+      });
+      expect(overrideGate.open).toBe(true);
+
+      const freshOnlyKernel = createInMemoryKernel();
+      const freshOnlyMission = freshOnlyKernel.startMission({
+        objective: "Use fresh stored maintenance signals.",
+        repoRoot,
+      });
+      freshOnlyKernel.startRound(freshOnlyMission.missionId);
+      freshOnlyKernel.recordEvidence(freshOnlyMission.missionId, {
+        sourceType: "file",
+        sourcePath: "evidence.md",
+        retrievalMethod: "read_file",
+        summary: "Evidence exists.",
+      });
+      writeFileSync(
+        runtimeStatePath,
+        JSON.stringify(
+          {
+            stateMaintenance: {
+              runs: [
+                {
+                  ...runBase,
+                  runId: "fresh-run",
+                  status: "completed",
+                  missionId: freshOnlyMission.missionId,
+                  updatedAt: "2026-06-28T00:00:07.000Z",
+                  freshness: { indexHealth: freshHealth },
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      const freshOnlyTools = createToolHandlers(freshOnlyKernel, {
+        allowedRepoRoots: [repoRoot],
+        runtimeStatePath,
+      });
+
+      expect(freshOnlyTools.gateRequest({ missionId: freshOnlyMission.missionId }).open).toBe(true);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
   });
 
   it("emits plans through the generic tool handlers", () => {

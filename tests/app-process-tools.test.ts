@@ -91,4 +91,36 @@ describe("app process tool handlers", () => {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
+
+  it("reports stale objective app-process status through tools", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), { allowedRepoRoots: [repoRoot] });
+      tools.appProcessWriteArtifacts({
+        repoRoot,
+        objective: "Build a shared team scheduling app.",
+      });
+
+      const status = tools.appProcessStatus({
+        repoRoot,
+        objective: "Build a billing lifecycle app.",
+      });
+
+      expect(status.objectiveFreshness).toEqual(
+        expect.objectContaining({
+          status: "stale",
+          expectedObjective: "Build a billing lifecycle app.",
+        }),
+      );
+      expect(status.artifacts).toContainEqual(
+        expect.objectContaining({
+          relativePath: ".wormhole/app-process.json",
+          status: "stale",
+        }),
+      );
+      expect(status.status.status).toBe("blocked");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
 });

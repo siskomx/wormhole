@@ -175,6 +175,7 @@ export type ProjectModelCacheOptions = {
 export type ProjectModelCacheInput = {
   projectModelCache?: ProjectModelCache;
   indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">;
+  preferredSources?: string[];
 };
 
 export function createProjectModelCache(options: ProjectModelCacheOptions = {}): ProjectModelCache {
@@ -539,12 +540,20 @@ export function generateProjectContextPack(input: {
   maxChars: number;
 } & ProjectModelCacheInput): ProjectContextPack {
   const changedFiles = uniqueSorted((input.changedFiles ?? []).map(toRepoPath));
+  const preferredSources = uniqueSorted((input.preferredSources ?? []).map(toRepoPath));
   if (input.projectModelCache) {
     return input.projectModelCache.getDerived({
       repoRoot: input.repoRoot,
       indexOptions: input.indexOptions,
       kind: "context_pack",
-      keyParts: [input.objective, input.query, String(input.maxChars), ...changedFiles],
+      keyParts: [
+        input.objective,
+        input.query,
+        String(input.maxChars),
+        JSON.stringify(input.indexOptions ?? {}),
+        ...changedFiles,
+        ...preferredSources.map((source) => `preferred:${source}`),
+      ],
       create: (model) =>
         generateProjectContextPackFromModel(
           model,
@@ -552,6 +561,7 @@ export function generateProjectContextPack(input: {
             objective: input.objective,
             query: input.query,
             changedFiles,
+            preferredSources,
             maxChars: input.maxChars,
           },
           input.projectModelCache,
@@ -563,6 +573,7 @@ export function generateProjectContextPack(input: {
     objective: input.objective,
     query: input.query,
     changedFiles,
+    preferredSources,
     maxChars: input.maxChars,
   });
 }
@@ -573,6 +584,7 @@ function generateProjectContextPackFromModel(
     objective: string;
     query: string;
     changedFiles: string[];
+    preferredSources: string[];
     maxChars: number;
   },
   projectModelCache?: ProjectModelCache,
@@ -597,7 +609,7 @@ function generateProjectContextPackFromModel(
             changedFiles: input.changedFiles,
           })
       : undefined;
-  const sources = selectContextSources(model, input.query, input.changedFiles, blast);
+  const sources = selectContextSources(model, input.query, input.changedFiles, input.preferredSources, blast);
   const rendered = clampToBudget(
     renderProjectContextPack({
       objective: input.objective,
@@ -916,9 +928,13 @@ function selectContextSources(
   model: ProjectModel,
   query: string,
   changedFiles: string[],
+  preferredSources: string[],
   blast: BlastRadiusAnalysis | undefined,
 ): string[] {
   const selected = new Set<string>(changedFiles.map(toRepoPath));
+  for (const source of preferredSources) {
+    selected.add(source);
+  }
   for (const file of blast?.impactedFiles ?? []) {
     selected.add(file.path);
   }

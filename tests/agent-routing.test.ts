@@ -64,6 +64,32 @@ function createFixtureRepo(): string {
   return repoRoot;
 }
 
+function createLargeFixtureRepo(): string {
+  const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-agent-routing-large-"));
+  mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+  writeFileSync(
+    path.join(repoRoot, "package.json"),
+    JSON.stringify(
+      {
+        type: "module",
+        scripts: { test: "vitest run tests" },
+        devDependencies: { typescript: "^6.0.3", vitest: "^4.1.9" },
+      },
+      null,
+      2,
+    ),
+  );
+  for (let index = 0; index < 1005; index += 1) {
+    const id = String(index).padStart(4, "0");
+    writeFileSync(path.join(repoRoot, "src", `f${id}.ts`), `export const value${id} = ${index};\n`);
+  }
+  writeFileSync(
+    path.join(repoRoot, "src", "f1004.ts"),
+    "export function lifecycleAccountingMarker() { return 'large repo context'; }\n",
+  );
+  return repoRoot;
+}
+
 describe("agent-facing routing tools", () => {
   it("creates a project intelligence snapshot with the recommended default path", () => {
     const repoRoot = createFixtureRepo();
@@ -228,4 +254,39 @@ describe("agent-facing routing tools", () => {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
+
+  it("seeds prepared context from fresh durable retrieval in large repos", () => {
+    const repoRoot = createLargeFixtureRepo();
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), { allowedRepoRoots: [repoRoot] });
+      const fallback = tools.agentContextPrepare({
+        repoRoot,
+        objective: "Create accounting lifecycle feature",
+        query: "lifecycleAccountingMarker",
+        maxChars: 4_000,
+      });
+
+      expect(fallback.durableRetrieval).toBeUndefined();
+      expect(fallback.contextPack.rendered).toContain("Context Pack");
+      expect(fallback.agentInstructions).toContain("Refresh index state before trusting degraded or stale context.");
+
+      tools.durableRepoIndexRefresh({ repoRoot, preset: "large_repo" });
+
+      const prepared = tools.agentContextPrepare({
+        repoRoot,
+        objective: "Create accounting lifecycle feature",
+        query: "lifecycleAccountingMarker",
+        maxChars: 4_000,
+      });
+
+      expect(prepared.durableRetrieval?.usedSqlite).toBe(true);
+      expect(["sqlite_fts", "sqlite_like"]).toContain(prepared.durableRetrieval?.retrievalMode);
+      expect(prepared.durableRetrieval?.results.map((entry) => entry.path)).toContain("src/f1004.ts");
+      expect(prepared.contextPack.sources).toContain("src/f1004.ts");
+      expect(prepared.indexHealth.fileCount).toBeGreaterThan(1000);
+      expect(prepared.agentInstructions).toContain("durable repo index retrieval seeded this context pack");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  }, 20_000);
 });

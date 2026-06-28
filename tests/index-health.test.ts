@@ -47,6 +47,24 @@ describe("index health snapshots", () => {
     expect(health.reasons).toContain("Index is truncated; some repository files were not indexed.");
   });
 
+  it("calls out skipped generated API contract artifacts", () => {
+    const health = createIndexHealthSnapshot({
+      source: "durable_repo_index",
+      present: true,
+      fresh: true,
+      truncated: true,
+      skippedFiles: [
+        "public/api-docs/openapi.json",
+        "public/api-docs/openapi-agents.json",
+        "src/generated/openapi.ts",
+      ],
+    });
+
+    expect(health.status).toBe("degraded");
+    expect(health.reasons.join("\n")).toContain("Skipped generated/API contract artifacts");
+    expect(health.reasons.join("\n")).toContain("src/generated/openapi.ts");
+  });
+
   it("classifies stale, missing, and unknown index state with closed actions", () => {
     expect(
       createIndexHealthSnapshot({

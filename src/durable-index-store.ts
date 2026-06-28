@@ -133,6 +133,24 @@ export function refreshDurableRepoIndex(input: RepoIndexBuildOptions): DurableRe
   };
 }
 
+export function durableRepoIndexBuildOptions(
+  input: { repoRoot: string },
+): Omit<RepoIndexBuildOptions, "repoRoot"> | undefined {
+  const repoRoot = path.resolve(input.repoRoot);
+  const index = readJson<RepoIndex>(repoIndexPath(repoRoot));
+  if (!index?.buildOptions) {
+    return undefined;
+  }
+  return {
+    preset: index.buildOptions.preset,
+    ...(index.buildOptions.include ? { include: [...index.buildOptions.include] } : {}),
+    ...(index.buildOptions.exclude ? { exclude: [...index.buildOptions.exclude] } : {}),
+    maxFiles: index.buildOptions.maxFiles,
+    maxFileBytes: index.buildOptions.maxFileBytes,
+    maxTotalBytes: index.buildOptions.maxTotalBytes,
+  };
+}
+
 export function refreshDurableIndexManifest(input: RepoIndexBuildOptions): DurableIndexManifest {
   const repoRoot = path.resolve(input.repoRoot);
   const index = buildRepoIndex({ ...input, repoRoot });

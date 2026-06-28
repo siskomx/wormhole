@@ -533,7 +533,7 @@ const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
     pack: "core",
     risk: "read",
     summary: "Read app-process run state, blocked gates, next action, verification records, and artifact freshness.",
-    inputs: ["repoRoot"],
+    inputs: ["repoRoot", "objective"],
   },
   app_process_accept_section: {
     plane: "project",

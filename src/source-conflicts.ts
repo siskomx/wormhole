@@ -1,12 +1,13 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import type { ProjectContract } from "./project-contract.js";
-import type { RepoIndex, RepoIndexFile } from "./repo-index.js";
+import { summarizeRepoIndex, type RepoIndex, type RepoIndexFile, type RepoIndexSummary } from "./repo-index.js";
 import { classifySourceProvenance, type SourceConflict, type SourceProvenance } from "./source-authority.js";
 
 export type SourceConflictAnalysis = {
   repoRoot: string;
   indexFingerprint: string;
+  indexSummary: RepoIndexSummary;
   conflicts: SourceConflict[];
 };
 
@@ -43,6 +44,7 @@ export function analyzeSourceConflicts(input: AnalyzeSourceConflictsInput): Sour
   return {
     repoRoot,
     indexFingerprint: input.index.fingerprint,
+    indexSummary: summarizeRepoIndex(input.index),
     conflicts,
   };
 }

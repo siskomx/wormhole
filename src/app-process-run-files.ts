@@ -1,6 +1,8 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { AppProcess } from "./app-process.js";
+import { compileBootstrapBlueprint } from "./blueprint.js";
+import { createFeatureIndex } from "./feature-index.js";
 import {
   acceptAppProcessSection,
   createAppProcessRunStatus,
@@ -14,11 +16,33 @@ import {
   type AppProcessRunStatusReport,
 } from "./app-process-run.js";
 
+export type AppProcessObjectiveFreshness = {
+  status: "fresh" | "stale";
+  actualObjective: string;
+  expectedObjective?: string;
+  reason?: string;
+};
+
+export type AppProcessFingerprintComparison = {
+  status: "fresh" | "stale";
+  expected: string;
+  actual: string;
+  reason?: string;
+};
+
+export type AppProcessFingerprintFreshness = {
+  status: "fresh" | "stale";
+  featureIndex: AppProcessFingerprintComparison;
+  blueprint: AppProcessFingerprintComparison;
+};
+
 export type AppProcessRunBundle = {
   repoRoot: string;
   appProcess: AppProcess;
   runState: AppProcessRunState;
   artifacts: AppProcessArtifactFreshness[];
+  objectiveFreshness?: AppProcessObjectiveFreshness;
+  fingerprintFreshness?: AppProcessFingerprintFreshness;
   status: AppProcessRunStatusReport;
 };
 
@@ -26,20 +50,32 @@ export type AppProcessRunFileMutationResult = AppProcessRunBundle & {
   event?: AppProcessRunEvent;
 };
 
-export function loadAppProcessRunBundle(input: { repoRoot: string; now?: string }): AppProcessRunBundle {
+export function loadAppProcessRunBundle(input: {
+  repoRoot: string;
+  objective?: string;
+  now?: string;
+}): AppProcessRunBundle {
   const repoRoot = path.resolve(input.repoRoot);
   const appProcess = readJson<AppProcess>(repoRoot, ".wormhole/app-process.json");
   const runState = readRunState(repoRoot) ?? createInitialAppProcessRunState({
     appProcess,
     now: input.now,
   });
-  const artifacts = collectArtifactFreshness(repoRoot, appProcess);
+  const objectiveFreshness = evaluateObjectiveFreshness(appProcess, input.objective);
+  const fingerprintFreshness = evaluateFingerprintFreshness(repoRoot, appProcess, input.objective);
+  const artifacts = applyAppProcessFreshness(
+    collectArtifactFreshness(repoRoot, appProcess),
+    objectiveFreshness,
+    fingerprintFreshness,
+  );
   const status = createAppProcessRunStatus({ appProcess, runState, artifacts });
   return {
     repoRoot,
     appProcess,
     runState,
     artifacts,
+    objectiveFreshness,
+    fingerprintFreshness,
     status,
   };
 }
@@ -180,6 +216,91 @@ function collectArtifactFreshness(repoRoot: string, appProcess: AppProcess): App
       mtimeMs: stats.mtimeMs,
     };
   });
+}
+
+function evaluateObjectiveFreshness(
+  appProcess: AppProcess,
+  expectedObjective: string | undefined,
+): AppProcessObjectiveFreshness | undefined {
+  if (!expectedObjective) {
+    return undefined;
+  }
+  const actualObjective = appProcess.objective;
+  const fresh = normalizeObjective(expectedObjective) === normalizeObjective(actualObjective);
+  return {
+    status: fresh ? "fresh" : "stale",
+    actualObjective,
+    expectedObjective,
+    ...(fresh ? {} : { reason: "App-process objective does not match requested objective." }),
+  };
+}
+
+function evaluateFingerprintFreshness(
+  repoRoot: string,
+  appProcess: AppProcess,
+  requestedObjective: string | undefined,
+): AppProcessFingerprintFreshness {
+  const objective = requestedObjective ?? appProcess.objective;
+  const currentFeatureIndex = createFeatureIndex({ repoRoot });
+  const currentBlueprint = compileBootstrapBlueprint({ repoRoot, objective });
+  const featureIndex = compareFingerprint({
+    expected: currentFeatureIndex.fingerprint,
+    actual: appProcess.repoIntelligence.featureIndexFingerprint,
+    reason: "App-process feature index fingerprint does not match the current repo feature index.",
+  });
+  const blueprint = compareFingerprint({
+    expected: currentBlueprint.blueprint.fingerprint,
+    actual: appProcess.blueprintRef.fingerprint,
+    reason: "App-process blueprint fingerprint does not match the current repo blueprint.",
+  });
+  return {
+    status: featureIndex.status === "fresh" && blueprint.status === "fresh" ? "fresh" : "stale",
+    featureIndex,
+    blueprint,
+  };
+}
+
+function compareFingerprint(input: {
+  expected: string;
+  actual: string;
+  reason: string;
+}): AppProcessFingerprintComparison {
+  const fresh = input.expected === input.actual;
+  return {
+    status: fresh ? "fresh" : "stale",
+    expected: input.expected,
+    actual: input.actual,
+    ...(fresh ? {} : { reason: input.reason }),
+  };
+}
+
+function applyAppProcessFreshness(
+  artifacts: AppProcessArtifactFreshness[],
+  objectiveFreshness: AppProcessObjectiveFreshness | undefined,
+  fingerprintFreshness: AppProcessFingerprintFreshness,
+): AppProcessArtifactFreshness[] {
+  const staleReasons = [
+    objectiveFreshness?.status === "stale" ? objectiveFreshness.reason : undefined,
+    fingerprintFreshness.featureIndex.status === "stale" ? fingerprintFreshness.featureIndex.reason : undefined,
+    fingerprintFreshness.blueprint.status === "stale" ? fingerprintFreshness.blueprint.reason : undefined,
+  ].filter((reason): reason is string => Boolean(reason));
+  if (staleReasons.length === 0) {
+    return artifacts;
+  }
+  return artifacts.map((artifact) =>
+    artifact.relativePath === ".wormhole/app-process.json"
+      ? {
+          relativePath: artifact.relativePath,
+          status: "stale",
+          reason: staleReasons.join(" "),
+          mtimeMs: artifact.mtimeMs,
+        }
+      : artifact,
+  );
+}
+
+function normalizeObjective(objective: string): string {
+  return objective.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function readJson<T>(repoRoot: string, relativePath: string): T {

@@ -1894,6 +1894,7 @@ export function createWormholeMcpServer(
       description: "Read durable app-process run state, blocked gates, next action, verification records, and missing artifacts.",
       inputSchema: {
         repoRoot: z.string(),
+        objective: z.string().optional(),
       },
     },
     async (input) => jsonResult(tools.appProcessStatus(input)),

@@ -5,6 +5,22 @@ import { describe, expect, it } from "vitest";
 import { createInMemoryKernel } from "../src/kernel.js";
 import { createToolHandlers } from "../src/tools.js";
 
+function writeLargeRepo(repoRoot: string, fileCount = 1005): void {
+  mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+  writeFileSync(
+    path.join(repoRoot, "package.json"),
+    JSON.stringify({ type: "module", scripts: { test: "vitest run tests" } }, null, 2),
+  );
+  for (let index = 0; index < fileCount; index += 1) {
+    const id = String(index).padStart(4, "0");
+    writeFileSync(path.join(repoRoot, "src", `f${id}.ts`), `export const value${id} = ${index};\n`);
+  }
+  writeFileSync(
+    path.join(repoRoot, "src", "f1004.ts"),
+    "export function lifecycleAccountingMarker() { return 'large repo'; }\n",
+  );
+}
+
 describe("repo activity MCP tool handlers", () => {
   it("auto-records mission evidence and refreshes the durable graph during watch scans", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-watch-tools-"));
@@ -95,6 +111,46 @@ describe("repo activity MCP tool handlers", () => {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
+
+  it("preserves large durable index options during maintenance graph and conflict refreshes", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-state-maintenance-large-index-"));
+    writeLargeRepo(repoRoot);
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), { allowedRepoRoots: [repoRoot] });
+      tools.durableRepoIndexRefresh({ repoRoot, preset: "large_repo" });
+      const before = tools.durableIndexStatus({ repoRoot });
+
+      writeFileSync(path.join(repoRoot, "src", "f0000.ts"), "export const value0000 = 'changed';\n");
+
+      const result = tools.stateMaintenanceRun({
+        repoRoot,
+        objective: "Preserve large lifecycle index",
+        query: "lifecycleAccountingMarker",
+        changedFiles: ["src/f0000.ts"],
+        refreshGraph: true,
+        sourceConflicts: true,
+        freshness: true,
+      });
+      const after = tools.durableIndexStatus({ repoRoot });
+      const query = tools.durableRepoIndexQuery({
+        repoRoot,
+        query: "lifecycleAccountingMarker",
+        requireFresh: true,
+      });
+
+      expect(before.repoIndex?.summary.fileCount).toBeGreaterThan(1000);
+      expect(before.repoIndex?.summary.skippedFiles).not.toContain("src/f1004.ts");
+      expect(result.graph?.index.summary.fileCount).toBeGreaterThan(1000);
+      expect(result.sourceConflicts?.indexSummary.fileCount).toBeGreaterThan(1000);
+      expect(result.sourceConflicts?.indexFingerprint).toBe(after.repoIndex?.summary.indexHealth.fingerprint);
+      expect(after.repoIndex?.summary.fileCount).toBeGreaterThan(1000);
+      expect(after.repoIndex?.summary.skippedFiles).not.toContain("src/f1004.ts");
+      expect(query.results.map((entry) => entry.path)).toContain("src/f1004.ts");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  }, 20_000);
 
   it("persists failed state maintenance runs and retries with corrected inputs", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-state-maintenance-failure-"));

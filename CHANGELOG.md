@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.4.1 - 2026-06-28
+
+- Seeded agent context preparation from fresh durable repo-index query results so ctx packs can start with persisted large-repo evidence.
+- Preserved durable repo-index build options across state maintenance, watch, and source-conflict paths.
+- Extended app-process status and gate wiring to consume objective-scoped freshness, stale artifact, source-conflict, and index-health signals.
+- Added index-health coverage for skipped generated and OpenAPI contract artifacts.
+
 ## 0.4.0 - 2026-06-28
 
 - Added shared `indexHealth` metadata across repo index summaries/queries, durable index status/query results, project intelligence, context packs, and agent routing.

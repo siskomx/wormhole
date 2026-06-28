@@ -56,6 +56,7 @@ export function createIndexHealthSnapshot(input: IndexHealthInput): IndexHealthS
   const reasons = uniqueSorted([
     ...reasonForStatus(status),
     ...(truncated ? ["Index is truncated; some repository files were not indexed."] : []),
+    ...criticalSkippedArtifactReasons(skippedFiles),
     ...(input.reasons ?? []),
   ]);
 
@@ -122,6 +123,26 @@ function reasonForStatus(status: IndexHealthStatus): string[] {
     case "fresh":
       return [];
   }
+}
+
+function criticalSkippedArtifactReasons(skippedFiles: string[]): string[] {
+  const critical = skippedFiles.filter(isGeneratedApiContractPath).sort((left, right) => left.localeCompare(right));
+  if (critical.length === 0) {
+    return [];
+  }
+  const sample = critical.slice(0, 8);
+  const suffix = critical.length > sample.length ? `, and ${critical.length - sample.length} more` : "";
+  return [`Skipped generated/API contract artifacts: ${sample.join(", ")}${suffix}.`];
+}
+
+function isGeneratedApiContractPath(filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, "/");
+  return (
+    normalized === "public/api-docs/openapi.json" ||
+    normalized === "public/api-docs/openapi-agents.json" ||
+    normalized === "src/generated/openapi.ts" ||
+    /(^|\/)openapi[^/]*\.json$/i.test(normalized)
+  );
 }
 
 function uniqueSorted(values: string[]): string[] {

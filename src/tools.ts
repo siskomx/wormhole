@@ -112,6 +112,7 @@ import {
 } from "./privileged-action-gate.js";
 import { createDependencySecurityReport } from "./dependency-security.js";
 import {
+  durableRepoIndexBuildOptions,
   durableIndexStatus,
   durableIndexManifestStatus,
   queryDurableShardedRepoIndex,
@@ -322,6 +323,11 @@ export type StateMaintenanceWorkspaceInput = {
   runIds?: string[];
 };
 
+export type StateMaintenanceFreshness = {
+  durableIndex: ReturnType<typeof durableIndexStatus>;
+  durableIndexManifest: ReturnType<typeof durableIndexManifestStatus>;
+};
+
 export type StateMaintenanceRunInput = {
   repoRoot: string;
   missionId?: string;
@@ -352,6 +358,8 @@ export type StateMaintenanceRunRecord = {
   input: StateMaintenanceRunInput;
   changedFiles: string[];
   actions: StateMaintenanceAction[];
+  sourceConflicts?: ReturnType<typeof analyzeSourceConflicts>;
+  freshness?: StateMaintenanceFreshness;
   startedAt: string;
   updatedAt: string;
   error?: string;
@@ -549,17 +557,36 @@ export function createToolHandlers(
     privilegedActionGate.assertAllowed(request);
   }
 
-  function getRepoIndex(repoRoot: string): RepoIndex {
+  function getRepoIndex(
+    repoRoot: string,
+    indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">,
+  ): RepoIndex {
     const absoluteRoot = resolveAllowedRepoRoot(repoRoot, allowedRepoRoots);
-    const cacheKey = createRepoIndexCacheKey({ repoRoot: absoluteRoot });
+    const cacheKey = createRepoIndexCacheKey({ ...(indexOptions ?? {}), repoRoot: absoluteRoot });
     const existing = repoIndexes.get(cacheKey);
     if (existing && isRepoIndexFresh(existing)) {
       return existing;
     }
-    const index = buildRepoIndex({ repoRoot: absoluteRoot });
+    const index = buildRepoIndex({ ...(indexOptions ?? {}), repoRoot: absoluteRoot });
     repoIndexes.set(cacheKey, index);
     evictOldestRepoIndex(repoIndexes, maxCachedRepoIndexes);
     return index;
+  }
+
+  function preservedRepoIndexOptions(repoRoot: string): Omit<RepoIndexBuildOptions, "repoRoot"> | undefined {
+    return durableRepoIndexBuildOptions({ repoRoot });
+  }
+
+  function clearRepoIndexCaches(
+    repoRoot: string,
+    indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">,
+  ): void {
+    const absoluteRoot = resolveAllowedRepoRoot(repoRoot, allowedRepoRoots);
+    repoIndexes.delete(createRepoIndexCacheKey({ repoRoot: absoluteRoot }));
+    if (indexOptions) {
+      repoIndexes.delete(createRepoIndexCacheKey({ ...indexOptions, repoRoot: absoluteRoot }));
+    }
+    projectModelCache.delete(absoluteRoot);
   }
 
   function compileBlueprintForRepo(input: { repoRoot: string; objective: string }) {
@@ -601,9 +628,9 @@ export function createToolHandlers(
   }) {
     const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
     const changedFiles = uniqueSorted(input.changedFiles.map((file) => repoRelativePath(repoRoot, file)));
-    const index = refreshDurableRepoIndex({ repoRoot });
-    repoIndexes.delete(createRepoIndexCacheKey({ repoRoot }));
-    projectModelCache.delete(repoRoot);
+    const indexOptions = preservedRepoIndexOptions(repoRoot);
+    const index = refreshDurableRepoIndex({ ...(indexOptions ?? {}), repoRoot });
+    clearRepoIndexCaches(repoRoot, indexOptions);
     const testImpact = analyzeTestImpactV2({
       repoRoot,
       changedFiles,
@@ -683,12 +710,7 @@ export function createToolHandlers(
       | ReturnType<ReturnType<typeof createContextStore>["refreshPack"]>
       | undefined;
     let sourceConflicts: ReturnType<typeof analyzeSourceConflicts> | undefined;
-    let freshness:
-      | {
-          durableIndex: ReturnType<typeof durableIndexStatus>;
-          durableIndexManifest: ReturnType<typeof durableIndexManifestStatus>;
-        }
-      | undefined;
+    let freshness: StateMaintenanceFreshness | undefined;
     let workspace:
       | {
           written?: ReturnType<ReturnType<typeof createAgentWorkspaceStore>["write"]>;
@@ -711,6 +733,8 @@ export function createToolHandlers(
       runRecord.error = error;
       runRecord.actions = [...actions];
       runRecord.changedFiles = [...changedFiles];
+      runRecord.sourceConflicts = sourceConflicts;
+      runRecord.freshness = freshness;
       runRecord.updatedAt = new Date().toISOString();
       saveStateMaintenanceRun(runRecord);
       return {
@@ -784,9 +808,10 @@ export function createToolHandlers(
 
       if (input.sourceConflicts) {
         currentToolName = "source_conflicts_analyze";
+        const indexOptions = preservedRepoIndexOptions(repoRoot);
         sourceConflicts = analyzeSourceConflicts({
           repoRoot,
-          index: getRepoIndex(repoRoot),
+          index: getRepoIndex(repoRoot, indexOptions),
           contract: detectProjectContract({ repoRoot }),
         });
         addAction({ toolName: "source_conflicts_analyze", status: "ran" });
@@ -895,6 +920,27 @@ export function createToolHandlers(
     return finish("completed");
   }
 
+  function latestMaintenanceSignalsForMission(missionId: string):
+    | {
+        sourceConflicts?: ReturnType<typeof analyzeSourceConflicts>;
+        freshness?: StateMaintenanceFreshness;
+      }
+    | undefined {
+    const completedRuns = [...stateMaintenanceRuns.values()]
+      .filter((run) => run.missionId === missionId && run.status === "completed")
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    let sourceConflicts: ReturnType<typeof analyzeSourceConflicts> | undefined;
+    let freshness: StateMaintenanceFreshness | undefined;
+    for (const run of completedRuns) {
+      sourceConflicts ??= run.sourceConflicts;
+      freshness ??= run.freshness;
+      if (sourceConflicts && freshness) {
+        break;
+      }
+    }
+    return sourceConflicts || freshness ? { sourceConflicts, freshness } : undefined;
+  }
+
   return {
     missionStart(input: { objective: string; repoRoot: string }) {
       return kernel.startMission(input);
@@ -955,9 +1001,10 @@ export function createToolHandlers(
       sourceConflicts?: GateSourceConflictsInput;
       freshness?: GateFreshnessInput;
     }) {
+      const storedSignals = latestMaintenanceSignalsForMission(input.missionId);
       return kernel.requestGate(input.missionId, {
-        sourceConflicts: input.sourceConflicts,
-        freshness: input.freshness,
+        sourceConflicts: input.sourceConflicts ?? storedSignals?.sourceConflicts,
+        freshness: input.freshness ?? storedSignals?.freshness,
       });
     },
 
@@ -1590,11 +1637,13 @@ export function createToolHandlers(
       }
       const graphRefresh =
         session?.options.autoRefreshGraph && scan.changedFiles.length > 0
-          ? refreshDurableRepoIndex({ repoRoot: scan.repoRoot })
+          ? refreshDurableRepoIndex({
+              ...(preservedRepoIndexOptions(scan.repoRoot) ?? {}),
+              repoRoot: scan.repoRoot,
+            })
           : undefined;
       if (graphRefresh) {
-        repoIndexes.delete(createRepoIndexCacheKey({ repoRoot: scan.repoRoot }));
-        projectModelCache.delete(scan.repoRoot);
+        clearRepoIndexCaches(scan.repoRoot, preservedRepoIndexOptions(scan.repoRoot));
         repoActivityStore.recordActivity({
           repoRoot: scan.repoRoot,
           watchId: input.watchId,
@@ -1863,9 +1912,9 @@ export function createToolHandlers(
       return checkAppProcessGate(input);
     },
 
-    appProcessStatus(input: { repoRoot: string }) {
+    appProcessStatus(input: { repoRoot: string; objective?: string }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      return loadAppProcessRunBundle({ repoRoot });
+      return loadAppProcessRunBundle({ repoRoot, objective: input.objective });
     },
 
     appProcessAcceptSection(input: {
@@ -2006,7 +2055,35 @@ export function createToolHandlers(
 
     agentContextPrepare(input: Parameters<typeof prepareAgentContext>[0]) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      return prepareAgentContext({ ...input, repoRoot, projectModelCache });
+      const indexOptions = preservedRepoIndexOptions(repoRoot);
+      const durableStatus = durableIndexStatus({ repoRoot });
+      const hasFreshDurableIndex = durableStatus.sqliteIndex?.fresh === true || durableStatus.repoIndex?.fresh === true;
+      const durableQuery = hasFreshDurableIndex
+        ? queryDurableShardedRepoIndex({
+            repoRoot,
+            query: input.query ?? input.objective,
+            limit: 8,
+            requireFresh: true,
+          })
+        : undefined;
+      const durableRetrieval = durableQuery && !durableQuery.refused
+        ? {
+            usedSqlite: durableQuery.usedSqlite,
+            ...(durableQuery.retrievalMode ? { retrievalMode: durableQuery.retrievalMode } : {}),
+            results: durableQuery.results,
+            warnings: durableQuery.warnings,
+            indexHealth: durableQuery.indexHealth,
+          }
+        : undefined;
+      const preferredSources = uniqueSorted(durableRetrieval?.results.map((result) => result.path) ?? []);
+      return prepareAgentContext({
+        ...input,
+        repoRoot,
+        projectModelCache,
+        ...(indexOptions ? { indexOptions } : {}),
+        ...(preferredSources.length > 0 ? { preferredSources } : {}),
+        ...(durableRetrieval ? { durableRetrieval } : {}),
+      });
     },
 
     projectModelCacheStats() {
@@ -2065,16 +2142,16 @@ export function createToolHandlers(
     durableRepoIndexRefresh(input: RepoIndexBuildOptions) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       const result = refreshDurableRepoIndex({ ...input, repoRoot });
-      repoIndexes.delete(createRepoIndexCacheKey({ ...input, repoRoot }));
-      projectModelCache.delete(repoRoot);
+      const { repoRoot: _repoRoot, ...indexOptions } = input;
+      clearRepoIndexCaches(repoRoot, indexOptions);
       return result;
     },
 
     durableIndexManifestRefresh(input: RepoIndexBuildOptions) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       const result = refreshDurableIndexManifest({ ...input, repoRoot });
-      repoIndexes.delete(createRepoIndexCacheKey({ ...input, repoRoot }));
-      projectModelCache.delete(repoRoot);
+      const { repoRoot: _repoRoot, ...indexOptions } = input;
+      clearRepoIndexCaches(repoRoot, indexOptions);
       return result;
     },
 
