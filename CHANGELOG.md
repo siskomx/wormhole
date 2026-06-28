@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.2 - 2026-06-28
+
+- Added an internal deterministic agent-loop health primitive for the perceive, reason, plan, act, observe, and maintain phases without adding a new MCP tool surface.
+- Wired loop health to consume existing runtime behavior audit output, gate freshness, verification, source-conflict, durable-index health, and loop budget signals.
+- Added advisory safeguards for planned-mode empty observations, observed-mode runtime blockers, stale/failed/missing stop conditions, unknown tool omission, and sensitive next-tool suppression.
+
 ## 0.5.1 - 2026-06-28
 
 - Added an internal deterministic behavior-improvement review primitive that consumes existing runtime behavior, capability relation, gate, freshness, trace, and registry summaries without adding a new MCP tool surface.
