@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.1 - 2026-06-28
+
+- Added an internal deterministic behavior-improvement review primitive that consumes existing runtime behavior, capability relation, gate, freshness, trace, and registry summaries without adding a new MCP tool surface.
+- Added advisory-only report safeguards for bounded notices, circular recommendation detection, evidence-required states, and unsafe-looking tool recommendation omission.
+- Added conformance tests proving the review remains library-only and is not exposed through the registry, handlers, or MCP server listing.
+
 ## 0.5.0 - 2026-06-28
 
 - Added language-profile detection and coverage reporting so repo indexes, project contracts, project intelligence, gate signals, agent routing, and verification plans can surface language-specific guidance and gaps.
