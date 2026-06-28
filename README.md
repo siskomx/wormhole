@@ -93,6 +93,7 @@ For Codex, use the repo-local plugin metadata in `plugins/wormhole/.codex-plugin
 - [Canonical plan](docs/planning/wormhole-canonical-plan.md)
 - [Orchestration and adaptive architecture](docs/architecture/orchestration-adaptive-capabilities.md)
 - [Capability manifest contract](docs/contracts/capability-manifest.md)
+- [Inspiration](docs/inspiration.md)
 - [Changelog](CHANGELOG.md)
 
 Dated implementation plans, generated tool inventories, and one-off analysis reports are intentionally not maintained as current documentation. Use git history for implementation archaeology.
