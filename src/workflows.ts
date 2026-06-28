@@ -6,12 +6,15 @@ import {
   type RepoFeature,
   type RepoFeatureIndex,
 } from "./feature-index.js";
+import { detectProjectContract } from "./project-contract.js";
+import { buildRepoIndex } from "./repo-index.js";
 import {
   classifySourceProvenance,
   compareSourceProvenance,
   type SourceConflict,
   type SourceProvenance,
 } from "./source-authority.js";
+import { analyzeSourceConflicts } from "./source-conflicts.js";
 
 export type WorkflowKind =
   | "workflow_start_feature"
@@ -410,8 +413,10 @@ function workflow(input: {
     repoRoot: input.input.repoRoot,
     generatedAt: now,
   });
+  const sourceConflicts = collectWorkflowSourceConflicts(input.input.repoRoot);
   const featureBindings = bindWorkflowFeatures({
     featureIndex,
+    sourceConflicts,
     objective: input.input.objective,
     query: input.input.query,
     changedFiles: input.input.changedFiles ?? [],
@@ -535,6 +540,7 @@ function routeInput(input: WorkflowInput): AgentToolCall["input"] {
 
 function bindWorkflowFeatures(input: {
   featureIndex: RepoFeatureIndex;
+  sourceConflicts: SourceConflict[];
   objective: string;
   query?: string;
   changedFiles: string[];
@@ -558,7 +564,7 @@ function bindWorkflowFeatures(input: {
     })
     .slice(0, input.workflow === "workflow_onboard_repo" ? 5 : 3);
 
-  return scoredFeatures.map(({ feature }) => toFeatureBinding(feature));
+  return scoredFeatures.map(({ feature }) => toFeatureBinding(feature, input.sourceConflicts));
 }
 
 function scoreFeatureBinding(input: {
@@ -589,7 +595,7 @@ function scoreFeatureBinding(input: {
   return score;
 }
 
-function toFeatureBinding(feature: RepoFeature): WorkflowFeatureBinding {
+function toFeatureBinding(feature: RepoFeature, sourceConflicts: SourceConflict[]): WorkflowFeatureBinding {
   return {
     featureId: feature.featureId,
     name: feature.name,
@@ -604,10 +610,70 @@ function toFeatureBinding(feature: RepoFeature): WorkflowFeatureBinding {
     docs: feature.docs,
     sourceOfTruth: feature.sourceOfTruth,
     supportingDocs: feature.supportingDocs,
-    conflicts: feature.conflicts,
+    conflicts: uniqueSourceConflicts([
+      ...feature.conflicts,
+      ...sourceConflicts.filter((conflict) => conflictBelongsToFeature(conflict, feature)),
+    ]),
     sideEffects: feature.risk.sideEffects,
     evidence: feature.evidence,
   };
+}
+
+function collectWorkflowSourceConflicts(repoRoot: string): SourceConflict[] {
+  try {
+    const index = buildRepoIndex({ repoRoot });
+    return analyzeSourceConflicts({
+      repoRoot,
+      index,
+      contract: detectProjectContract({ repoRoot }),
+    }).conflicts;
+  } catch {
+    return [];
+  }
+}
+
+function conflictBelongsToFeature(conflict: SourceConflict, feature: RepoFeature): boolean {
+  const featurePaths = new Set(feature.files.map((file) => toRepoPath(file.path)));
+  const featureRoots = feature.roots
+    .map(toRepoPath)
+    .filter((root) => isSpecificFeatureRoot(root, feature.featureId));
+  const conflictPaths = [
+    ...conflictingSourcePathsFromConflict(conflict),
+    ...subjectPathsFromConflict(conflict.subject),
+  ];
+
+  return conflictPaths.some((repoPath) => pathBelongsToFeature(repoPath, featurePaths, featureRoots));
+}
+
+function pathBelongsToFeature(pathInput: string, featurePaths: Set<string>, featureRoots: string[]): boolean {
+  const repoPath = toRepoPath(pathInput);
+  return featurePaths.has(repoPath) || featureRoots.some((root) => repoPath === root || repoPath.startsWith(`${root}/`));
+}
+
+function isSpecificFeatureRoot(rootInput: string, featureId: string): boolean {
+  const root = toRepoPath(rootInput);
+  if (root === "." || root.startsWith("docs/") || root === "migrations" || root.startsWith("migrations/")) {
+    return false;
+  }
+  return normalizeLookup(root).includes(normalizeLookup(featureId));
+}
+
+function conflictingSourcePathsFromConflict(conflict: SourceConflict): string[] {
+  return conflict.conflicting
+    .map((source) => source.sourcePath)
+    .filter((sourcePath): sourcePath is string => Boolean(sourcePath));
+}
+
+function subjectPathsFromConflict(subject: string): string[] {
+  return subject.includes(" -> ") ? subject.split(" -> ") : [];
+}
+
+function uniqueSourceConflicts(conflicts: SourceConflict[]): SourceConflict[] {
+  const byKey = new Map<string, SourceConflict>();
+  for (const conflict of conflicts) {
+    byKey.set(`${conflict.subject}\0${conflict.message}`, conflict);
+  }
+  return [...byKey.values()].sort((left, right) => left.subject.localeCompare(right.subject));
 }
 
 function createExactNextAction(

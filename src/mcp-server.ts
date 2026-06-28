@@ -1518,6 +1518,28 @@ export function createWormholeMcpServer(
   );
 
   server.registerTool(
+    "source_conflicts_analyze",
+    {
+      description: "Compare documentation and generated artifacts against current repo, package, and schema facts.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.sourceConflictsAnalyze(input)),
+  );
+
+  server.registerTool(
+    "capability_relation_audit",
+    {
+      description: "Audit capability-to-tool/workflow/test relations and report missing wiring.",
+      inputSchema: {
+        allowlist: z.array(z.string()).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.capabilityRelationAudit(input)),
+  );
+
+  server.registerTool(
     "dependency_inventory",
     {
       description: "Return dependency inventory from the detected project contract.",
@@ -2137,6 +2159,8 @@ export function createWormholeMcpServer(
         watchId: z.string().optional(),
         scanWatch: z.boolean().optional(),
         refreshGraph: z.boolean().optional(),
+        sourceConflicts: z.boolean().optional(),
+        freshness: z.boolean().optional(),
         recordEvidence: z.boolean().optional(),
         context: z
           .object({

@@ -23,6 +23,47 @@ describe("Wormhole MCP tool handlers", () => {
     expect(status.evidenceCount).toBe(0);
   });
 
+  it("analyzes source conflicts through the public tool handler", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-source-conflict-tool-"));
+    try {
+      mkdirSync(path.join(repoRoot, "docs"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+      writeFileSync(
+        path.join(repoRoot, "package.json"),
+        JSON.stringify({ scripts: { test: "vitest run" } }, null, 2),
+      );
+      writeFileSync(path.join(repoRoot, "src", "existing.ts"), "export const existing = true;\n");
+      writeFileSync(
+        path.join(repoRoot, "docs", "architecture.md"),
+        [
+          "# Architecture",
+          "",
+          "See [missing](../src/missing.ts).",
+          "Run `npm run deploy` before release.",
+        ].join("\n"),
+      );
+
+      const tools = createToolHandlers(createInMemoryKernel(), { allowedRepoRoots: [repoRoot] });
+      const result = tools.sourceConflictsAnalyze({ repoRoot });
+
+      expect(result.indexFingerprint).toEqual(expect.any(String));
+      expect(result.conflicts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            subject: "docs/architecture.md -> src/missing.ts",
+            resolution: "needs_validation",
+          }),
+          expect.objectContaining({
+            subject: "script:deploy",
+            resolution: "trust_authoritative",
+          }),
+        ]),
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("emits plans through the generic tool handlers", () => {
     const kernel = createInMemoryKernel();
     const tools = createToolHandlers(kernel);

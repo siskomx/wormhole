@@ -156,6 +156,65 @@ describe("repo activity MCP tool handlers", () => {
     }
   });
 
+  it("optionally runs source conflict analysis and durable freshness checks during state maintenance", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-state-maintenance-freshness-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    mkdirSync(path.join(repoRoot, ".wormhole", "workflows"), { recursive: true });
+    writeFileSync(
+      path.join(repoRoot, "package.json"),
+      JSON.stringify(
+        {
+          type: "module",
+          scripts: { test: "vitest run tests" },
+          devDependencies: { typescript: "^6.0.3", vitest: "^4.1.9" },
+        },
+        null,
+        2,
+      ),
+    );
+    writeFileSync(path.join(repoRoot, "package-lock.json"), JSON.stringify({ packages: {} }));
+    writeFileSync(path.join(repoRoot, "src", "app.ts"), "export const app = 1;\n");
+    writeFileSync(
+      path.join(repoRoot, ".wormhole", "workflows", "stale.json"),
+      `${JSON.stringify({ indexFingerprint: "old-fingerprint" }, null, 2)}\n`,
+    );
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), { allowedRepoRoots: [repoRoot] });
+      tools.durableIndexManifestRefresh({ repoRoot });
+      writeFileSync(path.join(repoRoot, "src", "app.ts"), "export const app = 2;\n");
+
+      const result = tools.stateMaintenanceRun({
+        repoRoot,
+        objective: "Refresh maintenance signals",
+        changedFiles: ["src/app.ts"],
+        refreshGraph: false,
+        sourceConflicts: true,
+        freshness: true,
+      });
+
+      expect(result.status).toBe("completed");
+      expect(result.actions.map((action: { toolName: string }) => action.toolName)).toEqual(
+        expect.arrayContaining([
+          "source_conflicts_analyze",
+          "durable_index_status",
+          "durable_index_manifest_status",
+          "mission_route",
+        ]),
+      );
+      expect(result.sourceConflicts?.conflicts).toContainEqual(
+        expect.objectContaining({
+          subject: ".wormhole/workflows/stale.json#indexFingerprint",
+          severity: "warning",
+        }),
+      );
+      expect(result.freshness?.durableIndex.repoIndex?.fresh).toBe(false);
+      expect(result.freshness?.durableIndexManifest.manifest?.fresh).toBe(false);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("runs graph, context, evidence, route, and workspace maintenance as one audited tool call", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-state-maintenance-"));
     mkdirSync(path.join(repoRoot, "src"), { recursive: true });

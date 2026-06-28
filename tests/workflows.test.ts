@@ -164,6 +164,80 @@ describe("golden-path workflows", () => {
     }
   });
 
+  it("surfaces source conflicts for feature-bound stale documentation claims", () => {
+    const repoRoot = createChatFixtureRepo();
+    try {
+      mkdirSync(path.join(repoRoot, "docs", "discoveries", "features"), { recursive: true });
+      writeFileSync(
+        path.join(repoRoot, "docs", "discoveries", "features", "chat.md"),
+        [
+          "# Chat",
+          "",
+          "Current implementation: [missing](../../../src/features/chat/Missing.tsx).",
+        ].join("\n"),
+      );
+      writeFileSync(
+        path.join(repoRoot, "docs", "unrelated.md"),
+        ["# Unrelated", "", "Tables: missing_accounts."].join("\n"),
+      );
+
+      const workflow = createFeatureWorkflow({
+        repoRoot,
+        objective: "Fix chat message sending",
+      });
+
+      expect(workflow.featureBindings[0]?.conflicts).toContainEqual(
+        expect.objectContaining({
+          subject: "docs/discoveries/features/chat.md -> src/features/chat/Missing.tsx",
+          resolution: "needs_validation",
+        }),
+      );
+      expect(workflow.resume.conflicts).toContainEqual(
+        expect.objectContaining({
+          subject: "docs/discoveries/features/chat.md -> src/features/chat/Missing.tsx",
+        }),
+      );
+      expect(workflow.featureBindings[0]?.conflicts.map((conflict) => conflict.subject)).not.toContain(
+        "table:missing_accounts",
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("does not attach conflicts through broad fallback feature roots", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-workflow-broad-root-"));
+    try {
+      mkdirSync(path.join(repoRoot, "backend", "src", "modules", "fiscal"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "backend", "src", ".claude", "refs"), { recursive: true });
+      writeFileSync(
+        path.join(repoRoot, "package.json"),
+        JSON.stringify({ scripts: { test: "vitest run" } }, null, 2),
+      );
+      writeFileSync(
+        path.join(repoRoot, "backend", "src", "modules", "fiscal", "AccountingService.ts"),
+        "export class AccountingService {}\n",
+      );
+      writeFileSync(
+        path.join(repoRoot, "backend", "src", ".claude", "refs", "testing.md"),
+        "Run `npm run missing` before release.\n",
+      );
+
+      const workflow = createFeatureWorkflow({
+        repoRoot,
+        objective: "Finish accounting production readiness",
+      });
+
+      expect(workflow.featureBindings[0]?.featureId).toBe("accounting");
+      expect(workflow.featureBindings[0]?.roots).toContain("backend/src");
+      expect(workflow.featureBindings[0]?.conflicts.map((conflict) => conflict.subject)).not.toContain(
+        "script:missing",
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("prefers compound workflow features over broad single-token feature matches", () => {
     const repoRoot = createClientAgentFixtureRepo();
     try {

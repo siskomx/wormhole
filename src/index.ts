@@ -52,3 +52,6 @@ export * from "./privileged-action-gate.js";
 export * from "./workflows.js";
 export * from "./workflow-files.js";
 export * from "./source-authority.js";
+export * from "./source-conflicts.js";
+export * from "./capability-relations.js";
+export * from "./capability-relation-audit.js";

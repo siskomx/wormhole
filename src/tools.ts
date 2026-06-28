@@ -270,6 +270,11 @@ import {
   type RepoIndexPathInput,
   type RepoIndexQueryInput,
 } from "./repo-index.js";
+import { analyzeSourceConflicts } from "./source-conflicts.js";
+import {
+  auditCapabilityRelations,
+  createDefaultCapabilityRelationAuditInput,
+} from "./capability-relation-audit.js";
 import {
   createModelProfileRegistry,
   type ModelProfile,
@@ -326,6 +331,8 @@ export type StateMaintenanceRunInput = {
   watchId?: string;
   scanWatch?: boolean;
   refreshGraph?: boolean;
+  sourceConflicts?: boolean;
+  freshness?: boolean;
   recordEvidence?: boolean;
   context?: StateMaintenanceContextInput;
   workspace?: StateMaintenanceWorkspaceInput;
@@ -657,6 +664,13 @@ export function createToolHandlers(
     let context:
       | ReturnType<ReturnType<typeof createContextStore>["refreshPack"]>
       | undefined;
+    let sourceConflicts: ReturnType<typeof analyzeSourceConflicts> | undefined;
+    let freshness:
+      | {
+          durableIndex: ReturnType<typeof durableIndexStatus>;
+          durableIndexManifest: ReturnType<typeof durableIndexManifestStatus>;
+        }
+      | undefined;
     let workspace:
       | {
           written?: ReturnType<ReturnType<typeof createAgentWorkspaceStore>["write"]>;
@@ -697,6 +711,8 @@ export function createToolHandlers(
         ...(watchScan ? { watchScan } : {}),
         ...(graph ? { graph } : {}),
         ...(context ? { context } : {}),
+        ...(sourceConflicts ? { sourceConflicts } : {}),
+        ...(freshness ? { freshness } : {}),
         recordedEvidence,
         ...(workspace ? { workspace } : {}),
         ...(route ? { route } : {}),
@@ -746,6 +762,29 @@ export function createToolHandlers(
         addAction({ toolName: "ctx_pack_refresh", status: "ran" });
       }
 
+      if (input.sourceConflicts) {
+        currentToolName = "source_conflicts_analyze";
+        sourceConflicts = analyzeSourceConflicts({
+          repoRoot,
+          index: getRepoIndex(repoRoot),
+          contract: detectProjectContract({ repoRoot }),
+        });
+        addAction({ toolName: "source_conflicts_analyze", status: "ran" });
+      }
+
+      if (input.freshness) {
+        currentToolName = "durable_index_status";
+        const durableIndex = durableIndexStatus({ repoRoot });
+        addAction({ toolName: "durable_index_status", status: "ran" });
+        currentToolName = "durable_index_manifest_status";
+        const durableIndexManifest = durableIndexManifestStatus({ repoRoot });
+        addAction({ toolName: "durable_index_manifest_status", status: "ran" });
+        freshness = {
+          durableIndex,
+          durableIndexManifest,
+        };
+      }
+
       if (input.recordEvidence) {
         currentToolName = "record_evidence";
         if (input.missionId) {
@@ -763,6 +802,9 @@ export function createToolHandlers(
                   graphRefreshMode: graph?.refreshMode,
                   graphIndexPath: graph?.index.indexPath,
                   contextPackId: context?.pack.packId,
+                  sourceConflictCount: sourceConflicts?.conflicts.length,
+                  durableRepoIndexFresh: freshness?.durableIndex.repoIndex?.fresh,
+                  durableIndexManifestFresh: freshness?.durableIndexManifest.manifest?.fresh,
                   watchId: input.watchId,
                 },
                 null,
@@ -1466,6 +1508,23 @@ export function createToolHandlers(
 
     repoIndexReport(input: { repoRoot: string }) {
       return getRepoGraphReport(getRepoIndex(input.repoRoot));
+    },
+
+    sourceConflictsAnalyze(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return analyzeSourceConflicts({
+        repoRoot,
+        index: getRepoIndex(repoRoot),
+        contract: detectProjectContract({ repoRoot }),
+      });
+    },
+
+    capabilityRelationAudit(input: { allowlist?: string[] } = {}) {
+      return auditCapabilityRelations(
+        createDefaultCapabilityRelationAuditInput({
+          allowlist: input.allowlist,
+        }),
+      );
     },
 
     repoGraphExport(input: { repoRoot: string; communities?: GraphCommunity[] }) {
