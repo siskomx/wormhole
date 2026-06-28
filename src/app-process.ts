@@ -19,6 +19,15 @@ export const APP_PROCESS_LANES = [
   "ux",
   "security",
   "verification",
+  "lifecycle",
+] as const;
+
+export const APP_PROCESS_LIFECYCLE_STAGES = [
+  "environment",
+  "data_migration",
+  "ci",
+  "deployment",
+  "release",
 ] as const;
 
 export const APP_PROCESS_STORY_LANES = [
@@ -39,6 +48,8 @@ export type AppProcessStoryLane = (typeof APP_PROCESS_STORY_LANES)[number];
 export type AppProcessStatus = "partial" | "ready";
 export type AppProcessSectionStatus = "ai_drafted" | "confirmed_from_repo" | "needs_user_confirmation";
 export type AppProcessSecurityPosture = "low" | "medium" | "high";
+export type AppProcessLifecycleStageId = (typeof APP_PROCESS_LIFECYCLE_STAGES)[number];
+export type AppProcessLifecycleStageStatus = "ready" | "warning" | "unknown";
 
 export type AppProcessEvidence = {
   source: "objective" | "repo" | "blueprint" | "derived";
@@ -94,6 +105,19 @@ export type AppProcessSecurity = {
 export type AppProcessVerification = {
   requiredCommands: BlueprintCommand[];
   qualityGates: string[];
+};
+
+export type AppProcessLifecycleStage = {
+  stage: AppProcessLifecycleStageId;
+  status: AppProcessLifecycleStageStatus;
+  evidence: AppProcessEvidence[];
+  findings: string[];
+};
+
+export type AppProcessLifecycle = {
+  stages: AppProcessLifecycleStage[];
+  releaseReadiness: "ready" | "needs_attention";
+  requiredSignals: string[];
 };
 
 export type AppProcessStory = {
@@ -172,6 +196,7 @@ export type AppProcess = {
   ux: AppProcessSection<AppProcessUx>;
   security: AppProcessSection<AppProcessSecurity>;
   verification: AppProcessSection<AppProcessVerification>;
+  lifecycle: AppProcessSection<AppProcessLifecycle>;
   repoIntelligence: AppProcessRepoIntelligence;
   progressive: AppProcessProgressiveState;
 };
@@ -272,6 +297,7 @@ export function compileAppProcess(input: AppProcessCompileInput): AppProcessComp
   const product = createProductDefinition({ objective, repoRoot });
   const architecture = createArchitecture(input.blueprint);
   const verification = createVerification(input.blueprint);
+  const lifecycle = createLifecycle({ architecture, verification, blueprint: input.blueprint });
   const security = createSecurity(product);
   const ux = createUx(product);
   const repoIntelligence = createRepoIntelligence(input.blueprint.blueprint.featureIndex);
@@ -287,6 +313,7 @@ export function compileAppProcess(input: AppProcessCompileInput): AppProcessComp
     ux,
     security,
     verification,
+    lifecycle,
   });
   const fingerprint = fingerprintAppProcess([
     objective,
@@ -294,6 +321,7 @@ export function compileAppProcess(input: AppProcessCompileInput): AppProcessComp
     input.blueprint.blueprint.featureIndex.fingerprint,
     product.keyEntities.join(","),
     backlog.stories.map((story) => story.storyId).join(","),
+    lifecycle.stages.map((stage) => `${stage.stage}:${stage.status}`).join(","),
   ]);
   const appProcess: AppProcess = {
     schemaVersion: "app-process.v0",
@@ -320,6 +348,7 @@ export function compileAppProcess(input: AppProcessCompileInput): AppProcessComp
       blueprintEvidence,
     ]),
     verification: section(verification, "confirmed_from_repo", 0.85, [blueprintEvidence]),
+    lifecycle: section(lifecycle, "confirmed_from_repo", 0.75, [blueprintEvidence]),
     repoIntelligence,
     progressive,
   };
@@ -354,6 +383,7 @@ export function renderAppProcessContext(input: Pick<AppProcessCompileResult, "ap
         .slice(0, 12)
         .map((feature) => `- ${feature.featureId}: files=${feature.fileCount}, key=${feature.keyFiles.slice(0, 4).join(", ")}`)
     : ["- No feature roots detected."];
+  const lifecycleLines = appProcess.lifecycle.value.stages.map((stage) => `- ${stage.stage}: ${stage.status}`);
 
   return [
     "# Wormhole App Process Context",
@@ -371,6 +401,10 @@ export function renderAppProcessContext(input: Pick<AppProcessCompileResult, "ap
     "",
     "## Architecture",
     `Stack: ${architecture.stack.language}, ${architecture.stack.runtime}, ${architecture.stack.framework}, ${architecture.stack.database}`,
+    "",
+    "## Lifecycle",
+    ...lifecycleLines,
+    `Release readiness: ${appProcess.lifecycle.value.releaseReadiness}`,
     "",
     "## Repo Intelligence",
     `Feature index: ${appProcess.repoIntelligence.featureIndexPath}`,
@@ -426,6 +460,14 @@ export function validateAppProcess(appProcess: AppProcess): AppProcessValidation
   }
   if (appProcess.roadmap.value.phases.length === 0) {
     errors.push("Roadmap requires at least one phase.");
+  }
+  const lifecycleStageIds = appProcess.lifecycle.value.stages.map((stage) => stage.stage);
+  if (
+    lifecycleStageIds.length !== APP_PROCESS_LIFECYCLE_STAGES.length ||
+    new Set(lifecycleStageIds).size !== APP_PROCESS_LIFECYCLE_STAGES.length ||
+    !APP_PROCESS_LIFECYCLE_STAGES.every((stage) => lifecycleStageIds.includes(stage))
+  ) {
+    errors.push("Lifecycle requires environment, data_migration, ci, deployment, and release stages.");
   }
   for (const story of appProcess.backlog.value.stories) {
     if (story.acceptanceCriteria.length === 0) {
@@ -554,6 +596,174 @@ function createVerification(blueprint: BlueprintCompileResult): AppProcessVerifi
       "Every implementation story must link to a verification command or test lane.",
       "Completion claims must pass the blueprint verification gate.",
     ],
+  };
+}
+
+function createLifecycle(input: {
+  architecture: AppProcessArchitecture;
+  verification: AppProcessVerification;
+  blueprint: BlueprintCompileResult;
+}): AppProcessLifecycle {
+  const environmentStage = createEnvironmentLifecycleStage(input.architecture);
+  const migrationStage = createMigrationLifecycleStage(input.architecture, input.blueprint);
+  const ciStage = createCiLifecycleStage(input.verification);
+  const deploymentStage = createDeploymentLifecycleStage(input.blueprint);
+  const releaseStage = createReleaseLifecycleStage([
+    environmentStage,
+    migrationStage,
+    ciStage,
+    deploymentStage,
+  ]);
+  return {
+    stages: [
+      environmentStage,
+      migrationStage,
+      ciStage,
+      deploymentStage,
+      releaseStage,
+    ],
+    releaseReadiness: releaseStage.status === "ready" ? "ready" : "needs_attention",
+    requiredSignals: [
+      "environment stack",
+      "database or migration convention",
+      "verification command",
+      "deployment artifact review",
+      "release readiness",
+    ],
+  };
+}
+
+function createEnvironmentLifecycleStage(architecture: AppProcessArchitecture): AppProcessLifecycleStage {
+  const stack = architecture.stack;
+  const missing = [
+    ["package manager", stack.packageManager],
+    ["language", stack.language],
+    ["runtime", stack.runtime],
+    ["framework", stack.framework],
+  ].filter(([, value]) => !isConcreteLifecycleValue(value));
+  return lifecycleStage(
+    "environment",
+    missing.length === 0 ? "ready" : "unknown",
+    [
+      evidence(
+        "blueprint",
+        `Environment stack from blueprint: package manager ${stack.packageManager}, language ${stack.language}, runtime ${stack.runtime}, framework ${stack.framework}.`,
+        missing.length === 0 ? 0.85 : 0.45,
+      ),
+    ],
+    missing.map(([label]) => `Blueprint did not confirm ${label}.`),
+  );
+}
+
+function createMigrationLifecycleStage(
+  architecture: AppProcessArchitecture,
+  blueprint: BlueprintCompileResult,
+): AppProcessLifecycleStage {
+  const database = architecture.stack.database;
+  const migrationPaths = lifecycleSampleFiles(blueprint).filter(isMigrationPath);
+  if (!isConcreteLifecycleValue(database)) {
+    return lifecycleStage(
+      "data_migration",
+      "ready",
+      [evidence("blueprint", "No concrete database convention detected; migration check is not required yet.", 0.65)],
+      [],
+    );
+  }
+  if (migrationPaths.length > 0) {
+    return lifecycleStage(
+      "data_migration",
+      "ready",
+      migrationPaths.slice(0, 5).map((repoPath) =>
+        evidence("repo", `Migration evidence detected at ${repoPath}.`, 0.8, repoPath),
+      ),
+      [],
+    );
+  }
+  return lifecycleStage(
+    "data_migration",
+    "warning",
+    [evidence("blueprint", `Database convention ${database} was detected.`, 0.75)],
+    ["Database convention detected; migration evidence is not linked yet."],
+  );
+}
+
+function createCiLifecycleStage(verification: AppProcessVerification): AppProcessLifecycleStage {
+  if (verification.requiredCommands.length === 0) {
+    return lifecycleStage(
+      "ci",
+      "unknown",
+      [evidence("blueprint", "No required verification command was detected.", 0.4)],
+      ["No required verification command detected."],
+    );
+  }
+  return lifecycleStage(
+    "ci",
+    "ready",
+    verification.requiredCommands.map((command) =>
+      evidence("blueprint", `Required verification command linked: ${command.name}.`, 0.85),
+    ),
+    [],
+  );
+}
+
+function createDeploymentLifecycleStage(blueprint: BlueprintCompileResult): AppProcessLifecycleStage {
+  const deploymentPaths = lifecycleSampleFiles(blueprint).filter(isDeploymentPath);
+  if (deploymentPaths.length === 0) {
+    return lifecycleStage(
+      "deployment",
+      "unknown",
+      [evidence("derived", "No deployment artifact was detected in progressive lane samples.", 0.45)],
+      ["No deployment artifact detected."],
+    );
+  }
+  return lifecycleStage(
+    "deployment",
+    "warning",
+    deploymentPaths.slice(0, 5).map((repoPath) =>
+      evidence("repo", `Deployment-related artifact detected at ${repoPath}.`, 0.75, repoPath),
+    ),
+    ["Deployment artifacts detected; deployment readiness is not verified yet."],
+  );
+}
+
+function createReleaseLifecycleStage(stages: AppProcessLifecycleStage[]): AppProcessLifecycleStage {
+  const warnings = stages.filter((stage) => stage.status === "warning");
+  const unknowns = stages.filter((stage) => stage.status === "unknown");
+  if (warnings.length > 0) {
+    return lifecycleStage(
+      "release",
+      "warning",
+      [evidence("derived", "Release readiness aggregated from lifecycle stages.", 0.65)],
+      warnings.map((stage) => `${stage.stage} needs attention before release.`),
+    );
+  }
+  if (unknowns.length > 0) {
+    return lifecycleStage(
+      "release",
+      "unknown",
+      [evidence("derived", "Release readiness aggregated from lifecycle stages.", 0.55)],
+      unknowns.map((stage) => `${stage.stage} readiness is unknown.`),
+    );
+  }
+  return lifecycleStage(
+    "release",
+    "ready",
+    [evidence("derived", "All local lifecycle stages are ready.", 0.75)],
+    [],
+  );
+}
+
+function lifecycleStage(
+  stage: AppProcessLifecycleStageId,
+  status: AppProcessLifecycleStageStatus,
+  evidenceItems: AppProcessEvidence[],
+  findings: string[],
+): AppProcessLifecycleStage {
+  return {
+    stage,
+    status,
+    evidence: evidenceItems,
+    findings,
   };
 }
 
@@ -733,6 +943,7 @@ function createProgressiveState(input: {
   ux: AppProcessUx;
   security: AppProcessSecurity;
   verification: AppProcessVerification;
+  lifecycle: AppProcessLifecycle;
 }): AppProcessProgressiveState {
   const counts: Record<AppProcessLaneId, number> = {
     discovery: input.product.assumptions.length,
@@ -743,6 +954,7 @@ function createProgressiveState(input: {
     ux: input.ux.primaryFlows.length + input.ux.screens.length,
     security: input.security.requiredControls.length,
     verification: input.verification.requiredCommands.length + input.verification.qualityGates.length,
+    lifecycle: input.lifecycle.stages.length + input.lifecycle.requiredSignals.length,
   };
   return {
     status: "partial",
@@ -753,6 +965,32 @@ function createProgressiveState(input: {
       artifactPath: `.wormhole/lanes/${lane}.md`,
     })),
   };
+}
+
+function lifecycleSampleFiles(blueprint: BlueprintCompileResult): string[] {
+  return [
+    ...new Set(
+      (blueprint.progressive?.lanes ?? []).flatMap((lane) =>
+        lane.sampleFiles.map((sampleFile) => sampleFile.replaceAll("\\", "/")),
+      ),
+    ),
+  ].sort((left, right) => left.localeCompare(right));
+}
+
+function isMigrationPath(repoPath: string): boolean {
+  return /(^|\/)(migrations?|prisma\/migrations)(\/|$)/i.test(repoPath) ||
+    /(^|\/).*migration.*\.(sql|ts|js|mjs|cjs)$/i.test(repoPath);
+}
+
+function isDeploymentPath(repoPath: string): boolean {
+  return /(^|\/)(deploy|deployment|docker|infra|k8s|helm|nginx)(\/|$)/i.test(repoPath) ||
+    /(^|\/)\.github\/workflows\//i.test(repoPath) ||
+    /(^|\/)(dockerfile|docker-compose|vercel\.json|netlify\.toml|fly\.toml)$/i.test(repoPath);
+}
+
+function isConcreteLifecycleValue(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 && normalized !== "unknown" && normalized !== "none";
 }
 
 function extractEntities(objective: string, repoSummary: string): string[] {

@@ -68,8 +68,30 @@ describe("app process compiler", () => {
       expect(result.appProcess.backlog.value.stories.every((story) => story.acceptanceCriteria.length > 0)).toBe(true);
       expect(result.appProcess.backlog.value.stories.every((story) => story.verifiableBy.length > 0)).toBe(true);
       expect(result.appProcess.progressive.lanes.map((lane) => lane.lane)).toEqual(
-        expect.arrayContaining(["discovery", "product", "roadmap", "backlog", "architecture", "ux", "security", "verification"]),
+        expect.arrayContaining([
+          "discovery",
+          "product",
+          "roadmap",
+          "backlog",
+          "architecture",
+          "ux",
+          "security",
+          "verification",
+          "lifecycle",
+        ]),
       );
+      expect(result.appProcess.lifecycle.value.stages.map((stage) => stage.stage)).toEqual([
+        "environment",
+        "data_migration",
+        "ci",
+        "deployment",
+        "release",
+      ]);
+      expect(result.appProcess.lifecycle.value.releaseReadiness).toBe("needs_attention");
+      expect(result.appProcess.lifecycle.value.stages.find((stage) => stage.stage === "data_migration")?.status).toBe("warning");
+      expect(result.appProcess.lifecycle.value.stages.find((stage) => stage.stage === "ci")?.status).toBe("ready");
+      expect(result.appContextMarkdown).toContain("## Lifecycle");
+      expect(result.appContextMarkdown).toContain("- environment:");
       expect(validateAppProcess(result.appProcess).valid).toBe(true);
 
       const blocked = checkAppProcessGate({
@@ -113,6 +135,40 @@ describe("app process compiler", () => {
       expect(markdown).toContain("Product definition: ai_drafted");
       expect(markdown).toContain("Current phase: 1");
       expect(markdown).not.toContain("undefined");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("marks data migration ready when a detected database has migration evidence", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-app-process-lifecycle-migrations-"));
+    try {
+      mkdirSync(path.join(repoRoot, "migrations"), { recursive: true });
+      writeFileSync(
+        path.join(repoRoot, "package.json"),
+        JSON.stringify(
+          {
+            type: "module",
+            scripts: { test: "vitest run tests" },
+            dependencies: { pg: "^8.16.0" },
+            devDependencies: { typescript: "^6.0.3", vitest: "^4.1.9" },
+          },
+          null,
+          2,
+        ),
+      );
+      writeFileSync(path.join(repoRoot, "package-lock.json"), JSON.stringify({ packages: {} }));
+      writeFileSync(path.join(repoRoot, "migrations", "001_create_clients.sql"), "create table clients(id text);\n");
+
+      const result = compileAppProcess({
+        repoRoot,
+        objective: "Build billing workflows for accountants.",
+        blueprint: compileBootstrapBlueprint({ repoRoot, objective: "Build billing workflows for accountants." }),
+      });
+
+      const migrationStage = result.appProcess.lifecycle.value.stages.find((stage) => stage.stage === "data_migration");
+      expect(migrationStage?.status).toBe("ready");
+      expect(migrationStage?.evidence.map((item) => item.sourcePath)).toContain("migrations/001_create_clients.sql");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

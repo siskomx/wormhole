@@ -52,6 +52,7 @@ export function writeAppProcessArtifacts(input: WriteAppProcessArtifactsInput): 
     writeArtifact(repoRoot, ".wormhole/lanes/security.md", renderSecurityLane(appProcess)),
     writeArtifact(repoRoot, ".wormhole/lanes/ux.md", renderUxLane(appProcess)),
     writeArtifact(repoRoot, ".wormhole/lanes/verification.md", renderVerificationLane(appProcess)),
+    writeArtifact(repoRoot, ".wormhole/lanes/lifecycle.md", renderLifecycleLane(appProcess)),
   ].sort((left, right) => left.relativePath.localeCompare(right.relativePath));
 
   return {
@@ -177,6 +178,34 @@ function renderVerificationLane(appProcess: AppProcess): string {
     "## Quality Gates",
     ...verification.qualityGates.map((item) => `- ${item}`),
     "",
+  ].join("\n");
+}
+
+function renderLifecycleLane(appProcess: AppProcess): string {
+  const lifecycle = appProcess.lifecycle.value;
+  const requiredSignals = lifecycle.requiredSignals.length > 0
+    ? lifecycle.requiredSignals.map((signal) => `- ${signal}`)
+    : ["- No lifecycle signals configured."];
+  return [
+    "# Lifecycle Lane",
+    "",
+    `Release readiness: ${lifecycle.releaseReadiness}`,
+    "",
+    "## Required Signals",
+    ...requiredSignals,
+    "",
+    ...lifecycle.stages.flatMap((stage) => [
+      `## ${stage.stage}`,
+      "",
+      `Status: ${stage.status}`,
+      "",
+      "Findings:",
+      ...(stage.findings.length > 0 ? stage.findings.map((finding) => `- ${finding}`) : ["- No findings."]),
+      "",
+      "Evidence:",
+      ...(stage.evidence.length > 0 ? stage.evidence.map((item) => `- ${item.summary}`) : ["- No evidence linked."]),
+      "",
+    ]),
   ].join("\n");
 }
 

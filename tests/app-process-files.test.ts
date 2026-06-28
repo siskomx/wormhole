@@ -62,11 +62,16 @@ describe("app process artifact writer", () => {
           ".wormhole/lanes/ux.md",
           ".wormhole/lanes/security.md",
           ".wormhole/lanes/verification.md",
+          ".wormhole/lanes/lifecycle.md",
         ]),
       );
       expect(existsSync(path.join(repoRoot, ".wormhole", "app-process.json"))).toBe(true);
       expect(readFileSync(path.join(repoRoot, ".wormhole", "app-context.md"), "utf8")).toContain("chat");
       expect(readFileSync(path.join(repoRoot, ".wormhole", "lanes", "discovery.md"), "utf8")).toContain("src/features/chat/hooks/useChat.ts");
+      const lifecycleLane = readFileSync(path.join(repoRoot, ".wormhole", "lanes", "lifecycle.md"), "utf8");
+      expect(lifecycleLane).toContain("# Lifecycle Lane");
+      expect(lifecycleLane).toContain("## environment");
+      expect(lifecycleLane).toContain("Release readiness:");
       expect(
         JSON.parse(readFileSync(path.join(repoRoot, ".wormhole", "feature-index.json"), "utf8")).features.find(
           (feature: { featureId: string }) => feature.featureId === "chat",

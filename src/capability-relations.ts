@@ -249,7 +249,7 @@ export const CAPABILITY_RELATIONS: CapabilityRelation[] = [
       "app_process_validate",
       "app_process_gate_check",
     ],
-    artifactKinds: ["app-process", "roadmap", "backlog"],
+    artifactKinds: ["app-process", "roadmap", "backlog", "lifecycle"],
     freshnessChecks: ["app-process-gate-check"],
     testFiles: ["tests/app-process.test.ts", "tests/app-process-files.test.ts"],
   },

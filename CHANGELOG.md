@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-06-28
+
+- Added a first-class app lifecycle lane covering environment, data migration, CI, deployment, and release readiness.
+- Wired lifecycle into app-process compilation, context rendering, validation, progressive lane summaries, and generated `.wormhole/lanes/lifecycle.md` artifacts.
+- Added lifecycle artifact relation coverage for the app-process compiler.
+- Documented lifecycle as part of the project intelligence sequencing layer.
+
 ## 0.2.0 - 2026-06-28
 
 - Added an inspiration document covering MCP, Codex, Claude Code, RTK, Headroom, Caveman, Ponytail, Graphify, Printing Press, Sakana Fugu, and Wormhole's operating principles.

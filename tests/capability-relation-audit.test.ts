@@ -112,6 +112,12 @@ describe("capability relation audit", () => {
         freshnessChecks: expect.arrayContaining(["durable-index-status", "workflow-artifact-freshness"]),
       }),
     );
+    expect(CAPABILITY_RELATIONS).toContainEqual(
+      expect.objectContaining({
+        capabilityId: "orchestration.app-process-compiler",
+        artifactKinds: expect.arrayContaining(["app-process", "roadmap", "backlog", "lifecycle"]),
+      }),
+    );
   });
 
   it("warns when workflow artifact writers omit artifact freshness metadata", () => {
