@@ -185,6 +185,7 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("patch_apply");
     expect(manifest.tools.map((tool) => tool.name)).toContain("patch_status");
     expect(manifest.tools.map((tool) => tool.name)).toContain("patch_rollback");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("repo_reachability_analyze");
     expect(manifest.tools.map((tool) => tool.name)).toContain("code_smell_scan");
     expect(manifest.tools.map((tool) => tool.name)).toContain("diff_scope_review");
     expect(manifest.tools.map((tool) => tool.name)).toContain("test_quality_review");

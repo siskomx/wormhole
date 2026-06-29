@@ -189,6 +189,7 @@ The tools are:
 - `entrypoint_flow_discover`: detects API, CLI, worker, and package-script entrypoints and links them to downstream repo files through the native repo graph.
 - `blast_radius_analyze`: maps changed files and diff hunks to changed symbols, impacted files, impacted modules, impacted entrypoints, and confidence-scored likely tests.
 - `context_pack_generate`: renders a task-scoped context pack from architecture, entrypoints, blast radius, and relevant source snippets within a caller-supplied character budget.
+- `repo_reachability_analyze`: runs read-only repo-wide reachability evidence collection for coding-agent deletion review. It combines repo-index edges, explicit or discovered entrypoints, workspace/package boundaries, dynamic import hints, framework/runtime conventions, manual known-used files, and optional Knip output, then returns `likely_used`, `manual_review`, `unknown`, and `candidate_remove_pending_review` categories. It never proves deletion safety; every candidate remains gated by `requiresHumanApproval: true`.
 
 Repo-index summaries, durable index status/query results, architecture maps, blast-radius reports, context packs, and agent routing outputs carry shared `indexHealth` metadata. Stale and missing index health can block enforced gates; degraded/truncated health remains warning-only so large repos can continue in an explicit degraded mode instead of silently pretending coverage is complete.
 

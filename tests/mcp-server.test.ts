@@ -92,6 +92,7 @@ describe("Wormhole MCP server", () => {
         "flows_refresh",
         "list_flows",
         "get_flow",
+        "repo_reachability_analyze",
         "code_smell_scan",
         "diff_scope_review",
         "test_quality_review",
@@ -146,5 +147,9 @@ describe("Wormhole MCP server", () => {
     expect(registeredToolMetadata.orchestration_policy_train?.description).toContain(
       "required Python runtime",
     );
+    expect(registeredToolMetadata.repo_reachability_analyze?.description).toContain(
+      "requires human approval",
+    );
+    expect(registeredToolMetadata.code_smell_scan?.description).toContain("changed-files-only");
   });
 });

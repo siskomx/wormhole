@@ -138,9 +138,10 @@ Domain tools:
 
 ### Lifecycle Anti-Slop Gates
 
-The lifecycle gate tools are generic and operate on changed files, diffs, repo-index facts, tests, and coverage summaries. They are not tied to a specific product or ticket system.
+The lifecycle gate tools are generic and operate on changed files, diffs, repo-index facts, tests, coverage summaries, and deletion-review reachability evidence. They are not tied to a specific product or ticket system.
 
-- `code_smell_scan`: flags likely dead code, complex functions, duplicate blocks, and new dependencies that do not appear to be used by the changed set.
+- `code_smell_scan`: runs a changed-files-only smell scan for likely dead code, complex functions, duplicate blocks, and new dependencies that do not appear to be used by the changed set. It is not repository-wide deletion proof.
+- `repo_reachability_analyze`: runs read-only repo-wide reachability evidence collection for deletion review, including explicit entrypoints, package boundaries, dynamic/framework/runtime blockers, and a mandatory human-approval flag for every candidate removal.
 - `diff_scope_review`: checks whether changed files and hunks trace to the objective, cited evidence paths, or explicitly approved paths.
 - `test_quality_review`: checks changed test files for skipped tests, missing assertions, snapshot-only coverage, and source changes without nearby tests.
 - `coverage_delta_analyze`: compares before/after coverage summaries and reports regressions.
@@ -162,21 +163,23 @@ The lifecycle gap-closure tools cover the parts of a coding loop that previously
 - `dependency_audit_live`: runs bounded npm audit/outdated probes when live package-manager evidence is needed. Unsupported managers are refused with a hint instead of silently returning partial results.
 - `docs_sync_check`: surfaces missing documentation updates for public API/config/schema/README-facing changes and reuses source-conflict analysis for stale claims.
 - `workspace_graph_analyze`: detects npm workspaces, pnpm workspace globs, and Cargo workspace members, then reports local package edges and unresolved internal dependencies.
+- `repo_reachability_analyze`: combines repo-index edges, entrypoint flows, workspace/package boundaries, dynamic import hints, framework conventions, manual known-used files, and optional Knip output into review categories for dead-code deletion decisions. It is advisory only and always requires human approval before removal.
 
 Recommended release handoff sequence:
 
 1. Run `git_lifecycle_status`.
 2. Run `docs_sync_check`, `dependency_risk_report` or `dependency_audit_live`, and the anti-slop lifecycle gates relevant to the change.
 3. Run `workspace_graph_analyze` in monorepos before broad impact claims.
-4. Run focused verification.
-5. Use `git_commit_prepare` and `git_pr_prepare` for handoff text.
-6. Use `git_branch_create` or `git_commit_create` only after `tool_admission_review` and `action_policy_review` agree the mutating action is allowed.
+4. Run `repo_reachability_analyze` before stale-file, unused-code, or deletion claims.
+5. Run focused verification.
+6. Use `git_commit_prepare` and `git_pr_prepare` for handoff text.
+7. Use `git_branch_create` or `git_commit_create` only after `tool_admission_review` and `action_policy_review` agree the mutating action is allowed.
 
 ### Implementation Loop
 
 1. Prepare context with `agent_context_prepare`.
 2. Narrow impact with `blast_radius_analyze`, `test_impact_analyze_v2`, `domain_slice_query`, or `feature_slice_query`.
-3. Run `diff_scope_review` and `code_smell_scan` before applying broader edits.
+3. Run `diff_scope_review` and `code_smell_scan` before applying broader edits; run `repo_reachability_analyze` before stale-code, unused-file, or deletion work.
 4. Make edits through normal repo tooling or guarded patch transactions when rollback matters.
 5. Run focused verification plus `test_quality_review` and `coverage_delta_analyze` when tests or coverage are in scope.
 6. Record evidence.

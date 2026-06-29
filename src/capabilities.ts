@@ -54,7 +54,7 @@ export type WormholeCapabilityManifest = {
 export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
   return {
     name: "wormhole",
-    version: "0.12.2",
+    version: "0.13.0",
     maxOrchestrationDepth: 4,
     layers: [
       {
@@ -276,6 +276,13 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         area: "orchestration",
         status: "implemented",
         description: "Workspace and cross-repo graph analysis for npm, pnpm, Cargo, and additional allowed repo roots with local package dependency edges.",
+      },
+      {
+        id: "orchestration.repo-reachability-review",
+        area: "orchestration",
+        status: "implemented",
+        description:
+          "Read-only repo-wide reachability evidence collection for coding-agent deletion review with explicit entrypoints, package boundaries, conservative dynamic/framework handling, and mandatory human approval for removals.",
       },
       {
         id: "orchestration.project-intelligence-sequencing",

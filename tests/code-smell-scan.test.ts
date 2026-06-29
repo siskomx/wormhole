@@ -23,6 +23,8 @@ describe("code smell scan", () => {
     expect(result.findings.map((finding) => finding.kind)).toEqual(
       expect.arrayContaining(["potential_dead_code", "complex_function"]),
     );
+    expect(result.scope).toBe("changed_files_only");
+    expect(result.warning).toContain("not repo-wide reachability");
   });
 
   it("flags duplicate normalized blocks in changed files", () => {

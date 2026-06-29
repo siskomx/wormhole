@@ -317,6 +317,7 @@ const TOOL_NAMES = [
   "dependency_audit_live",
   "docs_sync_check",
   "workspace_graph_analyze",
+  "repo_reachability_analyze",
   "code_smell_scan",
   "diff_scope_review",
   "test_quality_review",
@@ -940,12 +941,31 @@ const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
     summary: "Return domain-specific verification gate scripts and commands by feature or gate id.",
     inputs: ["repoRoot", "gateId", "feature", "requireFresh"],
   },
+  repo_reachability_analyze: {
+    plane: "verification",
+    phase: "verify",
+    pack: "large-repo",
+    risk: "read",
+    summary:
+      "Run read-only repo-wide reachability evidence collection for deletion review with human approval required for every removal.",
+    inputs: [
+      "repoRoot",
+      "paths",
+      "entrypoints",
+      "packageRoots",
+      "knownUsedFiles",
+      "knipUnusedFiles",
+      "limit",
+      "cursor",
+    ],
+  },
   code_smell_scan: {
     plane: "verification",
     phase: "verify",
     pack: "verification",
     risk: "read",
-    summary: "Scan changed code for potential dead code, complex functions, duplicate blocks, and needless dependencies.",
+    summary:
+      "Run a changed-files-only code smell scan for potential dead code, complex functions, duplicate blocks, and needless dependencies.",
     inputs: ["repoRoot", "changedFiles", "diffText", "maxComplexity", "duplicateMinLines"],
   },
   diff_scope_review: {

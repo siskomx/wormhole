@@ -150,6 +150,22 @@ describe("agent-facing routing tools", () => {
     }
   });
 
+  it("recommends repo reachability review for dead-code deletion objectives", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      const next = recommendNextBestTool({
+        repoRoot,
+        objective: "Find unused dead code and remove stale files",
+        completedTools: ["project_onboard", "architecture_map", "entrypoint_flow_discover"],
+      });
+
+      expect(next.recommended.toolName).toBe("repo_reachability_analyze");
+      expect(next.recommended.input.repoRoot).toBe(repoRoot);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("routes missions into ordered stages instead of exposing the full tool surface", () => {
     const repoRoot = createFixtureRepo();
     try {

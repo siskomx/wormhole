@@ -46,6 +46,7 @@ export * from "./git-lifecycle.js";
 export * from "./dependency-risk.js";
 export * from "./docs-sync.js";
 export * from "./workspace-graph.js";
+export * from "./repo-reachability.js";
 export * from "./code-smell-scan.js";
 export * from "./diff-scope-review.js";
 export * from "./test-quality-review.js";

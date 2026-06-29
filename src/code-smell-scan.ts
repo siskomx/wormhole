@@ -18,6 +18,8 @@ export type CodeSmellFinding = {
 
 export type CodeSmellScanResult = {
   repoRoot: string;
+  scope: "changed_files_only";
+  warning: string;
   changedFiles: string[];
   findings: CodeSmellFinding[];
 };
@@ -44,6 +46,9 @@ export function scanCodeSmells(input: CodeSmellScanInput): CodeSmellScanResult {
   ];
   return {
     repoRoot,
+    scope: "changed_files_only",
+    warning:
+      "code_smell_scan reviews only changed files and is not repo-wide reachability or deletion proof; use repo_reachability_analyze for repository-wide deletion review.",
     changedFiles,
     findings: findings.sort(compareFindings),
   };

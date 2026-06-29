@@ -264,13 +264,26 @@ describe("tool registry conformance", () => {
 
   it("advertises anti-slop lifecycle gates as verification tools", () => {
     const catalog = queryToolCatalog({
-      toolNames: ["code_smell_scan", "diff_scope_review", "test_quality_review", "coverage_delta_analyze"],
+      toolNames: [
+        "repo_reachability_analyze",
+        "code_smell_scan",
+        "diff_scope_review",
+        "test_quality_review",
+        "coverage_delta_analyze",
+      ],
     });
     const admission = reviewToolAdmission({ toolNames: ["patch_apply"] });
     const patchDecision = admission.decisions.find((decision) => decision.toolName === "patch_apply");
 
     expect(catalog.tools).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          name: "repo_reachability_analyze",
+          plane: "verification",
+          pack: "large-repo",
+          risk: "read",
+          phase: "verify",
+        }),
         expect.objectContaining({ name: "code_smell_scan", risk: "read", phase: "verify" }),
         expect.objectContaining({ name: "diff_scope_review", risk: "read", phase: "verify" }),
         expect.objectContaining({ name: "test_quality_review", risk: "read", phase: "verify" }),

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.13.0 - 2026-06-29
+
+- Added resume validation as a gate signal, including resume state detection, state-maintenance auto-validation when resume state exists, `gate_request` resume inputs, workflow done-gate enforcement, and relation freshness coverage.
+- Added `repo_reachability_analyze`, a read-only repo-wide reachability review tool for coding agents that combines repo-index edges, entrypoints, workspace/package boundaries, dynamic/framework blockers, manual known-used files, and optional Knip hints into deletion-review categories that always require human approval.
+- Clarified that `code_smell_scan` is changed-files-only and not repository-wide reachability or deletion proof.
+- Wired repo reachability review into MCP registration, tool registry metadata, capability relations, agent routing, plugin manifest guidance, README guidance, and focused tests.
+
 ## 0.12.2 - 2026-06-29
 
 - Added CI verification for build, tests, and benchmark fixture validation on Node.js 22.5.0.

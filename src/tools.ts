@@ -141,6 +141,7 @@ import { checkDocsSync } from "./docs-sync.js";
 import { analyzeWorkspaceGraph } from "./workspace-graph.js";
 import { analyzeCoverageDelta, type CoverageDeltaInput } from "./coverage-delta.js";
 import { scanCodeSmells } from "./code-smell-scan.js";
+import { analyzeRepoReachability } from "./repo-reachability.js";
 import {
   reviewDiffScope,
   type DiffScopeEvidence,
@@ -2876,6 +2877,34 @@ export function createToolHandlers(
         resolveAllowedRepoRoot(root, allowedRepoRoots),
       );
       return analyzeWorkspaceGraph({ repoRoot, additionalRepoRoots });
+    },
+
+    repoReachabilityAnalyze(input: {
+      repoRoot: string;
+      paths?: string[];
+      entrypoints?: string[];
+      packageRoots?: string[];
+      knownUsedFiles?: string[];
+      knipUnusedFiles?: string[];
+      limit?: number;
+      cursor?: number;
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const discoveredEntryPoints =
+        input.entrypoints ??
+        discoverEntrypointFlows({ repoRoot, projectModelCache }).entrypoints.map((entrypoint) => entrypoint.path);
+      const discoveredPackageRoots =
+        input.packageRoots ??
+        analyzeWorkspaceGraph({ repoRoot }).packages
+          .map((workspacePackage) => workspacePackage.path)
+          .filter((packagePath) => packagePath !== ".");
+      return analyzeRepoReachability({
+        ...input,
+        repoRoot,
+        index: getRepoIndex(repoRoot, { preset: "large_repo" }),
+        entrypoints: discoveredEntryPoints,
+        packageRoots: discoveredPackageRoots,
+      });
     },
 
     codeSmellScan(input: {

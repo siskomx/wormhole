@@ -33,6 +33,33 @@ describe("Wormhole MCP tool handlers", () => {
     expect(status.evidenceCount).toBe(0);
   });
 
+  it("runs repo reachability review through generic tool handlers", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-reachability-tools-"));
+    try {
+      mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+      writeFileSync(
+        path.join(repoRoot, "package.json"),
+        JSON.stringify({ scripts: { start: "tsx src/main.ts" }, dependencies: {} }, null, 2),
+      );
+      writeFileSync(path.join(repoRoot, "src", "main.ts"), "import { used } from './used';\nused();\n");
+      writeFileSync(path.join(repoRoot, "src", "used.ts"), "export function used() { return true; }\n");
+      writeFileSync(path.join(repoRoot, "src", "unused.ts"), "export function stale() { return false; }\n");
+      const tools = createToolHandlers(createInMemoryKernel(), { allowedRepoRoots: [repoRoot] });
+
+      const report = tools.repoReachabilityAnalyze({ repoRoot, entrypoints: ["src/main.ts"] });
+
+      expect(report.requiresHumanApproval).toBe(true);
+      expect(report.findings).toContainEqual(
+        expect.objectContaining({
+          path: "src/unused.ts",
+          category: "candidate_remove_pending_review",
+        }),
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("records, checkpoints, validates, and loads resume state", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-resume-tools-"));
     try {

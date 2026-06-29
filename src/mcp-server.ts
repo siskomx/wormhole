@@ -27,7 +27,7 @@ export function createWormholeMcpServer(
 ): McpServer {
   const server = new McpServer({
     name: "wormhole",
-    version: "0.12.2",
+    version: "0.13.0",
   });
   const tools = createToolHandlers(kernel, options);
   const taskStatusSchema = z.enum([
@@ -2965,9 +2965,29 @@ export function createWormholeMcpServer(
   );
 
   server.registerTool(
+    "repo_reachability_analyze",
+    {
+      description:
+        "Run read-only repo-wide reachability evidence collection for deletion review; findings are heuristic and every removal requires human approval.",
+      inputSchema: {
+        repoRoot: z.string(),
+        paths: z.array(z.string()).optional(),
+        entrypoints: z.array(z.string()).optional(),
+        packageRoots: z.array(z.string()).optional(),
+        knownUsedFiles: z.array(z.string()).optional(),
+        knipUnusedFiles: z.array(z.string()).optional(),
+        limit: z.number().int().positive().max(500).optional(),
+        cursor: z.number().int().min(0).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.repoReachabilityAnalyze(input)),
+  );
+
+  server.registerTool(
     "code_smell_scan",
     {
-      description: "Scan changed code for potential dead code, complexity, duplicate blocks, and needless dependencies.",
+      description:
+        "Run a changed-files-only code smell scan for potential dead code, complexity, duplicate blocks, and needless dependencies; not repo-wide reachability proof.",
       inputSchema: {
         repoRoot: z.string(),
         changedFiles: z.array(z.string()).optional(),

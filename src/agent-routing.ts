@@ -261,6 +261,18 @@ export function recommendMissionRoute(input: AgentRoutingInput): MissionRouteRec
           toolCall("entrypoint_flow_discover", 90, "Find user-facing and operational entrypoints.", {
             repoRoot: input.repoRoot,
           }),
+          ...(isReachabilityObjective(objective)
+            ? [
+                toolCall(
+                  "repo_reachability_analyze",
+                  88,
+                  "Run read-only repo-wide reachability evidence collection before deletion recommendations.",
+                  {
+                    repoRoot: input.repoRoot,
+                  },
+                ),
+              ]
+            : []),
         ],
       },
       {
@@ -566,6 +578,18 @@ function createDefaultToolSequence(input: {
     toolCall("entrypoint_flow_discover", 90, "Find API, CLI, worker, and script entrypoints.", {
       repoRoot: input.repoRoot,
     }),
+    ...(isReachabilityObjective(input.objective)
+      ? [
+          toolCall(
+            "repo_reachability_analyze",
+            89,
+            "Run read-only reachability review before stale-code or deletion recommendations.",
+            {
+              repoRoot: input.repoRoot,
+            },
+          ),
+        ]
+      : []),
     ...(input.changedFiles.length > 0
       ? [
           toolCall("blast_radius_analyze", 88, "Analyze affected files, modules, entrypoints, and likely tests.", {
@@ -653,6 +677,12 @@ function routeFor(input: {
     return "balanced";
   }
   return "fast";
+}
+
+function isReachabilityObjective(objective: string): boolean {
+  return /\b(dead[- ]?code|unused|unreachable|stale files?|delete|deletion|remove stale|prune|cleanup|clean up)\b/i.test(
+    objective,
+  );
 }
 
 function toolCall(

@@ -164,6 +164,23 @@ describe("capability relation audit", () => {
     );
     expect(CAPABILITY_RELATIONS).toContainEqual(
       expect.objectContaining({
+        capabilityId: "orchestration.repo-reachability-review",
+        primaryTools: expect.arrayContaining(["repo_reachability_analyze"]),
+        supportingTools: expect.arrayContaining([
+          "repo_graph_analyze",
+          "entrypoint_flow_discover",
+          "workspace_graph_analyze",
+          "code_smell_scan",
+          "diff_scope_review",
+          "gate_request",
+          "runtime_behavior_audit",
+          "capability_relation_audit",
+        ]),
+        freshnessChecks: expect.arrayContaining(["repo-index-health", "workspace-boundary-model"]),
+      }),
+    );
+    expect(CAPABILITY_RELATIONS).toContainEqual(
+      expect.objectContaining({
         capabilityId: "orchestration.resume-continuation",
         primaryTools: expect.arrayContaining(["resume_record", "resume_checkpoint", "resume_validate", "resume_load"]),
         stateOwners: expect.arrayContaining(["resume-store"]),
