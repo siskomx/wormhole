@@ -1501,4 +1501,37 @@ describe("Wormhole MCP tool handlers", () => {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
+
+  it("blocks the gate on invalid resume only when enforceResume is set", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-enforce-resume-"));
+    const runtimeStatePath = path.join(repoRoot, ".wormhole", "runtime-state.json");
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+        runtimeStatePath,
+      });
+      const mission = tools.missionStart({ objective: "obj", repoRoot });
+      const missionId = mission.missionId;
+
+      // Record resume material (no checkpoint) then run maintenance to store the resume signal.
+      tools.resumeRecord({
+        repoRoot,
+        objective: "obj",
+        kind: "exact_next_action",
+        summary: "next",
+      });
+      tools.stateMaintenanceRun({ repoRoot, missionId, objective: "obj", freshness: true });
+
+      // Passive: resume is invalid (no checkpoint) but the gate is NOT blocked on it.
+      const passive = tools.gateRequest({ missionId });
+      expect(passive.reasons.some((r: string) => /resume/i.test(r))).toBe(false);
+
+      // Active: enforceResume promotes the missing checkpoint to a blocking reason.
+      const enforced = tools.gateRequest({ missionId, enforceResume: true });
+      expect(enforced.open).toBe(false);
+      expect(enforced.reasons.some((r: string) => /resume checkpoint|resumable/i.test(r))).toBe(true);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
 });

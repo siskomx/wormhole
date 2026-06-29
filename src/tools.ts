@@ -239,6 +239,7 @@ import { writeWorkflowArtifacts } from "./workflow-files.js";
 import type {
   GateFreshnessInput,
   GateLoopHealthInput,
+  GateResumeInput,
   GateRuntimeBehaviorInput,
   GateSourceConflictsInput,
 } from "./gate-signals.js";
@@ -1261,13 +1262,21 @@ export function createToolHandlers(
       freshness?: GateFreshnessInput;
       runtimeBehavior?: GateRuntimeBehaviorInput;
       loopHealth?: GateLoopHealthInput;
+      resume?: GateResumeInput;
+      enforceResume?: boolean;
     }) {
       const storedSignals = latestMaintenanceSignalsForMission(input.missionId);
+      const baseResume =
+        input.resume ?? (storedSignals?.resume ? { validation: storedSignals.resume } : undefined);
+      const resume = baseResume
+        ? { ...baseResume, enforce: input.enforceResume === true || baseResume.enforce === true }
+        : undefined;
       return kernel.requestGate(input.missionId, {
         sourceConflicts: input.sourceConflicts ?? storedSignals?.sourceConflicts,
         freshness: input.freshness ?? storedSignals?.freshness,
         runtimeBehavior: input.runtimeBehavior,
         loopHealth: input.loopHealth,
+        resume,
       });
     },
 

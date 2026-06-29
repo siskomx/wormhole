@@ -529,6 +529,8 @@ export function createWormholeMcpServer(
         freshness: z.any().optional(),
         runtimeBehavior: z.any().optional(),
         loopHealth: z.any().optional(),
+        resume: z.any().optional(),
+        enforceResume: z.boolean().optional(),
       },
     },
     async (input) => jsonResult(tools.gateRequest(input)),
