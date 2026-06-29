@@ -228,6 +228,7 @@ describe("Claude Desktop extension metadata", () => {
       manifest.tools.find((tool) => tool.name === "media_dependency_report")?.description,
     ).toContain("Python media package");
     expect(manifest.compatibility.runtimes.python).toBe(">=3.0.0");
+    expect(manifest.compatibility.runtimes.node).toBe(">=22.5.0");
     expect(serialized).not.toContain("optional Python sidecar");
     expect(serialized).not.toContain("optional media extraction");
     expect(manifest.prompts.map((prompt) => prompt.name)).toContain("wormhole_orchestrate");
@@ -265,5 +266,17 @@ describe("Claude Desktop extension metadata", () => {
       "reasoning_strategy_evaluate",
     );
     expect(serialized).not.toContain("TODO");
+  });
+});
+
+describe("release automation", () => {
+  it("runs the documented verification commands on the supported Node runtime", () => {
+    const workflow = readFileSync(path.resolve(".github/workflows/ci.yml"), "utf8");
+
+    expect(workflow).toContain('node-version: "22.5.0"');
+    expect(workflow).toContain("npm ci");
+    expect(workflow).toContain("npm run build");
+    expect(workflow).toContain("npm test");
+    expect(workflow).toContain("npm run benchmarks:validate");
   });
 });

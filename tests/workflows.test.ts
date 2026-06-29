@@ -378,5 +378,11 @@ describe("golden-path workflows", () => {
     expect(workflow.phases.flatMap((phase) => phase.calls.map((call) => call.toolName))).toEqual(
       expect.arrayContaining(["project_intelligence_snapshot", "tool_exposure_profile", "tool_catalog_query"]),
     );
+    expect(workflow.artifactWriteStatus).toEqual({
+      generated: false,
+      status: "not_written",
+      writerTool: "workflow_write_artifacts",
+      message: "Workflow artifacts are planned but not written; call workflow_write_artifacts to create files.",
+    });
   });
 });

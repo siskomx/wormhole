@@ -11,6 +11,11 @@ export type WorkflowArtifactFile = {
 
 export type WorkflowArtifactWriteResult = {
   repoRoot: string;
+  artifactWriteStatus: {
+    generated: true;
+    status: "written";
+    message: string;
+  };
   files: WorkflowArtifactFile[];
   requiredArtifacts: WorkflowRequiredArtifactStatus[];
 };
@@ -51,6 +56,11 @@ export function writeWorkflowArtifacts(input: WriteWorkflowArtifactsInput): Work
 
   return {
     repoRoot,
+    artifactWriteStatus: {
+      generated: true,
+      status: "written",
+      message: "Workflow artifacts were written to .wormhole/workflows.",
+    },
     files,
     requiredArtifacts: input.workflow.requiredArtifacts
       .map((artifact) => {

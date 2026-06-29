@@ -32,6 +32,11 @@ describe("workflow artifact files", () => {
 
       const result = writeWorkflowArtifacts({ repoRoot, workflow });
 
+      expect(result.artifactWriteStatus).toEqual({
+        generated: true,
+        status: "written",
+        message: "Workflow artifacts were written to .wormhole/workflows.",
+      });
       expect(result.files.map((file) => file.relativePath)).toEqual([
         ".wormhole/workflows/latest.json",
         `.wormhole/workflows/${workflow.run.runId}.json`,

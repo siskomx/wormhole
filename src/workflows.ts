@@ -96,6 +96,13 @@ export type WorkflowArtifactRequirement = {
   description: string;
 };
 
+export type WorkflowArtifactWriteStatus = {
+  generated: boolean;
+  status: "not_written";
+  writerTool: "workflow_write_artifacts";
+  message: string;
+};
+
 export type WorkflowResume = {
   artifactPath: string;
   summary: string;
@@ -120,6 +127,7 @@ export type WorkflowSequence = {
   run: WorkflowRunState;
   featureIndex: WorkflowFeatureIndexSummary;
   featureBindings: WorkflowFeatureBinding[];
+  artifactWriteStatus: WorkflowArtifactWriteStatus;
   exactNextAction: WorkflowExactNextAction;
   verificationContract: WorkflowVerificationContract;
   requiredArtifacts: WorkflowArtifactRequirement[];
@@ -463,6 +471,12 @@ function workflow(input: {
       featureCount: featureIndex.featureCount,
     },
     featureBindings,
+    artifactWriteStatus: {
+      generated: false,
+      status: "not_written",
+      writerTool: "workflow_write_artifacts",
+      message: "Workflow artifacts are planned but not written; call workflow_write_artifacts to create files.",
+    },
     exactNextAction,
     verificationContract,
     requiredArtifacts,

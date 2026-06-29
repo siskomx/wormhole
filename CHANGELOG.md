@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.12.2 - 2026-06-29
+
+- Added CI verification for build, tests, and benchmark fixture validation on Node.js 22.5.0.
+- Aligned plugin runtime metadata with the Node.js version required by the SQLite-backed durable index backend.
+- Added startup validation for unsupported Node.js versions.
+- Clarified workflow artifact status so planned artifacts are not reported as written until `workflow_write_artifacts` runs.
+
 ## 0.12.1 - 2026-06-29
 
 - Bumped release metadata after the integration hardening commit so GitHub's latest release tag matches current `origin/main`.

@@ -2,9 +2,22 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { verifyRequiredPythonRuntime } from "../src/cli.js";
+import {
+  assertSupportedNodeRuntime,
+  nodeVersionSatisfies,
+  verifyRequiredPythonRuntime,
+} from "../src/cli.js";
 
 describe("Wormhole CLI startup runtime", () => {
+  it("requires the Node runtime that supports durable SQLite indexes", () => {
+    expect(nodeVersionSatisfies("22.5.0")).toBe(true);
+    expect(nodeVersionSatisfies("22.6.0")).toBe(true);
+    expect(nodeVersionSatisfies("23.0.0")).toBe(true);
+    expect(nodeVersionSatisfies("22.4.9")).toBe(false);
+    expect(nodeVersionSatisfies("20.19.0")).toBe(false);
+    expect(() => assertSupportedNodeRuntime("20.19.0")).toThrow(/Node\.js >=22\.5\.0/);
+  });
+
   it("verifies the required Python runtime before MCP startup", async () => {
     const tempRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-cli-python-"));
     const scriptPath = path.join(tempRoot, "probe.mjs");
