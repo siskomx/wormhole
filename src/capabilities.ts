@@ -54,7 +54,7 @@ export type WormholeCapabilityManifest = {
 export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
   return {
     name: "wormhole",
-    version: "0.10.0",
+    version: "0.11.0",
     maxOrchestrationDepth: 4,
     layers: [
       {
@@ -252,6 +252,30 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         area: "orchestration",
         status: "implemented",
         description: "Diff-scope review, code-smell scanning, test-quality review, coverage-delta analysis, and optional patch-apply scope enforcement for coding-agent edit loops.",
+      },
+      {
+        id: "orchestration.git-and-release-lifecycle",
+        area: "orchestration",
+        status: "implemented",
+        description: "Native git lifecycle status, branch preparation/creation, commit preparation/creation, provider-neutral PR preparation, and merge-conflict analysis with privileged action gates.",
+      },
+      {
+        id: "orchestration.dependency-risk-intelligence",
+        area: "orchestration",
+        status: "implemented",
+        description: "Dependency risk reporting that combines local lockfile/license metadata with npm audit, outdated, CVE/GHSA, and bounded live audit signals.",
+      },
+      {
+        id: "orchestration.docs-sync-gate",
+        area: "orchestration",
+        status: "implemented",
+        description: "Documentation synchronization gate that combines source-conflict analysis with public-surface change detection.",
+      },
+      {
+        id: "orchestration.workspace-graph-intelligence",
+        area: "orchestration",
+        status: "implemented",
+        description: "Workspace and cross-repo graph analysis for npm, pnpm, Cargo, and additional allowed repo roots with local package dependency edges.",
       },
       {
         id: "orchestration.project-intelligence-sequencing",

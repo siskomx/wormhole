@@ -112,6 +112,22 @@ import {
   type PrivilegedActionRequest,
 } from "./privileged-action-gate.js";
 import { createDependencySecurityReport } from "./dependency-security.js";
+import {
+  analyzeGitConflicts,
+  createGitBranch,
+  createGitCommit,
+  gitLifecycleStatus,
+  prepareGitBranch,
+  prepareGitCommit,
+  prepareGitPr,
+} from "./git-lifecycle.js";
+import {
+  createDependencyRiskReport,
+  runDependencyAuditLive,
+  type DependencyCommandRunner,
+} from "./dependency-risk.js";
+import { checkDocsSync } from "./docs-sync.js";
+import { analyzeWorkspaceGraph } from "./workspace-graph.js";
 import { analyzeCoverageDelta, type CoverageDeltaInput } from "./coverage-delta.js";
 import { scanCodeSmells } from "./code-smell-scan.js";
 import {
@@ -362,6 +378,7 @@ export type ToolHandlerOptions = {
   privilegedActionPolicy?: PrivilegedActionPolicy;
   projectModelCache?: ProjectModelCache;
   pythonSidecar?: PythonSidecar;
+  dependencyAuditRunner?: DependencyCommandRunner;
 };
 
 export type StateMaintenanceAction = {
@@ -2640,6 +2657,112 @@ export function createToolHandlers(
     dependencySecurityReport(input: { repoRoot: string }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return createDependencySecurityReport({ repoRoot });
+    },
+
+    gitLifecycleStatus(input: { repoRoot: string; baseRef?: string; timeoutMs?: number }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return gitLifecycleStatus({ ...input, repoRoot });
+    },
+
+    gitBranchPrepare(input: { objective: string; prefix?: string }) {
+      return prepareGitBranch(input);
+    },
+
+    gitBranchCreate(input: { repoRoot: string; branchName: string; checkout?: boolean; timeoutMs?: number }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      assertPrivilegedAction({
+        toolName: "git_branch_create",
+        kind: "command",
+        operations: [{ kind: "command", command: "git", args: input.checkout ? ["switch", "-c", input.branchName] : ["branch", input.branchName] }],
+        target: {
+          repoRoot,
+          command: "git",
+          args: input.checkout ? ["switch", "-c", input.branchName] : ["branch", input.branchName],
+        },
+      });
+      return createGitBranch({ ...input, repoRoot });
+    },
+
+    gitCommitPrepare(input: {
+      repoRoot: string;
+      objective: string;
+      evidence?: Array<{ sourcePath?: string; summary: string }>;
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return prepareGitCommit({ ...input, repoRoot });
+    },
+
+    gitCommitCreate(input: { repoRoot: string; files: string[]; message: string; timeoutMs?: number }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      assertPrivilegedAction({
+        toolName: "git_commit_create",
+        kind: "command",
+        operations: [{ kind: "command", command: "git", args: ["commit", "--no-verify", "--message=<message>"] }],
+        target: {
+          repoRoot,
+          command: "git",
+          args: ["commit", "--no-verify", "--message=<message>"],
+        },
+      });
+      return createGitCommit({ ...input, repoRoot });
+    },
+
+    gitPrPrepare(input: { repoRoot: string; baseRef?: string; objective?: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return prepareGitPr({ ...input, repoRoot });
+    },
+
+    gitConflictAnalyze(input: {
+      repoRoot: string;
+      timeoutMs?: number;
+      maxFileBytes?: number;
+      maxTotalBytes?: number;
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return analyzeGitConflicts({ ...input, repoRoot });
+    },
+
+    dependencyRiskReport(input: { repoRoot: string; auditJson?: string; outdatedJson?: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return createDependencyRiskReport({ ...input, repoRoot });
+    },
+
+    dependencyAuditLive(input: {
+      repoRoot: string;
+      includeOutdated?: boolean;
+      timeoutMs?: number;
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      assertPrivilegedAction({
+        toolName: "dependency_audit_live",
+        kind: "command",
+        operations: [{ kind: "command", command: "npm", args: ["audit", "--json"] }],
+        target: { repoRoot, command: "npm", args: ["audit", "--json"] },
+      });
+      return runDependencyAuditLive({ ...input, repoRoot }, options.dependencyAuditRunner);
+    },
+
+    docsSyncCheck(input: {
+      repoRoot: string;
+      changedFiles?: string[];
+      diffText?: string;
+      requireDocsForPublicChanges?: boolean;
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return checkDocsSync({
+        ...input,
+        repoRoot,
+        index: getRepoIndex(repoRoot),
+        contract: detectProjectContract({ repoRoot }),
+      });
+    },
+
+    workspaceGraphAnalyze(input: { repoRoot: string; additionalRepoRoots?: string[] }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const additionalRepoRoots = (input.additionalRepoRoots ?? []).map((root) =>
+        resolveAllowedRepoRoot(root, allowedRepoRoots),
+      );
+      return analyzeWorkspaceGraph({ repoRoot, additionalRepoRoots });
     },
 
     codeSmellScan(input: {

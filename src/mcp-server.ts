@@ -27,7 +27,7 @@ export function createWormholeMcpServer(
 ): McpServer {
   const server = new McpServer({
     name: "wormhole",
-    version: "0.10.0",
+    version: "0.11.0",
   });
   const tools = createToolHandlers(kernel, options);
   const taskStatusSchema = z.enum([
@@ -2734,6 +2734,158 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.dependencySecurityReport(input)),
+  );
+
+  server.registerTool(
+    "git_lifecycle_status",
+    {
+      description: "Summarize git branch, HEAD, ahead/behind, staged, unstaged, and untracked lifecycle state.",
+      inputSchema: {
+        repoRoot: z.string(),
+        baseRef: z.string().optional(),
+        timeoutMs: z.number().int().positive().max(30000).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.gitLifecycleStatus(input)),
+  );
+
+  server.registerTool(
+    "git_branch_prepare",
+    {
+      description: "Prepare a safe branch name from an objective without changing git state.",
+      inputSchema: {
+        objective: z.string(),
+        prefix: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.gitBranchPrepare(input)),
+  );
+
+  server.registerTool(
+    "git_branch_create",
+    {
+      description: "Create a git branch with ref validation and privileged action gating.",
+      inputSchema: {
+        repoRoot: z.string(),
+        branchName: z.string(),
+        checkout: z.boolean().optional(),
+        timeoutMs: z.number().int().positive().max(30000).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.gitBranchCreate(input)),
+  );
+
+  server.registerTool(
+    "git_commit_prepare",
+    {
+      description: "Prepare an advisory conventional commit message from changed files and objective evidence.",
+      inputSchema: {
+        repoRoot: z.string(),
+        objective: z.string(),
+        evidence: z
+          .array(
+            z.object({
+              sourcePath: z.string().optional(),
+              summary: z.string(),
+            }),
+          )
+          .optional(),
+      },
+    },
+    async (input) => jsonResult(tools.gitCommitPrepare(input)),
+  );
+
+  server.registerTool(
+    "git_commit_create",
+    {
+      description: "Create a git commit for explicit repo-relative files with path validation and no hook execution.",
+      inputSchema: {
+        repoRoot: z.string(),
+        files: z.array(z.string()),
+        message: z.string(),
+        timeoutMs: z.number().int().positive().max(30000).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.gitCommitCreate(input)),
+  );
+
+  server.registerTool(
+    "git_pr_prepare",
+    {
+      description: "Prepare provider-neutral pull request title, body, checklist, and command hints without network calls.",
+      inputSchema: {
+        repoRoot: z.string(),
+        baseRef: z.string().optional(),
+        objective: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.gitPrPrepare(input)),
+  );
+
+  server.registerTool(
+    "git_conflict_analyze",
+    {
+      description: "Analyze unmerged git files and bounded conflict markers.",
+      inputSchema: {
+        repoRoot: z.string(),
+        timeoutMs: z.number().int().positive().max(30000).optional(),
+        maxFileBytes: z.number().int().positive().optional(),
+        maxTotalBytes: z.number().int().positive().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.gitConflictAnalyze(input)),
+  );
+
+  server.registerTool(
+    "dependency_risk_report",
+    {
+      description: "Combine local dependency license metadata with npm audit and outdated JSON risk signals.",
+      inputSchema: {
+        repoRoot: z.string(),
+        auditJson: z.string().optional(),
+        outdatedJson: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.dependencyRiskReport(input)),
+  );
+
+  server.registerTool(
+    "dependency_audit_live",
+    {
+      description: "Run bounded npm audit/outdated commands and parse dependency risk output.",
+      inputSchema: {
+        repoRoot: z.string(),
+        includeOutdated: z.boolean().optional(),
+        timeoutMs: z.number().int().positive().max(120000).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.dependencyAuditLive(input)),
+  );
+
+  server.registerTool(
+    "docs_sync_check",
+    {
+      description: "Gate documentation freshness against source conflicts and public-surface file changes.",
+      inputSchema: {
+        repoRoot: z.string(),
+        changedFiles: z.array(z.string()).optional(),
+        diffText: z.string().optional(),
+        requireDocsForPublicChanges: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.docsSyncCheck(input)),
+  );
+
+  server.registerTool(
+    "workspace_graph_analyze",
+    {
+      description: "Analyze npm, pnpm, Cargo, and multi-root workspace package graphs.",
+      inputSchema: {
+        repoRoot: z.string(),
+        additionalRepoRoots: z.array(z.string()).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.workspaceGraphAnalyze(input)),
   );
 
   server.registerTool(

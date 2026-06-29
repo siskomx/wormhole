@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.11.0 - 2026-06-29
+
+- Added git lifecycle tools for status, branch preparation/creation, commit preparation/creation, PR preparation, and bounded conflict analysis.
+- Added dependency risk reporting with parsed audit/outdated inputs and bounded live npm audit/outdated execution.
+- Added `docs_sync_check` to gate public-surface changes against documentation freshness and stale source claims.
+- Added `workspace_graph_analyze` for npm, pnpm, and Cargo workspace roots with local package dependency edges.
+- Wired the new lifecycle coverage into MCP registration, tool registry metadata, capability relations, plugin manifests, README guidance, and release version metadata.
+
 ## 0.10.0 - 2026-06-29
 
 - Added anti-slop lifecycle gates: `code_smell_scan`, `diff_scope_review`, `test_quality_review`, and `coverage_delta_analyze`.

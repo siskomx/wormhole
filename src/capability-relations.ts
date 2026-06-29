@@ -233,6 +233,42 @@ export const CAPABILITY_RELATIONS: CapabilityRelation[] = [
     ],
   },
   {
+    capabilityId: "orchestration.git-and-release-lifecycle",
+    primaryTools: [
+      "git_lifecycle_status",
+      "git_branch_prepare",
+      "git_branch_create",
+      "git_commit_prepare",
+      "git_commit_create",
+      "git_pr_prepare",
+      "git_conflict_analyze",
+    ],
+    supportingTools: ["action_policy_review", "repo_change_scan", "patch_checkpoint"],
+    conflictChecks: ["git-conflicts", "git-path-safety"],
+    testFiles: ["tests/git-lifecycle.test.ts", "tests/tools.test.ts", "tests/tool-registry.test.ts"],
+  },
+  {
+    capabilityId: "orchestration.dependency-risk-intelligence",
+    primaryTools: ["dependency_risk_report", "dependency_audit_live"],
+    supportingTools: ["dependency_security_report", "action_policy_review"],
+    freshnessChecks: ["dependency-audit-timeout-cap"],
+    testFiles: ["tests/dependency-risk.test.ts", "tests/tools.test.ts", "tests/tool-registry.test.ts"],
+  },
+  {
+    capabilityId: "orchestration.docs-sync-gate",
+    primaryTools: ["docs_sync_check"],
+    supportingTools: ["source_conflicts_analyze", "gate_request"],
+    conflictChecks: ["source-conflicts", "missing-docs-update"],
+    testFiles: ["tests/docs-sync.test.ts", "tests/tools.test.ts", "tests/tool-registry.test.ts"],
+  },
+  {
+    capabilityId: "orchestration.workspace-graph-intelligence",
+    primaryTools: ["workspace_graph_analyze"],
+    supportingTools: ["project_contract_detect", "repo_index_build"],
+    freshnessChecks: ["allowed-root-boundary"],
+    testFiles: ["tests/workspace-graph.test.ts", "tests/tools.test.ts", "tests/tool-registry.test.ts"],
+  },
+  {
     capabilityId: "orchestration.project-intelligence-sequencing",
     primaryTools: [
       "project_onboard",

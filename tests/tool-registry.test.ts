@@ -268,6 +268,47 @@ describe("tool registry conformance", () => {
     );
   });
 
+  it("advertises lifecycle gap closure tools with policy preflights", () => {
+    const catalog = queryToolCatalog({
+      toolNames: [
+        "git_lifecycle_status",
+        "git_branch_prepare",
+        "git_branch_create",
+        "git_commit_prepare",
+        "git_commit_create",
+        "git_pr_prepare",
+        "git_conflict_analyze",
+        "dependency_risk_report",
+        "dependency_audit_live",
+        "docs_sync_check",
+        "workspace_graph_analyze",
+      ],
+    });
+    const admission = reviewToolAdmission({ toolNames: ["git_commit_create", "dependency_audit_live"] });
+
+    expect(catalog.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "git_lifecycle_status", plane: "project", risk: "read" }),
+        expect.objectContaining({ name: "git_commit_create", risk: "write" }),
+        expect.objectContaining({ name: "dependency_audit_live", risk: "execute" }),
+        expect.objectContaining({ name: "docs_sync_check", plane: "verification", phase: "gate", risk: "read" }),
+        expect.objectContaining({ name: "workspace_graph_analyze", plane: "project", phase: "gather" }),
+      ]),
+    );
+    expect(admission.decisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          toolName: "git_commit_create",
+          requiredPreflightTools: expect.arrayContaining(["action_policy_review"]),
+        }),
+        expect.objectContaining({
+          toolName: "dependency_audit_live",
+          requiredPreflightTools: expect.arrayContaining(["action_policy_review"]),
+        }),
+      ]),
+    );
+  });
+
   it("advertises domain index tools as large-repo guidance and verification coverage", () => {
     const catalog = queryToolCatalog({
       toolNames: [

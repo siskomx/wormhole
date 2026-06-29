@@ -72,6 +72,10 @@ Domain tools:
 - Diff-aware test impact analysis and focused verification plans.
 - Command diagnostics, LSP diagnostics, dependency reports, secret scanning, action policy review, and operation risk review.
 - Anti-slop lifecycle gates for changed-code smells, diff scope, test quality, and coverage deltas.
+- Git lifecycle tools for status, branch preparation/creation, commit preparation/creation, PR preparation, and bounded conflict analysis.
+- Dependency risk tools that combine local lockfile/package metadata with parsed or live npm audit/outdated results.
+- Documentation sync checks for public-surface changes and stale source-backed claims.
+- Workspace graph analysis for npm, pnpm, and Cargo workspaces, including local package roots and dependency edges.
 - Optional strict diff-scope enforcement on `patch_apply` so patch transactions can refuse unrelated writes before files are changed.
 - Privileged write admission checks for mutating artifacts.
 - Patch transactions with checkpoints, unified-diff application, status, and rollback.
@@ -134,6 +138,31 @@ The lifecycle gate tools are generic and operate on changed files, diffs, repo-i
 - `coverage_delta_analyze`: compares before/after coverage summaries and reports regressions.
 
 `tool_admission_review` now recommends `diff_scope_review` before `patch_apply`. Callers that want enforcement can pass `scopeReview` to `patch_apply`; strict failed reviews are refused before the patch writes files.
+
+### Git, Dependency, Docs, And Workspace Lifecycle
+
+The lifecycle gap-closure tools cover the parts of a coding loop that previously required host-side ad hoc commands. They are still control-plane tools: read/prep tools return evidence and command hints, while mutating git tools require explicit admission checks.
+
+- `git_lifecycle_status`: summarizes branch, HEAD, upstream, ahead/behind counts, staged files, unstaged files, and untracked files.
+- `git_branch_prepare`: turns an objective into a normalized branch name without changing git state.
+- `git_branch_create`: creates an explicitly named branch after privileged action review.
+- `git_commit_prepare`: builds an advisory commit message from objective, changed files, and caller-supplied evidence. Evidence is treated as advisory text, not as trusted provenance.
+- `git_commit_create`: stages only explicit repo-relative files and refuses absolute paths, parent traversal, missing/empty files, and symlinks resolving outside the repo.
+- `git_pr_prepare`: prepares a PR title, body, checklist, changed-file summary, and local command hints without provider tokens or network calls.
+- `git_conflict_analyze`: inspects bounded unmerged files and conflict markers so agents can scope merge-conflict work before editing.
+- `dependency_risk_report`: combines local dependency security metadata with parsed audit and outdated JSON.
+- `dependency_audit_live`: runs bounded npm audit/outdated probes when live package-manager evidence is needed. Unsupported managers are refused with a hint instead of silently returning partial results.
+- `docs_sync_check`: surfaces missing documentation updates for public API/config/schema/README-facing changes and reuses source-conflict analysis for stale claims.
+- `workspace_graph_analyze`: detects npm workspaces, pnpm workspace globs, and Cargo workspace members, then reports local package edges and unresolved internal dependencies.
+
+Recommended release handoff sequence:
+
+1. Run `git_lifecycle_status`.
+2. Run `docs_sync_check`, `dependency_risk_report` or `dependency_audit_live`, and the anti-slop lifecycle gates relevant to the change.
+3. Run `workspace_graph_analyze` in monorepos before broad impact claims.
+4. Run focused verification.
+5. Use `git_commit_prepare` and `git_pr_prepare` for handoff text.
+6. Use `git_branch_create` or `git_commit_create` only after `tool_admission_review` and `action_policy_review` agree the mutating action is allowed.
 
 ### Implementation Loop
 

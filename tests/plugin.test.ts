@@ -111,6 +111,21 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("workflow_review_pr");
     expect(manifest.tools.map((tool) => tool.name)).toContain("workflow_onboard_repo");
     expect(manifest.tools.map((tool) => tool.name)).toContain("workflow_write_artifacts");
+    expect(manifest.tools.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining([
+        "git_lifecycle_status",
+        "git_branch_prepare",
+        "git_branch_create",
+        "git_commit_prepare",
+        "git_commit_create",
+        "git_pr_prepare",
+        "git_conflict_analyze",
+        "dependency_risk_report",
+        "dependency_audit_live",
+        "docs_sync_check",
+        "workspace_graph_analyze",
+      ]),
+    );
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_workspace_merge");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_plan_local");
     expect(manifest.tools.map((tool) => tool.name)).toContain("orchestration_run_local");

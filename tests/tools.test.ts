@@ -1,10 +1,19 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { createIndexHealthSnapshot } from "../src/index-health.js";
 import { createInMemoryKernel } from "../src/kernel.js";
 import { createToolHandlers } from "../src/tools.js";
+
+function runGit(repoRoot: string, args: string[]): string {
+  const result = spawnSync("git", args, { cwd: repoRoot, encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
+  }
+  return result.stdout.trim();
+}
 
 describe("Wormhole MCP tool handlers", () => {
   it("starts a mission and reports status through generic tool handlers", () => {
@@ -22,6 +31,53 @@ describe("Wormhole MCP tool handlers", () => {
     expect(started.objective).toBe("Plan how to add audit logging");
     expect(status.roundsStarted).toBe(0);
     expect(status.evidenceCount).toBe(0);
+  });
+
+  it("exposes lifecycle gap closure handlers with safety boundaries", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-life-tools-"));
+    const outsideRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-life-outside-"));
+    const calls: Array<{ timeoutMs: number }> = [];
+    try {
+      runGit(repoRoot, ["init", "-b", "main"]);
+      runGit(repoRoot, ["config", "user.name", "Wormhole Test"]);
+      runGit(repoRoot, ["config", "user.email", "wormhole@example.test"]);
+      writeFileSync(path.join(repoRoot, "package.json"), JSON.stringify({ dependencies: { zod: "4.0.0" } }));
+      writeFileSync(path.join(repoRoot, "package-lock.json"), JSON.stringify({ packages: {} }));
+      writeFileSync(path.join(repoRoot, "README.md"), "# Lifecycle\n");
+      runGit(repoRoot, ["add", "--", "README.md", "package.json", "package-lock.json"]);
+      runGit(repoRoot, ["commit", "--no-verify", "--message=initial"]);
+      writeFileSync(path.join(repoRoot, "feature.ts"), "export const feature = true;\n");
+
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+        dependencyAuditRunner: (_command, _args, options) => {
+          calls.push({ timeoutMs: options.timeoutMs });
+          return { status: 0, stdout: JSON.stringify({ vulnerabilities: {} }), stderr: "" };
+        },
+      });
+
+      expect(tools.gitLifecycleStatus({ repoRoot }).changedFiles).toContain("feature.ts");
+      expect(tools.gitBranchPrepare({ objective: "Close lifecycle gaps", prefix: "IQx" }).branchName).toBe(
+        "IQx/close-lifecycle-gaps",
+      );
+      expect(tools.gitCommitPrepare({ repoRoot, objective: "Close lifecycle gaps" }).advisory).toBe(true);
+      expect(tools.gitPrPrepare({ repoRoot, baseRef: "main", objective: "Close lifecycle gaps" }).body).toContain(
+        "## Summary",
+      );
+      expect(tools.gitCommitCreate({ repoRoot, files: [path.join(outsideRoot, "outside.ts")], message: "feat: bad" }))
+        .toMatchObject({ refused: true });
+      expect(tools.dependencyRiskReport({ repoRoot }).local.packageManager).toBe("npm");
+      expect(tools.dependencyAuditLive({ repoRoot, timeoutMs: 999_999 }).refused).toBe(false);
+      expect(calls[0]?.timeoutMs).toBe(120_000);
+      expect(tools.docsSyncCheck({ repoRoot, changedFiles: ["feature.ts"] }).decision).toBe("pass");
+      expect(tools.workspaceGraphAnalyze({ repoRoot }).summary.repoCount).toBe(1);
+      expect(() => tools.workspaceGraphAnalyze({ repoRoot, additionalRepoRoots: [outsideRoot] })).toThrow(
+        "Repo root must stay within an allowed workspace root",
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+      rmSync(outsideRoot, { recursive: true, force: true });
+    }
   });
 
   it("analyzes source conflicts through the public tool handler", () => {
