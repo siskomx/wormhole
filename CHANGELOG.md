@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.7.0 - 2026-06-28
+
+- Added a domain manifest seeder lifecycle with `domain_manifest_generate`, `domain_manifest_diff`, `domain_manifest_status`, and guarded `domain_manifest_apply`.
+- Preserved manual domain knowledge during generation, including aliases, portals, file groups, and verification gates.
+- Added stale-hash protection, backup writes, atomic replacement, validation, and optional domain-index refresh for manifest apply.
+- Documented how domain seeders differ from generated repo, durable, semantic, and repo-native indexes.
+
+## 0.6.0 - 2026-06-28
+
+- Added the manifest-driven domain indexing layer backed by `.wormhole/domain-index.json` and `.wormhole/indexes/domain-index.sqlite`.
+- Added domain refresh, status, slice, API, table, coverage, drift, and verification-gate tools.
+- Wired domain index facts into repo-native context packs and capability relation coverage.
+
 ## 0.5.3 - 2026-06-28
 
 - Wired state maintenance to start an evidence round automatically before recording maintenance evidence.

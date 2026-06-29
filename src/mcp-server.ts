@@ -2406,6 +2406,52 @@ export function createWormholeMcpServer(
   );
 
   server.registerTool(
+    "domain_manifest_generate",
+    {
+      description: "Generate a reviewable .wormhole/domain-index.json candidate from generic repo evidence while preserving manual aliases, portals, and gates.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.domainManifestGenerate(input)),
+  );
+
+  server.registerTool(
+    "domain_manifest_diff",
+    {
+      description: "Compare the current domain manifest with the generated candidate and return semantic operations plus base and candidate hashes.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.domainManifestDiff(input)),
+  );
+
+  server.registerTool(
+    "domain_manifest_status",
+    {
+      description: "Report domain manifest validity, pending generated changes, operation counts, warnings, and blockers without writing files.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.domainManifestStatus(input)),
+  );
+
+  server.registerTool(
+    "domain_manifest_apply",
+    {
+      description: "Apply an approved generated domain manifest candidate with stale-hash protection, backup, atomic write, and optional index refresh.",
+      inputSchema: {
+        repoRoot: z.string(),
+        baseHash: z.string(),
+        refreshAfterApply: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.domainManifestApply(input)),
+  );
+
+  server.registerTool(
     "domain_slice_query",
     {
       description: "Query a domain feature slice with files, API endpoints, tables, coverage gaps, and gate plans; falls back to repo-native slices when stale or missing.",

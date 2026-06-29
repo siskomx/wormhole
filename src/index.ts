@@ -59,5 +59,6 @@ export * from "./capability-relation-audit.js";
 export * from "./runtime-behavior-audit.js";
 export * from "./repo-native-pack.js";
 export * from "./domain-index-manifest.js";
+export * from "./domain-manifest-seeder.js";
 export * from "./domain-index.js";
 export * from "./sqlite-domain-index.js";

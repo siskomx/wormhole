@@ -269,7 +269,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "orchestration.domain-indexing-layer",
         area: "orchestration",
         status: "implemented",
-        description: "Manifest-driven domain index with SQLite-backed feature/API/schema/convention/memory/gate coverage, freshness and drift checks, repo-native slice enrichment, and fallback feature queries for stale or missing indexes.",
+        description: "Manifest-driven domain index with reviewable seeder generation, semantic diffs, guarded manifest apply, SQLite-backed feature/API/schema/convention/memory/gate coverage, freshness and drift checks, repo-native slice enrichment, and fallback feature queries for stale or missing indexes.",
       },
       {
         id: "orchestration.repo-blueprint-compiler",

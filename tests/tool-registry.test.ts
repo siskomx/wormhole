@@ -220,6 +220,10 @@ describe("tool registry conformance", () => {
     const catalog = queryToolCatalog({
       toolNames: [
         "domain_index_refresh",
+        "domain_manifest_generate",
+        "domain_manifest_diff",
+        "domain_manifest_status",
+        "domain_manifest_apply",
         "domain_slice_query",
         "domain_api_query",
         "domain_table_query",
@@ -232,10 +236,17 @@ describe("tool registry conformance", () => {
     expect(catalog.tools).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "domain_index_refresh", risk: "write", phase: "maintain" }),
+        expect.objectContaining({ name: "domain_manifest_generate", risk: "read", phase: "gather" }),
+        expect.objectContaining({ name: "domain_manifest_diff", risk: "read", phase: "verify" }),
+        expect.objectContaining({ name: "domain_manifest_status", risk: "read", phase: "maintain" }),
+        expect.objectContaining({ name: "domain_manifest_apply", risk: "write", phase: "maintain" }),
         expect.objectContaining({ name: "domain_slice_query", risk: "read", phase: "gather" }),
         expect.objectContaining({ name: "domain_index_coverage", risk: "read", phase: "verify" }),
         expect.objectContaining({ name: "domain_verification_gate_plan", plane: "verification", phase: "plan" }),
       ]),
+    );
+    expect(catalog.tools.find((tool) => tool.name === "domain_manifest_apply")?.inputs).toEqual(
+      expect.arrayContaining(["baseHash", "refreshAfterApply"]),
     );
     expect(catalog.tools.find((tool) => tool.name === "domain_slice_query")?.inputs).toContain("requireFresh");
   });

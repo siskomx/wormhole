@@ -51,6 +51,10 @@ Domain tools:
 
 - `domain_index_refresh`: rebuild the SQLite domain index.
 - `domain_index_status`: read freshness, summary, warnings, and index health.
+- `domain_manifest_generate`: infer a reviewable `.wormhole/domain-index.json` candidate from generic repo evidence while preserving manual aliases, portals, and gates.
+- `domain_manifest_diff`: compare the current seeder manifest with the generated candidate and return semantic operations with base/candidate hashes.
+- `domain_manifest_status`: report manifest validity, pending seeder operations, warnings, and blockers without writing files.
+- `domain_manifest_apply`: write an approved candidate with stale-hash protection, backup, atomic replace, and optional domain-index refresh.
 - `domain_slice_query`: query one feature with files, API endpoints, tables, coverage gaps, and gate plans.
 - `domain_api_query`: query indexed API endpoints by feature, method, path template, or text.
 - `domain_table_query`: query folded schema tables, columns, indexes, foreign keys, and migration provenance.
@@ -96,11 +100,13 @@ Domain tools:
 
 ### Domain-Indexed Repos
 
-1. Add `.wormhole/domain-index.json`.
-2. Run `domain_index_refresh`.
-3. Check `domain_index_status`.
-4. Use `domain_slice_query`, `domain_api_query`, `domain_table_query`, and `domain_verification_gate_plan` before implementation.
-5. Use `domain_index_coverage` and `domain_index_drift` before trusting the stored domain facts.
+1. Run `domain_manifest_generate` to infer a candidate `.wormhole/domain-index.json`.
+2. Run `domain_manifest_diff` or `domain_manifest_status` to review semantic changes and blockers.
+3. Run `domain_manifest_apply` with the returned `baseHash` when the candidate is approved.
+4. Run `domain_index_refresh` or set `refreshAfterApply: true` on apply.
+5. Check `domain_index_status`.
+6. Use `domain_slice_query`, `domain_api_query`, `domain_table_query`, and `domain_verification_gate_plan` before implementation.
+7. Use `domain_index_coverage` and `domain_index_drift` before trusting the stored domain facts.
 
 ### Implementation Loop
 
@@ -113,7 +119,17 @@ Domain tools:
 
 ## Domain Manifest
 
-Create `.wormhole/domain-index.json` to teach Wormhole repo-specific feature ownership:
+`.wormhole/domain-index.json` teaches Wormhole repo-specific feature ownership. Agents can now create and maintain this seeder through `domain_manifest_generate`, `domain_manifest_diff`, `domain_manifest_status`, and `domain_manifest_apply`.
+
+The lifecycle is intentionally review-first:
+
+- Generate and status are read-only.
+- Diff returns semantic operations such as `add-feature`, `update-feature-roots`, `update-feature-tables`, `update-file-groups`, and `add-verification-gate`.
+- Apply is the only writer. It requires the current `baseHash`, writes a backup, performs an atomic replace, validates the manifest after write, and can refresh the domain index.
+- Manual knowledge is preserved. Existing aliases, portals, custom file groups, and verification gates are carried into generated candidates instead of being silently deleted.
+- Stale removals should be treated as warnings for human review; generated candidates add or update inferred coverage but do not silently erase repo-specific knowledge.
+
+The manifest shape is:
 
 ```json
 {
@@ -154,6 +170,17 @@ Notes:
 - Script names are preserved exactly so package scripts like `lint:org-filter` continue to work.
 - Manifest-declared `.wormhole/memory` files are indexed by the domain layer even though the broad repo index ignores `.wormhole` runtime state.
 - If OpenAPI files are absent, route scanning still produces endpoint facts and reports `route-without-openapi` coverage gaps.
+
+## Index Lifecycle Coverage
+
+Wormhole has several index-like artifacts, but they do not all need the same seeder lifecycle:
+
+- Repo graph indexes are generated from source files. Use `repo_index_build`, `repo_index_query`, `repo_index_explain`, `repo_index_path`, and `repo_index_report`.
+- Durable repo indexes and shard manifests are generated artifacts. Use `durable_repo_index_refresh`, `durable_index_manifest_refresh`, `durable_index_status`, `durable_index_manifest_status`, and `durable_repo_index_query`.
+- Semantic fallback indexes are generated from caller-provided records. Use `durable_semantic_index_refresh` and `durable_semantic_search`.
+- Repo-native packs are read-only synthesized coverage over existing repo evidence. Use `repo_native_pack_build` and `feature_slice_query`.
+- Blueprints and app-process artifacts already have compile/write/status/gate workflows because they are authored planning artifacts.
+- Domain indexing was the missing case: it depended on a repo-specific seeder manifest that Wormhole could read but not create or maintain. The `domain_manifest_*` tools close that gap.
 
 ## Runtime State
 

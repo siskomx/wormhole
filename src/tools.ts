@@ -132,6 +132,12 @@ import {
   refreshDomainIndex,
 } from "./sqlite-domain-index.js";
 import {
+  applyDomainManifestCandidate,
+  diffDomainManifestCandidate,
+  generateDomainManifestCandidate,
+  readDomainManifestSeederStatus,
+} from "./domain-manifest-seeder.js";
+import {
   createRepoActivityStore,
   type RepoActivityRecordInput,
   type RepoActivitySnapshot,
@@ -2231,6 +2237,48 @@ export function createToolHandlers(
     domainIndexStatus(input: { repoRoot: string }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return readDomainIndexStatus({ repoRoot });
+    },
+
+    domainManifestGenerate(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return generateDomainManifestCandidate({ repoRoot });
+    },
+
+    domainManifestDiff(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return diffDomainManifestCandidate({ repoRoot });
+    },
+
+    domainManifestStatus(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return readDomainManifestSeederStatus({ repoRoot });
+    },
+
+    domainManifestApply(input: { repoRoot: string; baseHash: string; refreshAfterApply?: boolean }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const diff = diffDomainManifestCandidate({ repoRoot });
+      if (diff.blockers.length > 0) {
+        throw new Error(`Cannot apply domain manifest candidate: ${diff.blockers.join(" ")}`);
+      }
+      if (input.baseHash !== diff.baseHash) {
+        throw new Error(
+          `Domain manifest base hash is stale: expected ${diff.baseHash}, received ${input.baseHash}. Re-run domain_manifest_diff before applying.`,
+        );
+      }
+      assertPrivilegedAction({
+        toolName: "domain_manifest_apply",
+        kind: "file_write",
+        operations: [{ kind: "file_write", path: path.join(repoRoot, ".wormhole/domain-index.json") }],
+        target: { repoRoot, path: path.join(repoRoot, ".wormhole/domain-index.json") },
+      });
+      const result = applyDomainManifestCandidate({ repoRoot, baseHash: input.baseHash });
+      if (!input.refreshAfterApply) {
+        return result;
+      }
+      return {
+        ...result,
+        refreshed: refreshDomainIndex({ repoRoot }),
+      };
     },
 
     domainSliceQuery(input: Parameters<typeof queryDomainSlice>[0]) {

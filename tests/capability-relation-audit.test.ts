@@ -139,6 +139,9 @@ describe("capability relation audit", () => {
         capabilityId: "orchestration.domain-indexing-layer",
         primaryTools: expect.arrayContaining([
           "domain_index_refresh",
+          "domain_manifest_generate",
+          "domain_manifest_diff",
+          "domain_manifest_apply",
           "domain_slice_query",
           "domain_api_query",
           "domain_verification_gate_plan",
