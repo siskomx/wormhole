@@ -520,7 +520,7 @@ function gatePhase(): WorkflowPhase {
       "missionId",
       "source evidence fields",
     ]),
-    toolCall("gate_request", 95, "Check whether evidence and open questions permit the final response.", {}, [
+    toolCall("gate_request", 95, "Check whether evidence and open questions permit the final response.", { enforceResume: true }, [
       "missionId",
     ]),
   ], ["Recorded evidence ids"], ["record_evidence", "gate_request"]);

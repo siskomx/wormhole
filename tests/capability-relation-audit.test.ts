@@ -247,6 +247,13 @@ describe("capability relation audit", () => {
     );
   });
 
+  it("declares the resume validation freshness check", () => {
+    const relation = CAPABILITY_RELATIONS.find(
+      (r) => r.capabilityId === "orchestration.resume-continuation",
+    );
+    expect(relation?.freshnessChecks).toContain("resume-validation-status");
+  });
+
   it("exposes the relation audit through the public tool handler", () => {
     const tools = createToolHandlers(createInMemoryKernel());
 

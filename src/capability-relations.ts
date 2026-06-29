@@ -443,6 +443,7 @@ export const CAPABILITY_RELATIONS: CapabilityRelation[] = [
     primaryTools: ["resume_record", "resume_checkpoint", "resume_validate", "resume_load"],
     stateOwners: ["resume-store"],
     artifactKinds: ["resume_latest", "resume_checkpoint"],
+    freshnessChecks: ["resume-validation-status"],
     testFiles: ["tests/resume-store.test.ts", "tests/runtime-persistence.test.ts", "tests/tools.test.ts"],
   },
   {

@@ -363,6 +363,19 @@ describe("golden-path workflows", () => {
     );
   });
 
+  it("enforces resume validation at the workflow done gate", () => {
+    const workflow = createBugfixWorkflow({
+      repoRoot: "/repo",
+      objective: "Fix failed login",
+      diagnosticSource: "npm test",
+      changedFiles: ["src/login.ts"],
+    });
+    const gateCall = workflow.phases
+      .flatMap((phase) => phase.calls)
+      .find((call) => call.toolName === "gate_request");
+    expect(gateCall?.input).toMatchObject({ enforceResume: true });
+  });
+
   it("onboards repos through project model and route discovery", () => {
     const workflow = createOnboardingWorkflow({
       repoRoot: "/repo",

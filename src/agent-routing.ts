@@ -397,6 +397,7 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     "Record source-backed evidence before making implementation claims.",
     "Run focused verification before requesting the gate.",
     "Run gate_request after verification_run and record_evidence.",
+    "Enforce resume validity (enforceResume) at the final gate; checkpoint before claiming the session is resumable.",
     "Run runtime_behavior_audit before final claims when observed tool calls are available.",
     "Call emit_plan only when the user explicitly asks for a plan, spec, design, or planning-only artifact.",
   ];
@@ -409,7 +410,7 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
       repoRoot: input.repoRoot,
       changedFiles,
     }),
-    toolCall("gate_request", 80, "Request the Wormhole gate before the final response.", {}, [
+    toolCall("gate_request", 80, "Request the Wormhole gate before the final response.", { enforceResume: true }, [
       "missionId",
     ]),
   ];
@@ -587,7 +588,7 @@ function createDefaultToolSequence(input: {
     toolCall("verification_run", 65, "Run selected checks and preserve evidence hashes.", {}, [
       "commands from test_plan_select",
     ]),
-    toolCall("gate_request", 50, "Ask the evidence gate before the final response.", {}, [
+    toolCall("gate_request", 50, "Ask the evidence gate before the final response.", { enforceResume: true }, [
       "missionId",
     ]),
   ];
