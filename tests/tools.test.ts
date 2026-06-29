@@ -33,6 +33,53 @@ describe("Wormhole MCP tool handlers", () => {
     expect(status.evidenceCount).toBe(0);
   });
 
+  it("records, checkpoints, validates, and loads resume state", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-resume-tools-"));
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+        runtimeStatePath: path.join(repoRoot, ".wormhole", "runtime-state.json"),
+      });
+      tools.ctxRecord({
+        source: "docs/handoff.md",
+        sourceType: "file",
+        text: "Resume validation should resolve real context pack ids.",
+        tags: ["resume"],
+      });
+      const pack = tools.ctxPackCreate({
+        objective: "Continue a long-running orchestration",
+        query: "resume validation",
+        maxChars: 500,
+      });
+      const record = tools.resumeRecord({
+        repoRoot,
+        objective: "Continue a long-running orchestration",
+        kind: "exact_next_action",
+        summary: "Run resume_validate before continuing.",
+        nextActions: ["Call resume_validate"],
+        contextPackIds: [pack.packId],
+      });
+
+      const beforeCheckpoint = tools.resumeValidate({ repoRoot, requireCanonical: true });
+      expect(beforeCheckpoint.valid).toBe(false);
+      expect(beforeCheckpoint.staleMaterialRecordIds).toEqual([record.recordId]);
+
+      const checkpoint = tools.resumeCheckpoint({
+        repoRoot,
+        objective: "Continue a long-running orchestration",
+        reason: "Before fresh chat",
+      });
+      const valid = tools.resumeValidate({ repoRoot, requireCanonical: true });
+      const loaded = tools.resumeLoad({ repoRoot });
+
+      expect(checkpoint.files?.map((file) => file.relativePath)).toContain(".wormhole/resume/latest.md");
+      expect(valid.valid).toBe(true);
+      expect(loaded.records.map((item) => item.recordId)).toEqual([record.recordId]);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("exposes lifecycle gap closure handlers with safety boundaries", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-life-tools-"));
     const outsideRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-life-outside-"));

@@ -166,6 +166,10 @@ Wormhole now has native coordination tools for the mid-session states that usual
 
 - `ctx_pack_budget_review` explains which context records will be retained or evicted from a budgeted pack using pinned records, stale-record ids, changed-file relevance, query score, and explicit eviction reasons.
 - `ctx_pack_refresh` creates a refreshed context pack from that review instead of silently truncating context.
+- `resume_record` stores material decisions, blockers, verification results, exact next actions, final response summaries, and fresh-session recommendations in runtime state.
+- `resume_checkpoint` writes compact `.wormhole/resume/latest.*` handoff artifacts with a repo fingerprint and retained record coverage.
+- `resume_validate` checks checkpoint coverage against runtime evidence IDs, context pack IDs, repo fingerprint drift, and changed-file existence before a handoff is treated as safely resumable.
+- `resume_load` returns the latest checkpoint and retained records for fresh-chat bootstrap.
 - `state_maintenance_run` coordinates watch-scan results, durable graph refresh, context-pack refresh, evidence recording, route refresh, and shared workspace writes/merges in one audited tool response. It records each step durably, returns failed partial runs instead of throwing away the audit trail, and remains explicit and caller-triggered; Wormhole does not run a hidden daemon.
 - `state_maintenance_status` reads completed and failed maintenance records after reconnects or handoffs.
 - `state_maintenance_retry` reruns a previous maintenance input with optional corrected overrides.

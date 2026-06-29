@@ -162,6 +162,19 @@ describe("capability relation audit", () => {
         freshnessChecks: expect.arrayContaining(["domain-index-status", "domain-index-drift"]),
       }),
     );
+    expect(CAPABILITY_RELATIONS).toContainEqual(
+      expect.objectContaining({
+        capabilityId: "orchestration.resume-continuation",
+        primaryTools: expect.arrayContaining(["resume_record", "resume_checkpoint", "resume_validate", "resume_load"]),
+        stateOwners: expect.arrayContaining(["resume-store"]),
+        artifactKinds: expect.arrayContaining(["resume_latest", "resume_checkpoint"]),
+        testFiles: expect.arrayContaining([
+          "tests/resume-store.test.ts",
+          "tests/runtime-persistence.test.ts",
+          "tests/tools.test.ts",
+        ]),
+      }),
+    );
   });
 
   it("warns when workflow artifact writers omit artifact freshness metadata", () => {

@@ -26,6 +26,16 @@ import {
   type AgentWorkspaceSnapshot,
   type AgentWorkspaceWriteInput,
 } from "./agent-workspace.js";
+import {
+  createResumeRepoFingerprint,
+  createResumeStore,
+  writeResumeArtifacts,
+  type ResumeCheckpointInput,
+  type ResumeRecordInput,
+  type ResumeStoreSnapshot,
+  type ResumeValidationGroundTruth,
+  type ResumeValidationInput,
+} from "./resume-store.js";
 import { createGraphArtifacts, type GraphCommunity } from "./graph-artifacts.js";
 import type {
   EvidenceInput,
@@ -494,6 +504,7 @@ type RuntimeToolState = {
   diagnostics?: Partial<DiagnosticStoreSnapshot>;
   optimizationAdapters?: Partial<OptimizationAdapterSnapshot>;
   agentWorkspace?: Partial<AgentWorkspaceSnapshot>;
+  resume?: Partial<ResumeStoreSnapshot>;
   repoActivity?: Partial<RepoActivitySnapshot>;
   patchTransactions?: Partial<PatchTransactionSnapshot>;
   stateMaintenance?: Partial<StateMaintenanceSnapshot>;
@@ -590,6 +601,9 @@ export function createToolHandlers(
   const agentWorkspaceStore = createAgentWorkspaceStore(runtimeState.agentWorkspace, (snapshot) =>
     persistRuntimeState("agentWorkspace", snapshot),
   );
+  const resumeStore = createResumeStore(runtimeState.resume, (snapshot) =>
+    persistRuntimeState("resume", snapshot),
+  );
   const optimizationStore = createOptimizationStore(runtimeState.optimization, (snapshot) =>
     persistRuntimeState("optimization", snapshot),
   );
@@ -657,6 +671,31 @@ export function createToolHandlers(
 
   function assertPrivilegedAction(request: PrivilegedActionRequest): void {
     privilegedActionGate.assertAllowed(request);
+  }
+
+  function existingResumeChangedFiles(repoRoot: string, changedFiles: string[]): string[] {
+    return changedFiles.filter((file) => {
+      const absolutePath = path.resolve(repoRoot, file);
+      const relativePath = path.relative(repoRoot, absolutePath);
+      return (
+        relativePath !== "" &&
+        !relativePath.startsWith("..") &&
+        !path.isAbsolute(relativePath) &&
+        existsSync(absolutePath)
+      );
+    });
+  }
+
+  function buildResumeValidationGroundTruth(repoRoot: string, changedFiles: string[]): ResumeValidationGroundTruth {
+    return {
+      evidenceIds: kernel
+        .evidenceRecords()
+        .map((record) => record.evidenceId)
+        .sort((left, right) => left.localeCompare(right)),
+      contextPackIds: contextStore.snapshot().packs.map((pack) => pack.packId),
+      repoFingerprint: createResumeRepoFingerprint(repoRoot),
+      existingChangedFiles: existingResumeChangedFiles(repoRoot, changedFiles),
+    };
   }
 
   function getRepoIndex(
@@ -1265,6 +1304,47 @@ export function createToolHandlers(
 
     ctxPackRender(input: { packId: string }) {
       return contextStore.renderPack(input);
+    },
+
+    resumeRecord(input: ResumeRecordInput) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return resumeStore.record({ ...input, repoRoot });
+    },
+
+    resumeCheckpoint(input: ResumeCheckpointInput) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      assertPrivilegedAction({
+        toolName: "resume_checkpoint",
+        kind: "file_write",
+        operations: [{ kind: "file_write", path: path.join(repoRoot, ".wormhole/resume") }],
+        target: { repoRoot, path: path.join(repoRoot, ".wormhole/resume") },
+      });
+      const checkpoint = resumeStore.checkpoint({
+        ...input,
+        repoRoot,
+        repoFingerprint: createResumeRepoFingerprint(repoRoot),
+      });
+      const artifacts = writeResumeArtifacts({
+        repoRoot,
+        checkpoint,
+        retainedCheckpointIds: resumeStore.retainedCheckpointIds({ repoRoot }),
+      });
+      return { ...checkpoint, files: artifacts.files, prunedFiles: artifacts.prunedFiles };
+    },
+
+    resumeValidate(input: ResumeValidationInput) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const loaded = resumeStore.load({ repoRoot });
+      return resumeStore.validate({
+        ...input,
+        repoRoot,
+        groundTruth: buildResumeValidationGroundTruth(repoRoot, loaded.checkpoint?.changedFiles ?? []),
+      });
+    },
+
+    resumeLoad(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return resumeStore.load({ repoRoot });
     },
 
     pythonSidecarProbe() {

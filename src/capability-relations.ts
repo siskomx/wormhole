@@ -439,6 +439,13 @@ export const CAPABILITY_RELATIONS: CapabilityRelation[] = [
     testFiles: ["tests/agent-workspace.test.ts"],
   },
   {
+    capabilityId: "orchestration.resume-continuation",
+    primaryTools: ["resume_record", "resume_checkpoint", "resume_validate", "resume_load"],
+    stateOwners: ["resume-store"],
+    artifactKinds: ["resume_latest", "resume_checkpoint"],
+    testFiles: ["tests/resume-store.test.ts", "tests/runtime-persistence.test.ts", "tests/tools.test.ts"],
+  },
+  {
     capabilityId: "orchestration.graph-artifact-suite",
     primaryTools: [
       "repo_graph_analyze",

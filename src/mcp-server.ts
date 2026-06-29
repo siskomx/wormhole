@@ -27,7 +27,7 @@ export function createWormholeMcpServer(
 ): McpServer {
   const server = new McpServer({
     name: "wormhole",
-    version: "0.11.0",
+    version: "0.12.0",
   });
   const tools = createToolHandlers(kernel, options);
   const taskStatusSchema = z.enum([
@@ -675,6 +675,80 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.ctxPackRender(input)),
+  );
+
+  const resumeRecordSchema = {
+    repoRoot: z.string(),
+    objective: z.string(),
+    kind: z.enum([
+      "user_decision",
+      "design_direction",
+      "exact_next_action",
+      "blocker",
+      "verification",
+      "tool_error",
+      "handoff",
+      "final_response",
+      "fresh_session_recommended",
+    ]),
+    summary: z.string(),
+    detail: z.unknown().optional(),
+    missionId: z.string().optional(),
+    trust: z.enum(["scratch", "handoff", "canonical"]).optional(),
+    evidenceIds: z.array(z.string()).optional(),
+    contextPackIds: z.array(z.string()).optional(),
+    workspaceRecordIds: z.array(z.string()).optional(),
+    changedFiles: z.array(z.string()).optional(),
+    nextActions: z.array(z.string()).optional(),
+    source: z.enum(["agent", "user", "tool", "host"]).optional(),
+  };
+
+  server.registerTool(
+    "resume_record",
+    {
+      description: "Record a material resume event for future chat continuation.",
+      inputSchema: resumeRecordSchema,
+    },
+    async (input) => jsonResult(tools.resumeRecord(input)),
+  );
+
+  server.registerTool(
+    "resume_checkpoint",
+    {
+      description: "Create a compact resume checkpoint and write .wormhole/resume artifacts.",
+      inputSchema: {
+        repoRoot: z.string(),
+        objective: z.string(),
+        missionId: z.string().optional(),
+        reason: z.string(),
+        maxRecords: z.number().optional(),
+        includeTrust: z.array(z.enum(["scratch", "handoff", "canonical"])).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.resumeCheckpoint(input)),
+  );
+
+  server.registerTool(
+    "resume_validate",
+    {
+      description: "Validate whether material resume records are covered by the latest ground-truth checkpoint.",
+      inputSchema: {
+        repoRoot: z.string(),
+        requireCanonical: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.resumeValidate(input)),
+  );
+
+  server.registerTool(
+    "resume_load",
+    {
+      description: "Load the latest compact resume checkpoint and records for fresh-chat bootstrap.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.resumeLoad(input)),
   );
 
   const scheduledTaskSchema = z.object({

@@ -49,6 +49,7 @@ describe("repo-local Codex plugin metadata", () => {
     expect(plugin.interface.longDescription).toContain("repo watch sessions");
     expect(plugin.interface.longDescription).toContain("git diff detection");
     expect(plugin.interface.longDescription).toContain("patch transactions");
+    expect(plugin.interface.longDescription).toContain("durable resume continuation");
     expect(plugin.interface.defaultPrompt.join("\n")).toContain(
       "only call emit_plan when the user explicitly asks for a plan",
     );
@@ -111,6 +112,9 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("workflow_review_pr");
     expect(manifest.tools.map((tool) => tool.name)).toContain("workflow_onboard_repo");
     expect(manifest.tools.map((tool) => tool.name)).toContain("workflow_write_artifacts");
+    expect(manifest.tools.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["resume_record", "resume_checkpoint", "resume_validate", "resume_load"]),
+    );
     expect(manifest.tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
         "git_lifecycle_status",
@@ -244,6 +248,9 @@ describe("Claude Desktop extension metadata", () => {
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "state_maintenance_run",
+    );
+    expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
+      "resume_checkpoint",
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "optimized_command_run",

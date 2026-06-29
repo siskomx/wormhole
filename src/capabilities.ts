@@ -54,7 +54,7 @@ export type WormholeCapabilityManifest = {
 export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
   return {
     name: "wormhole",
-    version: "0.11.0",
+    version: "0.12.0",
     maxOrchestrationDepth: 4,
     layers: [
       {
@@ -342,6 +342,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         area: "orchestration",
         status: "implemented",
         description: "Shared mission workspace memory for concurrent agent runs with attributed records, provenance, snapshot persistence, merge views, and conflict detection.",
+      },
+      {
+        id: "orchestration.resume-continuation",
+        area: "orchestration",
+        status: "implemented",
+        description: "Compact multi-chat resume records, checkpoint artifacts, verified evidence/context references, repo fingerprint validation, trust levels, and fresh-chat bootstrap loading.",
       },
       {
         id: "orchestration.graph-artifact-suite",

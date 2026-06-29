@@ -756,5 +756,9 @@ export function createInMemoryKernel(
         artifactCount: state.artifacts.length,
       };
     },
+
+    evidenceRecords(): EvidenceRecord[] {
+      return [...missions.values()].flatMap((state) => state.evidence.map((record) => ({ ...record })));
+    },
   };
 }

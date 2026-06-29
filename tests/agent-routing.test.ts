@@ -220,6 +220,10 @@ describe("agent-facing routing tools", () => {
           "durable_index_status",
           "durable_repo_index_query",
           "mission_route",
+          "resume_checkpoint",
+          "resume_load",
+          "resume_record",
+          "resume_validate",
           "round_start",
           "state_maintenance_run",
           "tool_catalog_query",
@@ -256,6 +260,7 @@ describe("agent-facing routing tools", () => {
         observedToolCalls: [
           { toolName: "agent_context_prepare" },
           { toolName: "durable_repo_index_query" },
+          { toolName: "resume_checkpoint" },
           { toolName: "workflow_write_artifacts" },
         ],
       });
@@ -271,7 +276,13 @@ describe("agent-facing routing tools", () => {
       expect(prepared.agentInstructions).toContain("Run gate_request after verification_run");
       expect(prepared.agentInstructions).toContain("Call emit_plan only when the user explicitly asks for a plan");
       expect(prepared.agentInstructions).toContain(
-        "Use durable_repo_index_query, ctx_pack_refresh, and workflow_write_artifacts for durable handoff and resume paths.",
+        "Use durable_repo_index_query, ctx_pack_refresh, workflow_write_artifacts, resume_record, resume_checkpoint, resume_validate, and resume_load for durable handoff and resume paths.",
+      );
+      expect(prepared.agentInstructions).toContain(
+        "Use resume_record for material session decisions, owner approvals, blockers, verification results, tool errors, exact next actions, final responses, and fresh-session recommendations.",
+      );
+      expect(prepared.agentInstructions).toContain(
+        "Use resume_checkpoint before fresh-chat handoff, final output, or any context-heavy transition; use resume_validate before claiming a session is safely resumable.",
       );
       expect(prepared.agentInstructions).toContain("Refresh index state before trusting degraded or stale context.");
       expect(prepared.agentInstructions).toContain(

@@ -11,7 +11,7 @@ describe("runtime handler persistence", () => {
     const runtimeStatePath = path.join(root, "runtime-state.json");
 
     try {
-      const first = createToolHandlers(createInMemoryKernel(), { runtimeStatePath });
+      const first = createToolHandlers(createInMemoryKernel(), { runtimeStatePath, allowedRepoRoots: [root] });
       first.agentRegister({
         agentId: "cli-helper",
         displayName: "CLI Helper",
@@ -58,6 +58,19 @@ describe("runtime handler persistence", () => {
         runId: "run-a",
         key: "finding",
         value: "Agent workspace memory survives handler recreation.",
+      });
+      const resumeRecord = first.resumeRecord({
+        repoRoot: root,
+        objective: "Persist resume checkpoint",
+        kind: "exact_next_action",
+        summary: "Resume records survive handler recreation.",
+        nextActions: ["Call resume_load in the next chat"],
+        contextPackIds: [pack.packId],
+      });
+      const resumeCheckpoint = first.resumeCheckpoint({
+        repoRoot: root,
+        objective: "Persist resume checkpoint",
+        reason: "Before handler recreation",
       });
       await first.optimizedCommandRun({
         command: process.execPath,
@@ -106,7 +119,7 @@ describe("runtime handler persistence", () => {
       });
       first.orchestrationPolicyActivate({ evaluationId: evaluation.evaluationId });
 
-      const second = createToolHandlers(createInMemoryKernel(), { runtimeStatePath });
+      const second = createToolHandlers(createInMemoryKernel(), { runtimeStatePath, allowedRepoRoots: [root] });
       const run = second.agentDispatch({
         missionId: "M1",
         taskId: "T1",
@@ -137,6 +150,10 @@ describe("runtime handler persistence", () => {
       expect(second.ctxPackRender({ packId: pack.packId })).toContain("Context packs should survive");
       expect(second.agentWorkspaceRead({ workspaceId: workspace.workspaceId }).records[0]?.recordId).toBe(
         workspaceRecord.recordId,
+      );
+      expect(second.resumeLoad({ repoRoot: root }).records[0]?.recordId).toBe(resumeRecord.recordId);
+      expect(second.resumeValidate({ repoRoot: root, requireCanonical: true }).checkpoint?.checkpointId).toBe(
+        resumeCheckpoint.checkpointId,
       );
       expect(second.optimizationStats().runCount).toBe(1);
       expect(second.behaviorModeGet()).toEqual({ brevity: "dense", minimality: "strict" });

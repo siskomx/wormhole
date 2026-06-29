@@ -84,6 +84,7 @@ Domain tools:
 ### Agent Collaboration And Runtime Extensions
 
 - Shared mission workspace memory for concurrent agent runs.
+- Durable resume continuation with material records, compact checkpoints, repo fingerprint checks, and verified evidence/context references.
 - External agent adapters, generated-tool validation, behavior/remit verification, and deterministic findings rendering.
 - Printing Press CLI adapter support.
 - Optional Python-backed graph metrics, graph communities, media extraction, trace summaries, and offline policy jobs.
@@ -107,6 +108,13 @@ Domain tools:
 3. Query through `durable_repo_index_query`.
 4. Pass `requireFresh: true` when stale data must be refused instead of returned with warnings.
 5. After upgrading to `0.8.0`, refresh each repo once because extractor-versioned fingerprints mark pre-AST durable indexes stale.
+
+### Cross-Chat Resume
+
+1. Use `resume_record` for material decisions, blockers, verification results, final responses, and exact next actions.
+2. Use `resume_checkpoint` before final output, fresh-chat handoff, or any context-heavy transition.
+3. Use `resume_validate` before trusting a checkpoint; canonical resume records must resolve to real evidence or context packs and changed files must still exist.
+4. Use `resume_load` at the start of a fresh chat to bootstrap from the latest compact checkpoint and retained records.
 
 ### Domain-Indexed Repos
 
@@ -279,6 +287,7 @@ Wormhole has several index-like artifacts, but they do not all need the same see
 - MCP entrypoint: `src/cli.ts`
 - Event log: `.wormhole/events.jsonl`
 - Handler runtime state: `.wormhole/runtime-state.json`
+- Resume artifacts: `.wormhole/resume/latest.json`, `.wormhole/resume/latest.md`, and retained checkpoint files.
 - App-process run state: `.wormhole/app-process/run-state.json` and `.wormhole/app-process/events.jsonl`
 - Durable repo indexes: `.wormhole/indexes/repo-index.sqlite`, JSON compatibility exports, and manifest shards.
 - Domain index: `.wormhole/indexes/domain-index.sqlite`

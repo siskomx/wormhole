@@ -61,6 +61,7 @@ Implemented `orchestration` capabilities include:
 - `orchestration.mission-delta-replanning`: mid-mission re-scope reports that combine changed files, diagnostics, blast radius, stale evidence, focused tests, refreshed context, and gate guidance.
 - `orchestration.lsp-feedback-replanning`: LSP diagnostic feedback loop that records structured diagnostics and feeds mission-delta replanning with repo-relative changed files.
 - `orchestration.agent-workspace-memory`: shared mission workspace memory for concurrent agent runs with attributed records, provenance, snapshot persistence, merge views, and conflict detection.
+- `orchestration.resume-continuation`: compact handoff records and checkpoints validated against real kernel evidence, context packs, repo fingerprints, and changed-file existence.
 - `orchestration.graph-artifact-suite`: native graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis.
 - `orchestration.repo-activity-watch-layer`: opt-in repo watch sessions with file change scans, git diff detection, structured activity recording, mission evidence capture, and durable repo graph refresh.
 - `orchestration.patch-transactions`: repo-confined patch checkpoints, unified-diff application, transaction status, and captured before-content rollback for safer coding-agent edits.

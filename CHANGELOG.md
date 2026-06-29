@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.12.0 - 2026-06-29
+
+- Added durable resume continuation tools for material session records, compact checkpoints, validation against kernel evidence/context packs, repo fingerprint drift checks, and latest handoff artifacts.
+- Wired resume continuation through runtime persistence, MCP registration, tool registry metadata, capability relations, agent routing, plugin manifests, docs, and focused tests.
+
 ## 0.11.0 - 2026-06-29
 
 - Added git lifecycle tools for status, branch preparation/creation, commit preparation/creation, PR preparation, and bounded conflict analysis.
