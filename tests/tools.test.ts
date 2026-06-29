@@ -1462,7 +1462,7 @@ describe("Wormhole MCP tool handlers", () => {
     expect(run.results.map((result) => result.output)).toEqual(["inspected", "edited"]);
   });
 
-  it("auto-validates resume only when resume state exists", async () => {
+  it("auto-validates resume only when resume state exists", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-resume-automaintain-"));
     const runtimeStatePath = path.join(repoRoot, ".wormhole", "runtime-state.json");
     try {
@@ -1525,6 +1525,7 @@ describe("Wormhole MCP tool handlers", () => {
       // Passive: resume is invalid (no checkpoint) but the gate is NOT blocked on it.
       const passive = tools.gateRequest({ missionId });
       expect(passive.reasons.some((r: string) => /resume/i.test(r))).toBe(false);
+      expect(passive.open).toBe(false);
 
       // Active: enforceResume promotes the missing checkpoint to a blocking reason.
       const enforced = tools.gateRequest({ missionId, enforceResume: true });

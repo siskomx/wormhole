@@ -1266,6 +1266,10 @@ export function createToolHandlers(
       enforceResume?: boolean;
     }) {
       const storedSignals = latestMaintenanceSignalsForMission(input.missionId);
+      // enforceResume blocks only on an existing resume validation: the A2-populated
+      // stored signal from state_maintenance_run (or an explicit input.resume). If
+      // maintenance never ran for this mission, enforceResume silently no-ops — the
+      // workflow gate phase runs maintenance before the gate, so the golden path is covered.
       const baseResume =
         input.resume ?? (storedSignals?.resume ? { validation: storedSignals.resume } : undefined);
       const resume = baseResume
