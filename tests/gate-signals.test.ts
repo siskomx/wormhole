@@ -1,6 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { createIndexHealthSnapshot } from "../src/index-health.js";
 import { blockingGateSignalMessages, evaluateGateSignals } from "../src/gate-signals.js";
+import type { ResumeValidationResult } from "../src/resume-store.js";
+
+function resumeResult(overrides: Partial<ResumeValidationResult> = {}): ResumeValidationResult {
+  return {
+    repoRoot: "/repo",
+    valid: true,
+    missingCheckpoint: false,
+    staleMaterialRecordIds: [],
+    staleScratchRecordIds: [],
+    unauditedRecordIds: [],
+    unresolvedEvidenceIds: [],
+    unresolvedContextPackIds: [],
+    missingChangedFiles: [],
+    repoFingerprintChanged: false,
+    reasons: [],
+    ...overrides,
+  };
+}
 
 describe("gate index health signals", () => {
   it("warns on degraded index health without blocking even when enforced", () => {
@@ -163,5 +181,54 @@ describe("gate index health signals", () => {
         severity: "block",
       }),
     );
+  });
+});
+
+describe("gate resume signals", () => {
+  it("warns on integrity failures and does not block without resume.enforce, even when globally enforced", () => {
+    const validation = resumeResult({ valid: false, repoFingerprintChanged: true });
+    expect(evaluateGateSignals({ resume: { validation } })[0]).toEqual(
+      expect.objectContaining({ ruleId: "resume:repo-fingerprint-changed", severity: "warn" }),
+    );
+    // global enforce must NOT promote resume findings — only resume.enforce does
+    expect(evaluateGateSignals({ resume: { validation }, enforce: true })[0]).toEqual(
+      expect.objectContaining({ ruleId: "resume:repo-fingerprint-changed", severity: "warn" }),
+    );
+    expect(blockingGateSignalMessages({ resume: { validation } })).toEqual([]);
+  });
+
+  it("blocks integrity failures and missing checkpoint when resume.enforce is set", () => {
+    const validation = resumeResult({
+      valid: false,
+      repoFingerprintChanged: true,
+      missingCheckpoint: true,
+      staleMaterialRecordIds: ["r1"],
+      missingChangedFiles: ["src/x.ts"],
+      unresolvedEvidenceIds: ["e1"],
+      unresolvedContextPackIds: ["c1"],
+    });
+    const findings = evaluateGateSignals({ resume: { validation, enforce: true } });
+    const blocked = findings.filter((f) => f.severity === "block").map((f) => f.ruleId).sort();
+    expect(blocked).toEqual(
+      [
+        "resume:missing-changed-files",
+        "resume:missing-checkpoint",
+        "resume:repo-fingerprint-changed",
+        "resume:stale-material-records",
+        "resume:unresolved-context-packs",
+        "resume:unresolved-evidence",
+      ].sort(),
+    );
+  });
+
+  it("keeps unaudited records as warn even when resume.enforce is set", () => {
+    const validation = resumeResult({ valid: false, unauditedRecordIds: ["r1"] });
+    expect(evaluateGateSignals({ resume: { validation, enforce: true } })).toEqual([
+      expect.objectContaining({ ruleId: "resume:unaudited-records", severity: "warn" }),
+    ]);
+  });
+
+  it("emits nothing for a valid resume result", () => {
+    expect(evaluateGateSignals({ resume: { validation: resumeResult(), enforce: true } })).toEqual([]);
   });
 });

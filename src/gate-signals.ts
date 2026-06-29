@@ -1,5 +1,6 @@
 import type { SourceConflict } from "./source-authority.js";
 import type { IndexHealthSnapshot } from "./index-health.js";
+import type { ResumeValidationResult } from "./resume-store.js";
 
 export type GateSourceConflictsInput = SourceConflict[] | { conflicts: SourceConflict[] };
 
@@ -57,12 +58,18 @@ export type GateLoopHealthInput = {
   }>;
 };
 
+export type GateResumeInput = {
+  validation: ResumeValidationResult;
+  enforce?: boolean;
+};
+
 export type GateSignalInput = {
   sourceConflicts?: GateSourceConflictsInput;
   freshness?: GateFreshnessInput;
   artifactFreshness?: GateArtifactFreshness[];
   runtimeBehavior?: GateRuntimeBehaviorInput;
   loopHealth?: GateLoopHealthInput;
+  resume?: GateResumeInput;
   enforce?: boolean;
 };
 
@@ -116,6 +123,8 @@ export function evaluateGateSignals(input: GateSignalInput): GateSignalFinding[]
   if (loopFinding) {
     findings.push(loopFinding);
   }
+
+  findings.push(...gateFindingsForResume(input.resume));
 
   if (
     !input.freshness?.durableIndex?.repoIndex?.indexHealth &&
@@ -197,6 +206,65 @@ function gateFindingForLoopHealth(loopHealth: GateLoopHealthInput | undefined): 
     };
   }
   return undefined;
+}
+
+function gateFindingsForResume(resume: GateResumeInput | undefined): GateSignalFinding[] {
+  if (!resume) {
+    return [];
+  }
+  const { validation } = resume;
+  const integritySeverity: GateSignalFinding["severity"] = resume.enforce ? "block" : "warn";
+  const findings: GateSignalFinding[] = [];
+  if (validation.repoFingerprintChanged) {
+    findings.push({
+      ruleId: "resume:repo-fingerprint-changed",
+      severity: integritySeverity,
+      message: "Resume checkpoint fingerprint differs from the current repo state; re-checkpoint before relying on resume.",
+    });
+  }
+  if (validation.staleMaterialRecordIds.length > 0) {
+    findings.push({
+      ruleId: "resume:stale-material-records",
+      severity: integritySeverity,
+      message: `Material resume records exist after the latest checkpoint: ${validation.staleMaterialRecordIds.join(", ")}.`,
+    });
+  }
+  if (validation.missingChangedFiles.length > 0) {
+    findings.push({
+      ruleId: "resume:missing-changed-files",
+      severity: integritySeverity,
+      message: `Resume checkpoint references files missing from the repo: ${validation.missingChangedFiles.join(", ")}.`,
+    });
+  }
+  if (validation.unresolvedEvidenceIds.length > 0) {
+    findings.push({
+      ruleId: "resume:unresolved-evidence",
+      severity: integritySeverity,
+      message: `Resume records reference unknown evidence ids: ${validation.unresolvedEvidenceIds.join(", ")}.`,
+    });
+  }
+  if (validation.unresolvedContextPackIds.length > 0) {
+    findings.push({
+      ruleId: "resume:unresolved-context-packs",
+      severity: integritySeverity,
+      message: `Resume records reference unknown context pack ids: ${validation.unresolvedContextPackIds.join(", ")}.`,
+    });
+  }
+  if (validation.missingCheckpoint) {
+    findings.push({
+      ruleId: "resume:missing-checkpoint",
+      severity: integritySeverity,
+      message: "No resume checkpoint exists; create one before claiming the session is resumable.",
+    });
+  }
+  if (validation.unauditedRecordIds.length > 0) {
+    findings.push({
+      ruleId: "resume:unaudited-records",
+      severity: "warn",
+      message: `Resume records below canonical trust: ${validation.unauditedRecordIds.join(", ")}.`,
+    });
+  }
+  return findings;
 }
 
 function indexHealthInputs(freshness: GateFreshnessInput | undefined): IndexHealthSnapshot[] {
