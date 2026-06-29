@@ -25,6 +25,8 @@ The goal is simple: make coding agents faster and more precise in large reposito
 - AST-first extraction for TypeScript/TSX, JavaScript/JSX, Python, Rust, and C# through pinned Tree-sitter grammars, with regex fallback for parser failures, Markdown, and unsupported text formats.
 - SQLite-backed durable repo indexes under `.wormhole/indexes`, plus JSON compatibility exports and shard manifests.
 - `repo_index_build`, `repo_index_query`, `repo_index_explain`, `repo_index_path`, `repo_index_report`, and `repo_graph_analyze` for immediate repo graph work.
+- Durable graph-derived artifacts for communities, surprising cross-community connections, graph wiki pages, graph-node semantic search, and named execution flows.
+- `graph_communities_refresh`, `list_communities`, `get_community`, `get_surprising_connections`, `graph_node_semantic_index_refresh`, `graph_node_semantic_search`, `flows_refresh`, `list_flows`, `get_flow`, and `graph_wiki_generate` for queryable graph intelligence beyond raw file/symbol search.
 - `durable_repo_index_refresh`, `durable_index_status`, `durable_index_manifest_refresh`, `durable_index_manifest_status`, and `durable_repo_index_query` for persistent large-repo retrieval.
 - Project contracts, dependency inventory, command maps, architecture maps, entrypoint discovery, blast-radius analysis, and generated project context packs.
 - Repo-native coverage packs and feature-slice queries over feature indexes, scripts, conventions, schema evidence, verification gates, source conflicts, and coverage gaps.
@@ -69,6 +71,8 @@ Domain tools:
 
 - Diff-aware test impact analysis and focused verification plans.
 - Command diagnostics, LSP diagnostics, dependency reports, secret scanning, action policy review, and operation risk review.
+- Anti-slop lifecycle gates for changed-code smells, diff scope, test quality, and coverage deltas.
+- Optional strict diff-scope enforcement on `patch_apply` so patch transactions can refuse unrelated writes before files are changed.
 - Privileged write admission checks for mutating artifacts.
 - Patch transactions with checkpoints, unified-diff application, status, and rollback.
 - App-process and blueprint gates for larger product or repo-change workflows.
@@ -110,14 +114,36 @@ Domain tools:
 6. Use `domain_slice_query`, `domain_api_query`, `domain_table_query`, and `domain_verification_gate_plan` before implementation.
 7. Use `domain_index_coverage` and `domain_index_drift` before trusting the stored domain facts.
 
+### Graph-Derived Intelligence
+
+1. Build or refresh the repo index first with `repo_index_build`, `durable_repo_index_refresh`, or state maintenance.
+2. Run `graph_communities_refresh` to persist `.wormhole/graph/communities.json`.
+3. Use `list_communities` and `get_community` to inspect graph clusters with files, symbols, and edge slices.
+4. Use `get_surprising_connections` to rank cross-community edges that may reveal hidden coupling.
+5. Run `flows_refresh`, then use `list_flows` and `get_flow` for named API, CLI, worker, and script execution paths.
+6. Run `graph_node_semantic_index_refresh`, then use `graph_node_semantic_search` when the query should target graph nodes rather than generic text records.
+7. Use `graph_wiki_generate` to render pages in memory, or pass `write: true` to write `.wormhole/graph-wiki/**` after privileged write admission.
+
+### Lifecycle Anti-Slop Gates
+
+The lifecycle gate tools are generic and operate on changed files, diffs, repo-index facts, tests, and coverage summaries. They are not tied to a specific product or ticket system.
+
+- `code_smell_scan`: flags likely dead code, complex functions, duplicate blocks, and new dependencies that do not appear to be used by the changed set.
+- `diff_scope_review`: checks whether changed files and hunks trace to the objective, cited evidence paths, or explicitly approved paths.
+- `test_quality_review`: checks changed test files for skipped tests, missing assertions, snapshot-only coverage, and source changes without nearby tests.
+- `coverage_delta_analyze`: compares before/after coverage summaries and reports regressions.
+
+`tool_admission_review` now recommends `diff_scope_review` before `patch_apply`. Callers that want enforcement can pass `scopeReview` to `patch_apply`; strict failed reviews are refused before the patch writes files.
+
 ### Implementation Loop
 
 1. Prepare context with `agent_context_prepare`.
 2. Narrow impact with `blast_radius_analyze`, `test_impact_analyze_v2`, `domain_slice_query`, or `feature_slice_query`.
-3. Make edits through normal repo tooling or guarded patch transactions when rollback matters.
-4. Run focused verification.
-5. Record evidence.
-6. Ask `gate_request`.
+3. Run `diff_scope_review` and `code_smell_scan` before applying broader edits.
+4. Make edits through normal repo tooling or guarded patch transactions when rollback matters.
+5. Run focused verification plus `test_quality_review` and `coverage_delta_analyze` when tests or coverage are in scope.
+6. Record evidence.
+7. Ask `gate_request`.
 
 ## Domain Manifest
 
@@ -192,6 +218,21 @@ What AST does not replace:
 
 Use `repo_graph_analyze` when relationships matter. It is read-only and returns hubs, connector nodes, cycles, disconnected files, orphan symbols, parser coverage, bounded changed-file impact flows, truncation state, and index health.
 
+Go and Java parser packages are intentionally not enabled in this release. The next step is a parser compatibility spike that validates native package install/build behavior before adding them to the supported Tree-sitter set; until then, those languages should be treated as unsupported by AST extraction rather than silently claiming parser-grade precision.
+
+## Graph Intelligence Artifacts
+
+The graph intelligence layer turns existing repo graph facts into durable, queryable artifacts. It does not replace `repo_index_query`, `repo_graph_analyze`, `python_graph_communities`, semantic search, or entrypoint discovery; it wraps those existing capabilities in stores that agents can revisit by id, name, kind, or query.
+
+Derived stores:
+
+- `.wormhole/graph/communities.json`: stable community records built from Python sidecar community detection over the current repo graph.
+- `.wormhole/flows/index.json`: named execution flows derived from entrypoint discovery, with downstream files and community membership.
+- `.wormhole/indexes/graph-node-semantic-index.json`: deterministic semantic records for file, symbol, community, and flow graph nodes.
+- `.wormhole/graph-wiki/**`: optional Markdown pages rendered from graph communities, flows, and cross-community connection evidence.
+
+Read tools are stale-aware. If a derived store is missing or its source repo fingerprint differs from the current index, Wormhole returns a clear refresh hint instead of silently treating old graph intelligence as current. `state_maintenance_run` reports missing or stale derived graph artifacts as advisory status, but refresh remains explicit through the graph, flow, semantic-index, and wiki tools.
+
 ## Index Lifecycle Coverage
 
 Wormhole has several index-like artifacts, but they do not all need the same seeder lifecycle:
@@ -199,6 +240,7 @@ Wormhole has several index-like artifacts, but they do not all need the same see
 - Repo graph indexes are generated from source files. Use `repo_index_build`, `repo_index_query`, `repo_index_explain`, `repo_index_path`, `repo_index_report`, and `repo_graph_analyze`.
 - Durable repo indexes and shard manifests are generated artifacts. Use `durable_repo_index_refresh`, `durable_index_manifest_refresh`, `durable_index_status`, `durable_index_manifest_status`, and `durable_repo_index_query`.
 - Semantic fallback indexes are generated from caller-provided records. Use `durable_semantic_index_refresh` and `durable_semantic_search`.
+- Graph intelligence artifacts are generated from existing repo graph facts. Use `graph_communities_refresh`, `flows_refresh`, `graph_node_semantic_index_refresh`, and `graph_wiki_generate` to rebuild them, then query them through their list/get/search tools.
 - Repo-native packs are read-only synthesized coverage over existing repo evidence. Use `repo_native_pack_build` and `feature_slice_query`.
 - Blueprints and app-process artifacts already have compile/write/status/gate workflows because they are authored planning artifacts.
 - Domain indexing was the missing case: it depended on a repo-specific seeder manifest that Wormhole could read but not create or maintain. The `domain_manifest_*` tools close that gap.
@@ -211,6 +253,10 @@ Wormhole has several index-like artifacts, but they do not all need the same see
 - App-process run state: `.wormhole/app-process/run-state.json` and `.wormhole/app-process/events.jsonl`
 - Durable repo indexes: `.wormhole/indexes/repo-index.sqlite`, JSON compatibility exports, and manifest shards.
 - Domain index: `.wormhole/indexes/domain-index.sqlite`
+- Graph communities: `.wormhole/graph/communities.json`
+- Named execution flows: `.wormhole/flows/index.json`
+- Graph-node semantic index: `.wormhole/indexes/graph-node-semantic-index.json`
+- Optional graph wiki pages: `.wormhole/graph-wiki/**`
 - Codex plugin metadata: `plugins/wormhole/.codex-plugin/plugin.json`
 - Claude Desktop extension metadata: `plugins/wormhole-claude-desktop`
 
@@ -218,7 +264,7 @@ The `.wormhole` directory is local runtime state and is ignored by git.
 
 ## Freshness And Index Health
 
-Repo, durable-index, domain-index, architecture, blast-radius, context-pack, and routing responses expose shared `indexHealth` metadata. Agents should inspect this before trusting generated guidance.
+Repo, durable-index, domain-index, derived graph artifact, architecture, blast-radius, context-pack, and routing responses expose shared `indexHealth` metadata. Agents should inspect this before trusting generated guidance.
 
 Common freshness behavior:
 

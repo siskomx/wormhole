@@ -27,7 +27,7 @@ export function createWormholeMcpServer(
 ): McpServer {
   const server = new McpServer({
     name: "wormhole",
-    version: "0.8.0",
+    version: "0.10.0",
   });
   const tools = createToolHandlers(kernel, options);
   const taskStatusSchema = z.enum([
@@ -123,6 +123,23 @@ export function createWormholeMcpServer(
     tier: z.enum(["smoke", "focused", "standard", "full"]).optional(),
     lanes: z.array(z.enum(["runtime", "tests", "fixtures", "benchmarks", "docs", "generated"])).optional(),
     source: z.enum(["contract", "impact", "fallback"]).optional(),
+  });
+  const diffScopeEvidenceSchema = z.object({
+    evidenceId: z.string().optional(),
+    sourcePath: z.string().optional(),
+    summary: z.string(),
+  });
+  const patchScopeReviewSchema = z.object({
+    objective: z.string(),
+    evidence: z.array(diffScopeEvidenceSchema).optional(),
+    approvedPaths: z.array(z.string()).optional(),
+    strict: z.boolean().optional(),
+  });
+  const coverageSummarySchema = z.object({
+    lines: z.number().optional(),
+    branches: z.number().optional(),
+    functions: z.number().optional(),
+    statements: z.number().optional(),
   });
   const semanticRecordSchema = z.object({
     id: z.string(),
@@ -1446,6 +1463,130 @@ export function createWormholeMcpServer(
   );
 
   server.registerTool(
+    "graph_communities_refresh",
+    {
+      description: "Compute and persist repo graph communities from the current native repo graph.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(await tools.graphCommunitiesRefresh(input)),
+  );
+
+  server.registerTool(
+    "list_communities",
+    {
+      description: "List persisted repo graph communities for the current repo index.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.listCommunities(input)),
+  );
+
+  server.registerTool(
+    "get_community",
+    {
+      description: "Return files, symbols, and edge evidence for one persisted repo graph community.",
+      inputSchema: {
+        repoRoot: z.string(),
+        id: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.getCommunity(input)),
+  );
+
+  server.registerTool(
+    "get_surprising_connections",
+    {
+      description: "Rank cross-community repo graph connections with path and edge evidence.",
+      inputSchema: {
+        repoRoot: z.string(),
+        limit: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.getSurprisingConnections(input)),
+  );
+
+  server.registerTool(
+    "graph_wiki_generate",
+    {
+      description: "Render or write wiki-style Markdown pages from repo graph communities and execution flows.",
+      inputSchema: {
+        repoRoot: z.string(),
+        scope: z.enum(["all", "overview", "communities", "flows"]).optional(),
+        communityId: z.string().optional(),
+        flowId: z.string().optional(),
+        write: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.graphWikiGenerate(input)),
+  );
+
+  const graphNodeKindSchema = z.enum(["file", "symbol", "community", "flow"]);
+  server.registerTool(
+    "graph_node_semantic_index_refresh",
+    {
+      description: "Persist a semantic fallback index scoped to repo graph files, symbols, communities, and flows.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.graphNodeSemanticIndexRefresh(input)),
+  );
+
+  server.registerTool(
+    "graph_node_semantic_search",
+    {
+      description: "Search the persisted semantic fallback index for graph nodes only.",
+      inputSchema: {
+        repoRoot: z.string(),
+        query: z.string(),
+        limit: z.number().optional(),
+        kinds: z.array(graphNodeKindSchema).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.graphNodeSemanticSearch(input)),
+  );
+
+  const executionFlowKindSchema = z.enum(["api", "cli", "worker", "script"]);
+  server.registerTool(
+    "flows_refresh",
+    {
+      description: "Persist named execution flows from discovered API, CLI, worker, and script entrypoints.",
+      inputSchema: {
+        repoRoot: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.flowsRefresh(input)),
+  );
+
+  server.registerTool(
+    "list_flows",
+    {
+      description: "List persisted named execution flows with optional kind and text filtering.",
+      inputSchema: {
+        repoRoot: z.string(),
+        kind: executionFlowKindSchema.optional(),
+        query: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.listFlows(input)),
+  );
+
+  server.registerTool(
+    "get_flow",
+    {
+      description: "Return one persisted named execution flow by id or name.",
+      inputSchema: {
+        repoRoot: z.string(),
+        idOrName: z.string(),
+      },
+    },
+    async (input) => jsonResult(tools.getFlow(input)),
+  );
+
+  server.registerTool(
     "repo_watch_start",
     {
       description: "Start an opt-in repo watch session with a baseline file snapshot.",
@@ -2596,6 +2737,63 @@ export function createWormholeMcpServer(
   );
 
   server.registerTool(
+    "code_smell_scan",
+    {
+      description: "Scan changed code for potential dead code, complexity, duplicate blocks, and needless dependencies.",
+      inputSchema: {
+        repoRoot: z.string(),
+        changedFiles: z.array(z.string()).optional(),
+        diffText: z.string().optional(),
+        maxComplexity: z.number().optional(),
+        duplicateMinLines: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.codeSmellScan(input)),
+  );
+
+  server.registerTool(
+    "diff_scope_review",
+    {
+      description: "Review whether changed files and hunks trace to an objective, evidence paths, or approved paths.",
+      inputSchema: {
+        repoRoot: z.string(),
+        objective: z.string(),
+        diffText: z.string().optional(),
+        changedFiles: z.array(z.string()).optional(),
+        evidence: z.array(diffScopeEvidenceSchema).optional(),
+        approvedPaths: z.array(z.string()).optional(),
+        strict: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.diffScopeReview(input)),
+  );
+
+  server.registerTool(
+    "test_quality_review",
+    {
+      description: "Review changed tests for skipped tests, missing assertions, snapshot-only assertions, and missing test changes.",
+      inputSchema: {
+        repoRoot: z.string(),
+        changedFiles: z.array(z.string()),
+      },
+    },
+    async (input) => jsonResult(tools.testQualityReview(input)),
+  );
+
+  server.registerTool(
+    "coverage_delta_analyze",
+    {
+      description: "Compare before/after coverage summaries and report coverage drops.",
+      inputSchema: {
+        before: z.union([z.string(), coverageSummarySchema]).optional(),
+        after: z.union([z.string(), coverageSummarySchema]).optional(),
+        failBelowDelta: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.coverageDeltaAnalyze(input)),
+  );
+
+  server.registerTool(
     "action_policy_review",
     {
       description: "Review commands, file edits, tool writes, deletes, and network operations for admission risk.",
@@ -2628,6 +2826,7 @@ export function createWormholeMcpServer(
         checkpointId: z.string(),
         unifiedDiff: z.string(),
         verificationCommands: z.array(patchVerificationCommandSchema).optional(),
+        scopeReview: patchScopeReviewSchema.optional(),
       },
     },
     async (input) => jsonResult(tools.patchApply(input)),

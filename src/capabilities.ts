@@ -54,7 +54,7 @@ export type WormholeCapabilityManifest = {
 export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
   return {
     name: "wormhole",
-    version: "0.8.0",
+    version: "0.10.0",
     maxOrchestrationDepth: 4,
     layers: [
       {
@@ -117,7 +117,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         target: "graphify",
         status: "implemented",
         transport: "graph-index",
-        description: "Graphify-style repo graph workflows can be represented through Wormhole's native repo index tools or an external graph connector.",
+        description: "Graphify-style repo graph workflows can be represented through Wormhole's native repo index, durable community, graph wiki, graph-node semantic search, and named execution-flow tools or an external graph connector.",
       },
       {
         target: "python-sidecar",
@@ -239,13 +239,19 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "orchestration.repo-index-graph",
         area: "orchestration",
         status: "implemented",
-        description: "Deterministic repo-local index with AST-first symbols, parser coverage, file, symbol, import, link, reference, call, provenance, confidence, SQLite-backed durable query, JSON compatibility exports, graph analysis, explain, report, and dependency-path tools.",
+        description: "Deterministic repo-local index with AST-first symbols, parser coverage, file, symbol, import, link, reference, call, provenance, confidence, SQLite-backed durable query, JSON compatibility exports, graph analysis, explain, report, dependency-path tools, community queries, graph-node semantic search, and named execution-flow lookup.",
       },
       {
         id: "orchestration.project-ground-truth-suite",
         area: "orchestration",
         status: "implemented",
         description: "Project contract detection, dependency inventory, structured diagnostics, impact-aware test planning, verification execution, safety scanning, deterministic semantic fallback search, and safe LSP config probes.",
+      },
+      {
+        id: "orchestration.anti-slop-lifecycle-gates",
+        area: "orchestration",
+        status: "implemented",
+        description: "Diff-scope review, code-smell scanning, test-quality review, coverage-delta analysis, and optional patch-apply scope enforcement for coding-agent edit loops.",
       },
       {
         id: "orchestration.project-intelligence-sequencing",
@@ -317,7 +323,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "orchestration.graph-artifact-suite",
         area: "orchestration",
         status: "implemented",
-        description: "Native graph.json, GRAPH_REPORT.md, graph.html, graph metrics, and deterministic community analysis for repo graphs.",
+        description: "Native graph.json, GRAPH_REPORT.md, graph.html, graph metrics, deterministic community analysis, persisted community list/get, surprising cross-community connections, graph wiki pages, graph-node semantic indexes, and named execution-flow artifacts for repo graphs.",
       },
       {
         id: "orchestration.repo-activity-watch-layer",
@@ -365,7 +371,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "adaptive.graph-first-codebase-query",
         area: "adaptive",
         status: "implemented",
-        description: "Graph-first codebase query workflow that lets agents ask the repo index before broad grep or file-reading passes.",
+        description: "Graph-first codebase query workflow that lets agents ask the repo index, communities, cross-community connections, graph-node semantic records, and named execution flows before broad grep or file-reading passes.",
       },
       {
         id: "adaptive.agent-facing-routing",

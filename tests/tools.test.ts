@@ -1230,6 +1230,46 @@ describe("Wormhole MCP tool handlers", () => {
     }
   });
 
+  it("refuses patch apply when strict scope review fails before writing", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-patch-scope-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "src", "app.ts"), "export const name = 'old';\n");
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+      });
+      const checkpoint = tools.patchCheckpoint({
+        repoRoot,
+        files: ["src/app.ts"],
+      });
+
+      expect(() =>
+        tools.patchApply({
+          repoRoot,
+          checkpointId: checkpoint.checkpointId,
+          unifiedDiff: [
+            "diff --git a/src/app.ts b/src/app.ts",
+            "--- a/src/app.ts",
+            "+++ b/src/app.ts",
+            "@@ -1 +1 @@",
+            "-export const name = 'old';",
+            "+export const name = 'new';",
+            "",
+          ].join("\n"),
+          scopeReview: {
+            objective: "Fix billing webhook validation",
+            strict: true,
+          },
+        }),
+      ).toThrow(/Diff scope review failed/);
+
+      expect(readFileSync(path.join(repoRoot, "src", "app.ts"), "utf8")).toBe("export const name = 'old';\n");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("plans and runs local orchestration without external adapters", async () => {
     const tools = createToolHandlers(createInMemoryKernel());
     const tasks = [

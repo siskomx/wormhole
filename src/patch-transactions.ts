@@ -7,6 +7,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import type { DiffScopeReviewResult } from "./diff-scope-review.js";
 
 export type PatchFileSnapshot = {
   path: string;
@@ -47,6 +48,7 @@ export type PatchTransaction = {
     status: "pending" | "not_required";
     commands: PatchVerificationCommand[];
   };
+  scopeReview?: DiffScopeReviewResult;
   error?: string;
 };
 
@@ -126,6 +128,7 @@ export function createPatchTransactionStore(
       checkpointId: string;
       unifiedDiff: string;
       verificationCommands?: PatchVerificationCommand[];
+      scopeReview?: DiffScopeReviewResult;
     }): PatchTransaction {
       const repoRoot = resolveRepoRoot(input.repoRoot);
       const checkpoint = checkpoints.get(input.checkpointId);
@@ -159,6 +162,7 @@ export function createPatchTransactionStore(
           status: (input.verificationCommands?.length ?? 0) > 0 ? "pending" : "not_required",
           commands: (input.verificationCommands ?? []).map((command) => ({ ...command })),
         },
+        ...(input.scopeReview ? { scopeReview: cloneScopeReview(input.scopeReview) } : {}),
       };
 
       try {
@@ -500,6 +504,15 @@ function cloneTransaction(transaction: PatchTransaction): PatchTransaction {
       status: transaction.verification.status,
       commands: transaction.verification.commands.map((command) => ({ ...command })),
     },
+    ...(transaction.scopeReview ? { scopeReview: cloneScopeReview(transaction.scopeReview) } : {}),
+  };
+}
+
+function cloneScopeReview(review: DiffScopeReviewResult): DiffScopeReviewResult {
+  return {
+    ...review,
+    changedFiles: [...review.changedFiles],
+    findings: review.findings.map((finding) => ({ ...finding })),
   };
 }
 

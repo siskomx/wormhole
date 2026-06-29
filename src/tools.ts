@@ -1,6 +1,7 @@
 import path from "node:path";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { createBehaviorPolicyStore, type BehaviorMode } from "./behavior-policy.js";
 import { captureBrowserNetwork } from "./browser-capture.js";
 import {
@@ -47,7 +48,7 @@ import {
 } from "./optimization.js";
 import { createOptimizedCommandRunner, type OptimizedCommandInput } from "./optimized-command-runner.js";
 import { createOptimizationStats, type OptimizationStatsSnapshot } from "./optimization-stats.js";
-import { createPythonSidecar, probePythonRuntime } from "./python-sidecar.js";
+import { createPythonSidecar, probePythonRuntime, type PythonSidecar } from "./python-sidecar.js";
 import { createMediaIngestion, type MediaIngestInput } from "./media-ingestion.js";
 import { createEvidenceCache } from "./evidence-cache.js";
 import {
@@ -111,6 +112,14 @@ import {
   type PrivilegedActionRequest,
 } from "./privileged-action-gate.js";
 import { createDependencySecurityReport } from "./dependency-security.js";
+import { analyzeCoverageDelta, type CoverageDeltaInput } from "./coverage-delta.js";
+import { scanCodeSmells } from "./code-smell-scan.js";
+import {
+  reviewDiffScope,
+  type DiffScopeEvidence,
+  type DiffScopeReviewResult,
+} from "./diff-scope-review.js";
+import { reviewTestQuality } from "./test-quality-review.js";
 import {
   durableRepoIndexBuildOptions,
   durableIndexStatus,
@@ -299,6 +308,29 @@ import {
   type RepoIndexQueryInput,
 } from "./repo-index.js";
 import { analyzeRepoGraph } from "./repo-graph-analysis.js";
+import {
+  getGraphCommunity,
+  graphCommunityStorePath,
+  listGraphCommunities,
+  readGraphCommunityStore,
+  refreshGraphCommunities,
+} from "./graph-communities.js";
+import { getSurprisingConnections as rankSurprisingConnections } from "./surprising-connections.js";
+import { renderGraphWiki, writeGraphWiki } from "./graph-wiki.js";
+import {
+  graphNodeSemanticIndexPath,
+  readGraphNodeSemanticIndex,
+  refreshGraphNodeSemanticIndex,
+  searchGraphNodeSemanticIndex,
+  type GraphNodeKind,
+} from "./graph-node-semantic.js";
+import {
+  executionFlowStorePath,
+  getExecutionFlow,
+  listExecutionFlows,
+  readExecutionFlowStore,
+  refreshExecutionFlows,
+} from "./execution-flow-store.js";
 import { analyzeSourceConflicts } from "./source-conflicts.js";
 import {
   auditCapabilityRelations,
@@ -329,6 +361,7 @@ export type ToolHandlerOptions = {
   privilegedActionGate?: PrivilegedActionGate;
   privilegedActionPolicy?: PrivilegedActionPolicy;
   projectModelCache?: ProjectModelCache;
+  pythonSidecar?: PythonSidecar;
 };
 
 export type StateMaintenanceAction = {
@@ -391,9 +424,30 @@ export type StateMaintenanceRunRecord = {
   actions: StateMaintenanceAction[];
   sourceConflicts?: ReturnType<typeof analyzeSourceConflicts>;
   freshness?: StateMaintenanceFreshness;
+  derivedGraphArtifacts?: StateMaintenanceDerivedGraphArtifacts;
   startedAt: string;
   updatedAt: string;
   error?: string;
+};
+
+export type StateMaintenanceDerivedGraphArtifactKind =
+  | "communities"
+  | "flows"
+  | "graph_node_semantic_index"
+  | "graph_wiki";
+
+export type StateMaintenanceDerivedGraphArtifactStatus = {
+  kind: StateMaintenanceDerivedGraphArtifactKind;
+  status: "missing" | "fresh" | "stale";
+  path: string;
+  hint: string;
+  fingerprint?: string;
+  reason?: string;
+};
+
+export type StateMaintenanceDerivedGraphArtifacts = {
+  statuses: StateMaintenanceDerivedGraphArtifactStatus[];
+  warnings: string[];
 };
 
 export type StateMaintenanceSnapshot = {
@@ -529,7 +583,7 @@ export function createToolHandlers(
   const modelProfileRegistry = createModelProfileRegistry(runtimeState.modelProfiles, (snapshot) =>
     persistRuntimeState("modelProfiles", snapshot),
   );
-  const pythonSidecar = createPythonSidecar();
+  const pythonSidecar = options.pythonSidecar ?? createPythonSidecar();
   const behaviorPolicy = createBehaviorPolicyStore(runtimeState.behavior, (snapshot) =>
     persistRuntimeState("behavior", snapshot),
   );
@@ -706,6 +760,87 @@ export function createToolHandlers(
     };
   }
 
+  function createDerivedGraphArtifactsReport(
+    repoRoot: string,
+    index: RepoIndex,
+  ): StateMaintenanceDerivedGraphArtifacts {
+    const communities = readGraphCommunityStore(repoRoot);
+    const flows = readExecutionFlowStore(repoRoot);
+    const graphNodeSemantic = readGraphNodeSemanticIndex(repoRoot);
+    const wikiPath = path.join(repoRoot, ".wormhole", "graph-wiki", "index.md");
+    const statuses: StateMaintenanceDerivedGraphArtifactStatus[] = [
+      fingerprintedArtifactStatus({
+        kind: "communities",
+        path: graphCommunityStorePath(repoRoot),
+        fingerprint: communities?.fingerprint,
+        currentFingerprint: index.fingerprint,
+        hint: "Run graph_communities_refresh.",
+      }),
+      fingerprintedArtifactStatus({
+        kind: "flows",
+        path: executionFlowStorePath(repoRoot),
+        fingerprint: flows?.fingerprint,
+        currentFingerprint: index.fingerprint,
+        hint: "Run flows_refresh.",
+      }),
+      fingerprintedArtifactStatus({
+        kind: "graph_node_semantic_index",
+        path: graphNodeSemanticIndexPath(repoRoot),
+        fingerprint: graphNodeSemantic?.fingerprint,
+        currentFingerprint: index.fingerprint,
+        hint: "Run graph_node_semantic_index_refresh.",
+      }),
+      {
+        kind: "graph_wiki",
+        status: existsSync(wikiPath) ? "fresh" : "missing",
+        path: wikiPath,
+        hint: "Run graph_wiki_generate with write=true.",
+        ...(existsSync(wikiPath) ? {} : { reason: "Graph wiki index page is missing." }),
+      },
+    ];
+    return {
+      statuses,
+      warnings: statuses
+        .filter((status) => status.status !== "fresh")
+        .map((status) => `${status.kind} is ${status.status}: ${status.reason ?? status.hint} ${status.hint}`),
+    };
+  }
+
+  function fingerprintedArtifactStatus(input: {
+    kind: StateMaintenanceDerivedGraphArtifactKind;
+    path: string;
+    fingerprint?: string;
+    currentFingerprint: string;
+    hint: string;
+  }): StateMaintenanceDerivedGraphArtifactStatus {
+    if (!input.fingerprint) {
+      return {
+        kind: input.kind,
+        status: "missing",
+        path: input.path,
+        hint: input.hint,
+        reason: `${input.kind} artifact is missing.`,
+      };
+    }
+    if (input.fingerprint !== input.currentFingerprint) {
+      return {
+        kind: input.kind,
+        status: "stale",
+        path: input.path,
+        fingerprint: input.fingerprint,
+        hint: input.hint,
+        reason: `${input.kind} artifact was built from a stale repo index fingerprint.`,
+      };
+    }
+    return {
+      kind: input.kind,
+      status: "fresh",
+      path: input.path,
+      fingerprint: input.fingerprint,
+      hint: input.hint,
+    };
+  }
+
   function runStateMaintenance(input: StateMaintenanceRunInput, retryOf?: string) {
     const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
     const query = input.query ?? input.objective;
@@ -742,6 +877,7 @@ export function createToolHandlers(
       | undefined;
     let sourceConflicts: ReturnType<typeof analyzeSourceConflicts> | undefined;
     let freshness: StateMaintenanceFreshness | undefined;
+    let derivedGraphArtifacts: StateMaintenanceDerivedGraphArtifacts | undefined;
     let workspace:
       | {
           written?: ReturnType<ReturnType<typeof createAgentWorkspaceStore>["write"]>;
@@ -766,6 +902,7 @@ export function createToolHandlers(
       runRecord.changedFiles = [...changedFiles];
       runRecord.sourceConflicts = sourceConflicts;
       runRecord.freshness = freshness;
+      runRecord.derivedGraphArtifacts = derivedGraphArtifacts;
       runRecord.updatedAt = new Date().toISOString();
       saveStateMaintenanceRun(runRecord);
       return {
@@ -786,6 +923,7 @@ export function createToolHandlers(
         ...(context ? { context } : {}),
         ...(sourceConflicts ? { sourceConflicts } : {}),
         ...(freshness ? { freshness } : {}),
+        ...(derivedGraphArtifacts ? { derivedGraphArtifacts } : {}),
         recordedEvidence,
         ...(workspace ? { workspace } : {}),
         ...(route ? { route } : {}),
@@ -908,6 +1046,9 @@ export function createToolHandlers(
           });
         }
       }
+
+      currentToolName = "derived_graph_artifacts_status";
+      derivedGraphArtifacts = createDerivedGraphArtifactsReport(repoRoot, getRepoIndex(repoRoot));
 
       if (input.workspace) {
         workspace = {};
@@ -1667,6 +1808,153 @@ export function createToolHandlers(
       });
     },
 
+    async graphCommunitiesRefresh(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return await refreshGraphCommunities({
+        repoRoot,
+        index: getRepoIndex(repoRoot),
+        sidecar: pythonSidecar,
+      });
+    },
+
+    listCommunities(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return listGraphCommunities({ repoRoot, index: getRepoIndex(repoRoot) });
+    },
+
+    getCommunity(input: { repoRoot: string; id: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return getGraphCommunity({ repoRoot, index: getRepoIndex(repoRoot), id: input.id });
+    },
+
+    getSurprisingConnections(input: { repoRoot: string; limit?: number }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const index = getRepoIndex(repoRoot);
+      const communities = listGraphCommunities({ repoRoot, index });
+      if (communities.refused) {
+        return {
+          repoRoot,
+          fingerprint: index.fingerprint,
+          generatedAt: new Date().toISOString(),
+          results: [],
+          warnings: communities.reason ? [communities.reason] : [],
+          refused: true as const,
+          reason: communities.reason,
+          hint: communities.hint,
+        };
+      }
+      return rankSurprisingConnections({
+        repoRoot,
+        index,
+        communities: communities.communities,
+        limit: input.limit,
+      });
+    },
+
+    graphWikiGenerate(input: {
+      repoRoot: string;
+      scope?: "all" | "overview" | "communities" | "flows";
+      communityId?: string;
+      flowId?: string;
+      write?: boolean;
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const index = getRepoIndex(repoRoot);
+      const communities = listGraphCommunities({ repoRoot, index });
+      const flows = listExecutionFlows({ repoRoot, currentFingerprint: index.fingerprint });
+      const surprisingConnections = communities.refused
+        ? undefined
+        : rankSurprisingConnections({
+            repoRoot,
+            index,
+            communities: communities.communities,
+            limit: 12,
+          }).results;
+      const pages = renderGraphWiki({
+        repoRoot,
+        index,
+        communities: communities.refused ? [] : communities.communities,
+        flows: flows.refused ? [] : flows.flows,
+        surprisingConnections,
+        scope: input.scope,
+        communityId: input.communityId,
+        flowId: input.flowId,
+      });
+      if (!input.write) {
+        return {
+          repoRoot,
+          pages,
+          warnings: [
+            ...(communities.refused && communities.reason ? [communities.reason] : []),
+            ...(flows.refused && flows.reason ? [flows.reason] : []),
+          ],
+        };
+      }
+      assertPrivilegedAction({
+        toolName: "graph_wiki_generate",
+        kind: "file_write",
+        operations: [{ kind: "file_write", path: path.join(repoRoot, ".wormhole/graph-wiki") }],
+        target: { repoRoot, path: path.join(repoRoot, ".wormhole/graph-wiki") },
+      });
+      return {
+        repoRoot,
+        pages,
+        written: writeGraphWiki({ repoRoot, pages }),
+      };
+    },
+
+    flowsRefresh(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const index = getRepoIndex(repoRoot);
+      const communities = listGraphCommunities({ repoRoot, index });
+      return refreshExecutionFlows({
+        repoRoot,
+        discovery: discoverEntrypointFlows({ repoRoot, projectModelCache }),
+        communities: communities.refused ? [] : communities.communities,
+      });
+    },
+
+    listFlows(input: { repoRoot: string; kind?: "api" | "cli" | "worker" | "script"; query?: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return listExecutionFlows({
+        ...input,
+        repoRoot,
+        currentFingerprint: getRepoIndex(repoRoot).fingerprint,
+      });
+    },
+
+    getFlow(input: { repoRoot: string; idOrName: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return getExecutionFlow({
+        repoRoot,
+        idOrName: input.idOrName,
+        currentFingerprint: getRepoIndex(repoRoot).fingerprint,
+      });
+    },
+
+    graphNodeSemanticIndexRefresh(input: { repoRoot: string }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const index = getRepoIndex(repoRoot);
+      const communities = listGraphCommunities({ repoRoot, index });
+      const flows = listExecutionFlows({ repoRoot, currentFingerprint: index.fingerprint });
+      return refreshGraphNodeSemanticIndex({
+        repoRoot,
+        index,
+        communities: communities.refused ? [] : communities.communities,
+        flows: flows.refused ? [] : flows.flows,
+      });
+    },
+
+    graphNodeSemanticSearch(input: {
+      repoRoot: string;
+      query: string;
+      limit?: number;
+      kinds?: GraphNodeKind[];
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return searchGraphNodeSemanticIndex({ ...input, repoRoot });
+    },
+
     repoWatchStart(input: RepoWatchStartInput) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return repoActivityStore.startWatch({ ...input, repoRoot });
@@ -2354,6 +2642,39 @@ export function createToolHandlers(
       return createDependencySecurityReport({ repoRoot });
     },
 
+    codeSmellScan(input: {
+      repoRoot: string;
+      changedFiles?: string[];
+      diffText?: string;
+      maxComplexity?: number;
+      duplicateMinLines?: number;
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return scanCodeSmells({ ...input, repoRoot, index: getRepoIndex(repoRoot) });
+    },
+
+    diffScopeReview(input: {
+      repoRoot: string;
+      objective: string;
+      diffText?: string;
+      changedFiles?: string[];
+      evidence?: DiffScopeEvidence[];
+      approvedPaths?: string[];
+      strict?: boolean;
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return reviewDiffScope({ ...input, repoRoot });
+    },
+
+    testQualityReview(input: { repoRoot: string; changedFiles: string[] }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return reviewTestQuality({ ...input, repoRoot });
+    },
+
+    coverageDeltaAnalyze(input: CoverageDeltaInput) {
+      return analyzeCoverageDelta(input);
+    },
+
     actionPolicyReview(input: { operations: ActionPolicyOperation[] }) {
       return reviewActionPolicy(input);
     },
@@ -2368,15 +2689,35 @@ export function createToolHandlers(
       checkpointId: string;
       unifiedDiff: string;
       verificationCommands?: PatchVerificationCommand[];
+      scopeReview?: {
+        objective: string;
+        evidence?: DiffScopeEvidence[];
+        approvedPaths?: string[];
+        strict?: boolean;
+      };
     }) {
+      const { scopeReview: scopeReviewInput, ...patchInput } = input;
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      let scopeReview: DiffScopeReviewResult | undefined;
+      if (scopeReviewInput) {
+        scopeReview = reviewDiffScope({
+          repoRoot,
+          diffText: input.unifiedDiff,
+          ...scopeReviewInput,
+        });
+        if (scopeReview.decision === "fail") {
+          throw new Error(
+            `Diff scope review failed: ${scopeReview.findings.map((finding) => finding.message).join(" ")}`,
+          );
+        }
+      }
       assertPrivilegedAction({
         toolName: "patch_apply",
         kind: "file_write",
         operations: [{ kind: "file_write", path: repoRoot }],
         target: { repoRoot, path: repoRoot },
       });
-      return patchTransactionStore.apply({ ...input, repoRoot });
+      return patchTransactionStore.apply({ ...patchInput, repoRoot, ...(scopeReview ? { scopeReview } : {}) });
     },
 
     patchStatus(input: { repoRoot?: string; checkpointId?: string; transactionId?: string } = {}) {

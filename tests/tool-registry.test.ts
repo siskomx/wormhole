@@ -6,6 +6,7 @@ import { createWormholeMcpServer } from "../src/mcp-server.js";
 import {
   TOOL_REGISTRY,
   queryToolCatalog,
+  reviewToolAdmission,
   toolExposureProfile,
   toolLayerMap,
   validateToolRegistry,
@@ -213,6 +214,57 @@ describe("tool registry conformance", () => {
           risk: "read",
         }),
       ]),
+    );
+  });
+
+  it("advertises graph intelligence query tools as large-repo graph guidance", () => {
+    const catalog = queryToolCatalog({
+      toolNames: [
+        "graph_communities_refresh",
+        "list_communities",
+        "get_community",
+        "get_surprising_connections",
+        "graph_wiki_generate",
+        "graph_node_semantic_index_refresh",
+        "graph_node_semantic_search",
+        "flows_refresh",
+        "list_flows",
+        "get_flow",
+      ],
+    });
+
+    expect(catalog.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "graph_communities_refresh", risk: "write", phase: "maintain" }),
+        expect.objectContaining({ name: "list_communities", risk: "read", phase: "gather" }),
+        expect.objectContaining({ name: "get_community", risk: "read", phase: "gather" }),
+        expect.objectContaining({ name: "get_surprising_connections", risk: "read", phase: "impact" }),
+        expect.objectContaining({ name: "graph_wiki_generate", plane: "project", pack: "large-repo" }),
+        expect.objectContaining({ name: "graph_node_semantic_search", risk: "read", phase: "gather" }),
+        expect.objectContaining({ name: "flows_refresh", risk: "write", phase: "maintain" }),
+        expect.objectContaining({ name: "list_flows", risk: "read", phase: "gather" }),
+        expect.objectContaining({ name: "get_flow", risk: "read", phase: "gather" }),
+      ]),
+    );
+  });
+
+  it("advertises anti-slop lifecycle gates as verification tools", () => {
+    const catalog = queryToolCatalog({
+      toolNames: ["code_smell_scan", "diff_scope_review", "test_quality_review", "coverage_delta_analyze"],
+    });
+    const admission = reviewToolAdmission({ toolNames: ["patch_apply"] });
+    const patchDecision = admission.decisions.find((decision) => decision.toolName === "patch_apply");
+
+    expect(catalog.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "code_smell_scan", risk: "read", phase: "verify" }),
+        expect.objectContaining({ name: "diff_scope_review", risk: "read", phase: "verify" }),
+        expect.objectContaining({ name: "test_quality_review", risk: "read", phase: "verify" }),
+        expect.objectContaining({ name: "coverage_delta_analyze", risk: "read", phase: "verify" }),
+      ]),
+    );
+    expect(patchDecision?.requiredPreflightTools).toEqual(
+      expect.arrayContaining(["action_policy_review", "patch_checkpoint", "diff_scope_review"]),
     );
   });
 

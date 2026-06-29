@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.10.0 - 2026-06-29
+
+- Added anti-slop lifecycle gates: `code_smell_scan`, `diff_scope_review`, `test_quality_review`, and `coverage_delta_analyze`.
+- Wired `patch_apply` to support optional strict diff-scope enforcement before a patch writes files.
+- Added focused foundation tests for repo extraction, Tree-sitter loader support, language-profile gaps, route extraction, network guard behavior, and SQLite repo-index freshness.
+- Documented Go and Java Tree-sitter package work as a deferred parser compatibility spike rather than shipping unverified native parser dependencies.
+
+## 0.9.0 - 2026-06-29
+
+- Added durable graph community artifacts with `graph_communities_refresh`, `list_communities`, and `get_community`.
+- Added community-aware `get_surprising_connections` ranking for cross-cluster repo graph edges.
+- Added graph wiki rendering and optional `.wormhole/graph-wiki/**` writes through `graph_wiki_generate`.
+- Added graph-node semantic indexing and search over file, symbol, community, and flow nodes.
+- Added persistent named execution flow artifacts with `flows_refresh`, `list_flows`, and `get_flow`.
+- Extended state maintenance to report missing or stale graph-derived artifacts as advisory refresh signals.
+
 ## 0.8.0 - 2026-06-29
 
 - Added AST-first repo extraction with pinned Tree-sitter grammars for TypeScript/TSX, JavaScript/JSX, Python, Rust, and C#.
