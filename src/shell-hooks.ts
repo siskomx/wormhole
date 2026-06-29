@@ -33,6 +33,7 @@ type ShellHookManagerConfig = {
   repoRoot: string;
   now?: () => Date;
   profilePaths?: Partial<Record<ShellKind, string>>;
+  cmdAutoRunReader?: () => string | undefined;
 };
 
 const SHELLS: ShellKind[] = [
@@ -136,6 +137,23 @@ function runRegistryCommand(args: string[]): string | undefined {
     throw new Error(result.stderr.trim() || `reg.exe failed with status ${result.status}`);
   }
   return undefined;
+}
+
+function readCmdAutoRunValue(): string | undefined {
+  if (process.platform !== "win32") {
+    return undefined;
+  }
+  const result = spawnSync("reg.exe", ["query", "HKCU\\Software\\Microsoft\\Command Processor", "/v", "AutoRun"], {
+    encoding: "utf8",
+    shell: false,
+  });
+  if (result.status !== 0) {
+    return undefined;
+  }
+  const line = result.stdout
+    .split(/\r?\n/)
+    .find((entry) => /^\s*AutoRun\s+REG_\w+\s+/.test(entry));
+  return line?.replace(/^\s*AutoRun\s+REG_\w+\s+/, "").trim();
 }
 
 export function createShellHookManager(config: ShellHookManagerConfig): {
@@ -400,9 +418,23 @@ export function createShellHookManager(config: ShellHookManagerConfig): {
     },
 
     verify(input) {
+      const warnings: string[] = [];
       const operations = input.shells.map((shell) => {
         if (shell === "cmd") {
-          return { shell, path: CMD_REGISTRY_PATH, action: "registry-set" as const, present: false };
+          let actual: string | undefined;
+          try {
+            actual = config.cmdAutoRunReader ? config.cmdAutoRunReader() : readCmdAutoRunValue();
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            warnings.push(`Cmd AutoRun registry verification failed: ${message}`);
+          }
+          const expected = cmdHookCommand(eventLogPath());
+          return {
+            shell,
+            path: CMD_REGISTRY_PATH,
+            action: "registry-set" as const,
+            present: Boolean(actual?.includes(expected)),
+          };
         }
         const target = profilePath(shell);
         const present = existsSync(target) && hasMarker(readFileSync(target, "utf8"));
@@ -413,7 +445,7 @@ export function createShellHookManager(config: ShellHookManagerConfig): {
           present,
         };
       });
-      return { operations, warnings: [] };
+      return { operations, warnings };
     },
   };
 }

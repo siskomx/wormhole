@@ -209,6 +209,32 @@ describe("shell hooks", () => {
     }
   });
 
+  it("verifies Cmd AutoRun when the registry contains the expected hook command", () => {
+    const home = tempHome();
+    const eventLogPath = path.join(home, ".wormhole", "shell-events.jsonl").replace(/\\/g, "/");
+    const manager = createShellHookManager({
+      homeDir: home,
+      repoRoot: home,
+      cmdAutoRunReader: () => `@echo {"shell":"cmd"}>>"${eventLogPath}"`,
+    });
+
+    try {
+      const plan = manager.verify({ shells: ["cmd"] });
+
+      expect(plan.operations).toEqual([
+        expect.objectContaining({
+          shell: "cmd",
+          action: "registry-set",
+          path: "HKCU\\Software\\Microsoft\\Command Processor\\AutoRun",
+          present: true,
+        }),
+      ]);
+      expect(plan.warnings).toEqual([]);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("rejects Cmd registry installs unless registry writes are allowed", () => {
     const home = tempHome();
     const manager = createShellHookManager({ homeDir: home, repoRoot: home });

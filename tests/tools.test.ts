@@ -220,6 +220,41 @@ describe("Wormhole MCP tool handlers", () => {
     );
   });
 
+  it("does not throw when gate_request receives a structured source conflict object without conflicts", () => {
+    const kernel = createInMemoryKernel();
+    const tools = createToolHandlers(kernel);
+    const mission = tools.missionStart({
+      objective: "Gate structured integration signals.",
+      repoRoot: process.cwd(),
+    });
+    tools.roundStart({ missionId: mission.missionId });
+    tools.recordEvidence({
+      missionId: mission.missionId,
+      sourceType: "file",
+      sourcePath: "README.md",
+      retrievalMethod: "read_file",
+      summary: "Structured gate integration was exercised.",
+    });
+
+    expect(() =>
+      tools.gateRequest({
+        missionId: mission.missionId,
+        sourceConflicts: { findings: [] } as never,
+        freshness: {
+          artifacts: [
+            {
+              relativePath: ".wormhole/workflows/latest.json",
+              status: "fresh",
+            },
+          ],
+        },
+        runtimeBehavior: { summary: { status: "ok" } },
+        loopHealth: { status: "ok" },
+      }),
+    ).not.toThrow();
+    expect(tools.missionStatus({ missionId: mission.missionId }).gate?.open).toBe(true);
+  });
+
   it("closes the mission gate from stored state-maintenance source conflicts and freshness", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-gate-maintenance-signals-"));
     mkdirSync(path.join(repoRoot, "src"), { recursive: true });

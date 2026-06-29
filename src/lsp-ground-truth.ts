@@ -1,8 +1,8 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 export type LanguageServerConfig = {
-  language: "typescript" | "python";
+  language: "typescript" | "python" | "csharp";
   command: string;
   args: string[];
   transport: "stdio";
@@ -54,6 +54,16 @@ export function detectLanguageServerConfigs(input: { repoRoot: string }): Langua
       transport: "stdio",
       workspaceRoot: repoRoot,
       reason: "Detected Python project files.",
+    });
+  }
+  if (hasCSharpProject(repoRoot)) {
+    configs.push({
+      language: "csharp",
+      command: "csharp-ls",
+      args: [],
+      transport: "stdio",
+      workspaceRoot: repoRoot,
+      reason: "Detected .NET solution or C# project files.",
     });
   }
   return configs;
@@ -113,6 +123,47 @@ function hasPythonProject(repoRoot: string): boolean {
     "setup.cfg",
     "Pipfile",
   ].some((file) => existsSync(path.join(repoRoot, file)));
+}
+
+function hasCSharpProject(repoRoot: string): boolean {
+  return hasFileMatching(repoRoot, (fileName) => /\.(?:sln|csproj)$/i.test(fileName));
+}
+
+function hasFileMatching(
+  directory: string,
+  predicate: (fileName: string) => boolean,
+  depth = 0,
+): boolean {
+  if (depth > 5) {
+    return false;
+  }
+  let entries: Array<{
+    name: string | Buffer;
+    isFile(): boolean;
+    isDirectory(): boolean;
+  }>;
+  try {
+    entries = readdirSync(directory, { withFileTypes: true, encoding: "utf8" });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    const entryName = String(entry.name);
+    if (entry.isFile() && predicate(entryName)) {
+      return true;
+    }
+    if (!entry.isDirectory() || shouldSkipDirectory(entryName)) {
+      continue;
+    }
+    if (hasFileMatching(path.join(directory, entryName), predicate, depth + 1)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function shouldSkipDirectory(name: string): boolean {
+  return new Set([".git", ".wormhole", "node_modules", "dist", "build", "bin", "obj"]).has(name);
 }
 
 function filePathFromUri(uri: string): string {

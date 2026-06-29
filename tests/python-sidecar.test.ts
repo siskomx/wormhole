@@ -20,12 +20,16 @@ describe("Python sidecar bridge", () => {
     writeFakeSidecar(
       scriptPath,
       [
-        "const input = JSON.parse(process.argv[2]);",
-        "process.stdout.write(JSON.stringify({",
-        "  ok: true,",
-        "  job: input.job,",
-        "  result: { received: input.payload.value }",
-        "}));",
+        "const chunks = [];",
+        "process.stdin.on('data', chunk => chunks.push(chunk));",
+        "process.stdin.on('end', () => {",
+        "  const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));",
+        "  process.stdout.write(JSON.stringify({",
+        "    ok: true,",
+        "    job: input.job,",
+        "    result: { received: input.payload.value }",
+        "  }));",
+        "});",
       ].join("\n"),
     );
 
@@ -47,6 +51,48 @@ describe("Python sidecar bridge", () => {
       expect(result.result).toEqual({ received: "hello" });
       expect(result.evidenceHash).toMatch(/^sha256:/);
       expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("sends JSON sidecar requests over stdin instead of argv", async () => {
+    const tempRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-python-sidecar-stdin-"));
+    const scriptPath = path.join(tempRoot, "stdin-sidecar.mjs");
+    writeFakeSidecar(
+      scriptPath,
+      [
+        "if (process.argv[2]) {",
+        "  process.stdout.write(JSON.stringify({ ok: false, job: 'graph_metrics', error: 'request JSON was passed through argv' }));",
+        "  process.exit(0);",
+        "}",
+        "const chunks = [];",
+        "process.stdin.on('data', chunk => chunks.push(chunk));",
+        "process.stdin.on('end', () => {",
+        "  const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));",
+        "  process.stdout.write(JSON.stringify({",
+        "    ok: true,",
+        "    job: input.job,",
+        "    result: { receivedBytes: input.payload.value.length }",
+        "  }));",
+        "});",
+      ].join("\n"),
+    );
+
+    try {
+      const sidecar = createPythonSidecar({
+        command: process.execPath,
+        args: [scriptPath],
+        timeoutMs: 2_000,
+      });
+
+      const result = await sidecar.run({
+        job: "graph_metrics",
+        payload: { value: "x".repeat(100_000) },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.result).toEqual({ receivedBytes: 100_000 });
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
     }
@@ -166,12 +212,16 @@ describe("Python sidecar bridge", () => {
     writeFakeSidecar(
       scriptPath,
       [
-        "const input = JSON.parse(process.argv[2]);",
-        "process.stdout.write(JSON.stringify({",
-        "  ok: true,",
-        "  job: input.job,",
-        "  result: { runtime: 'python', package: 'wormhole_sidecar', version: '0.1.0', pythonVersion: '3.12.0' }",
-        "}));",
+        "const chunks = [];",
+        "process.stdin.on('data', chunk => chunks.push(chunk));",
+        "process.stdin.on('end', () => {",
+        "  const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));",
+        "  process.stdout.write(JSON.stringify({",
+        "    ok: true,",
+        "    job: input.job,",
+        "    result: { runtime: 'python', package: 'wormhole_sidecar', version: '0.1.0', pythonVersion: '3.12.0' }",
+        "  }));",
+        "});",
       ].join("\n"),
     );
 

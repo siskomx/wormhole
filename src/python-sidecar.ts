@@ -229,9 +229,10 @@ export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSid
       const requestJson = JSON.stringify(input);
 
       return await new Promise((resolve) => {
-        const child = spawn(resolved.command, [...resolved.args, requestJson], {
+        const child = spawn(resolved.command, resolved.args, {
           cwd: resolved.cwd,
           shell: false,
+          stdio: ["pipe", "pipe", "pipe"],
           env: buildEnv(resolved),
         });
 
@@ -355,6 +356,11 @@ export function createPythonSidecar(config: PythonSidecarConfig = {}): PythonSid
         child.on("close", (code) => {
           finalize(code);
         });
+        child.stdin.on("error", (error) => {
+          stderrCapture.append(error.message);
+        });
+        child.stdin.write(requestJson);
+        child.stdin.end();
       });
     },
   };

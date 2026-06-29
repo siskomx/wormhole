@@ -37,6 +37,10 @@ describe("workflow artifact files", () => {
         `.wormhole/workflows/${workflow.run.runId}.json`,
         `.wormhole/workflows/${workflow.run.runId}.md`,
       ]);
+      expect(result.requiredArtifacts.map((artifact) => artifact.relativePath)).toEqual(
+        workflow.requiredArtifacts.map((artifact) => artifact.path).sort((left, right) => left.localeCompare(right)),
+      );
+      expect(result.requiredArtifacts.every((artifact) => artifact.status === "written")).toBe(true);
       for (const file of result.files) {
         expect(existsSync(file.absolutePath)).toBe(true);
         expect(file.bytes).toBeGreaterThan(20);

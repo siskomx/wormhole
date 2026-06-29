@@ -11,12 +11,16 @@ describe("Wormhole CLI startup runtime", () => {
     writeFileSync(
       scriptPath,
       [
-        "const input = JSON.parse(process.argv[2]);",
-        "process.stdout.write(JSON.stringify({",
-        "  ok: true,",
-        "  job: input.job,",
-        "  result: { runtime: 'python', package: 'wormhole_sidecar', version: '0.1.0', pythonVersion: '3.12.0' }",
-        "}));",
+        "const chunks = [];",
+        "process.stdin.on('data', chunk => chunks.push(chunk));",
+        "process.stdin.on('end', () => {",
+        "  const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));",
+        "  process.stdout.write(JSON.stringify({",
+        "    ok: true,",
+        "    job: input.job,",
+        "    result: { runtime: 'python', package: 'wormhole_sidecar', version: '0.1.0', pythonVersion: '3.12.0' }",
+        "  }));",
+        "});",
       ].join("\n"),
       "utf8",
     );

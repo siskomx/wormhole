@@ -13,10 +13,12 @@ import {
 } from "../src/tool-registry.js";
 
 function registeredToolNames(): string[] {
+  return registeredToolNamesInRegistrationOrder().sort((left, right) => left.localeCompare(right));
+}
+
+function registeredToolNamesInRegistrationOrder(): string[] {
   const server = createWormholeMcpServer(createInMemoryKernel());
-  return Object.keys((server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools).sort(
-    (left, right) => left.localeCompare(right),
-  );
+  return Object.keys((server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools);
 }
 
 function readJson<T>(filePath: string): T {
@@ -45,6 +47,10 @@ describe("tool registry conformance", () => {
     );
 
     expect(registryTools).toEqual(runtimeTools);
+  });
+
+  it("keeps registry order aligned with runtime MCP registration order", () => {
+    expect(TOOL_REGISTRY.map((tool) => tool.name)).toEqual(registeredToolNamesInRegistrationOrder());
   });
 
   it("serves a layered map and structured catalog queries", () => {

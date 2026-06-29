@@ -38,6 +38,34 @@ describe("LSP ground truth", () => {
     }
   });
 
+  it("detects C# language-server configs from solution and project files", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-lsp-csharp-"));
+    mkdirSync(path.join(repoRoot, "src", "Server"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "Example.sln"), "Microsoft Visual Studio Solution File\n");
+    writeFileSync(
+      path.join(repoRoot, "src", "Server", "Server.csproj"),
+      "<Project Sdk=\"Microsoft.NET.Sdk.Web\" />\n",
+    );
+
+    try {
+      const configs = detectLanguageServerConfigs({ repoRoot });
+      const probe = lspProbe({ repoRoot });
+
+      expect(configs).toContainEqual(
+        expect.objectContaining({
+          language: "csharp",
+          command: "csharp-ls",
+          args: [],
+          transport: "stdio",
+          reason: "Detected .NET solution or C# project files.",
+        }),
+      );
+      expect(probe.status).toBe("configured");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("normalizes protocol locations into one-based editor positions", () => {
     const location = normalizeLspLocation({
       uri: "file:///repo/src/app.ts",

@@ -1,7 +1,7 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { SourceConflict, SourceProvenance } from "./source-authority.js";
-import type { WorkflowFeatureBinding, WorkflowSequence } from "./workflows.js";
+import type { WorkflowArtifactRequirement, WorkflowFeatureBinding, WorkflowSequence } from "./workflows.js";
 
 export type WorkflowArtifactFile = {
   relativePath: string;
@@ -12,6 +12,17 @@ export type WorkflowArtifactFile = {
 export type WorkflowArtifactWriteResult = {
   repoRoot: string;
   files: WorkflowArtifactFile[];
+  requiredArtifacts: WorkflowRequiredArtifactStatus[];
+};
+
+export type WorkflowRequiredArtifactStatus = {
+  relativePath: string;
+  absolutePath: string;
+  kind: WorkflowArtifactRequirement["kind"];
+  requiredStatus: WorkflowArtifactRequirement["status"];
+  description: string;
+  status: "written" | "missing";
+  bytes?: number;
 };
 
 export type WriteWorkflowArtifactsInput = {
@@ -36,10 +47,26 @@ export function writeWorkflowArtifacts(input: WriteWorkflowArtifactsInput): Work
     writeArtifact(repoRoot, runPath, `${JSON.stringify(input.workflow, null, 2)}\n`),
     writeArtifact(repoRoot, resumePath, renderWorkflowResumeMarkdown(input.workflow)),
   ].sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+  const fileByPath = new Map(files.map((file) => [file.relativePath, file]));
 
   return {
     repoRoot,
     files,
+    requiredArtifacts: input.workflow.requiredArtifacts
+      .map((artifact) => {
+        const file = fileByPath.get(artifact.path);
+        const absolutePath = file?.absolutePath ?? resolveRepoPath(repoRoot, artifact.path);
+        return {
+          relativePath: artifact.path,
+          absolutePath,
+          kind: artifact.kind,
+          requiredStatus: artifact.status,
+          description: artifact.description,
+          status: file && existsSync(absolutePath) ? "written" as const : "missing" as const,
+          ...(file ? { bytes: file.bytes } : {}),
+        };
+      })
+      .sort((left, right) => left.relativePath.localeCompare(right.relativePath)),
   };
 }
 

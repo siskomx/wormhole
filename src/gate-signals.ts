@@ -260,7 +260,10 @@ function sourceConflicts(input: GateSourceConflictsInput | undefined): SourceCon
   if (!input) {
     return [];
   }
-  return Array.isArray(input) ? input : input.conflicts;
+  if (Array.isArray(input)) {
+    return input;
+  }
+  return Array.isArray(input.conflicts) ? input.conflicts : [];
 }
 
 function isStaleGeneratedArtifactConflict(conflict: SourceConflict): boolean {

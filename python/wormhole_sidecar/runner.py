@@ -50,19 +50,33 @@ def run_job(request):
 
 
 def main():
-    if len(sys.argv) != 2:
+    if len(sys.argv) == 2 and sys.argv[1] != "--stdin":
+        request_text = sys.argv[1]
+    elif len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] == "--stdin"):
+        if sys.stdin.isatty():
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "job": "probe",
+                        "error": "Expected one JSON request argument or JSON request on stdin",
+                    }
+                )
+            )
+            return 2
+        request_text = sys.stdin.read()
+    else:
         print(
             json.dumps(
                 {
                     "ok": False,
                     "job": "probe",
-                    "error": "Expected one JSON request argument",
+                    "error": "Expected one JSON request argument or JSON request on stdin",
                 }
             )
         )
         return 2
 
-    request_text = sys.argv[1]
     try:
         request = json.loads(request_text)
         result = run_job(request)
