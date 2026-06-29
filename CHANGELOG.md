@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.12.1 - 2026-06-29
+
+- Bumped release metadata after the integration hardening commit so GitHub's latest release tag matches current `origin/main`.
+
 ## 0.12.0 - 2026-06-29
 
 - Added durable resume continuation tools for material session records, compact checkpoints, validation against kernel evidence/context packs, repo fingerprint drift checks, and latest handoff artifacts.
