@@ -1461,4 +1461,44 @@ describe("Wormhole MCP tool handlers", () => {
     expect(run.status).toBe("completed");
     expect(run.results.map((result) => result.output)).toEqual(["inspected", "edited"]);
   });
+
+  it("auto-validates resume only when resume state exists", async () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-resume-automaintain-"));
+    const runtimeStatePath = path.join(repoRoot, ".wormhole", "runtime-state.json");
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+        runtimeStatePath,
+      });
+      const mission = tools.missionStart({ objective: "obj", repoRoot });
+      const missionId = mission.missionId;
+
+      // No resume state yet -> no resume signal on the run.
+      const before = tools.stateMaintenanceRun({
+        repoRoot,
+        missionId,
+        objective: "obj",
+        freshness: true,
+      });
+      expect(before.resume).toBeUndefined();
+
+      // Record resume material, then a maintenance run validates it.
+      tools.resumeRecord({
+        repoRoot,
+        objective: "obj",
+        kind: "exact_next_action",
+        summary: "next",
+      });
+      const after = tools.stateMaintenanceRun({
+        repoRoot,
+        missionId,
+        objective: "obj",
+        freshness: true,
+      });
+      expect(after.resume).toBeDefined();
+      expect(after.resume?.missingCheckpoint).toBe(true);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
 });

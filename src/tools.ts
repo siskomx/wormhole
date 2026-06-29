@@ -35,6 +35,7 @@ import {
   type ResumeStoreSnapshot,
   type ResumeValidationGroundTruth,
   type ResumeValidationInput,
+  type ResumeValidationResult,
 } from "./resume-store.js";
 import { createGraphArtifacts, type GraphCommunity } from "./graph-artifacts.js";
 import type {
@@ -451,6 +452,7 @@ export type StateMaintenanceRunRecord = {
   actions: StateMaintenanceAction[];
   sourceConflicts?: ReturnType<typeof analyzeSourceConflicts>;
   freshness?: StateMaintenanceFreshness;
+  resume?: ResumeValidationResult;
   derivedGraphArtifacts?: StateMaintenanceDerivedGraphArtifacts;
   startedAt: string;
   updatedAt: string;
@@ -933,6 +935,7 @@ export function createToolHandlers(
       | undefined;
     let sourceConflicts: ReturnType<typeof analyzeSourceConflicts> | undefined;
     let freshness: StateMaintenanceFreshness | undefined;
+    let resume: ResumeValidationResult | undefined;
     let derivedGraphArtifacts: StateMaintenanceDerivedGraphArtifacts | undefined;
     let workspace:
       | {
@@ -958,6 +961,7 @@ export function createToolHandlers(
       runRecord.changedFiles = [...changedFiles];
       runRecord.sourceConflicts = sourceConflicts;
       runRecord.freshness = freshness;
+      runRecord.resume = resume;
       runRecord.derivedGraphArtifacts = derivedGraphArtifacts;
       runRecord.updatedAt = new Date().toISOString();
       saveStateMaintenanceRun(runRecord);
@@ -979,6 +983,7 @@ export function createToolHandlers(
         ...(context ? { context } : {}),
         ...(sourceConflicts ? { sourceConflicts } : {}),
         ...(freshness ? { freshness } : {}),
+        ...(resume ? { resume } : {}),
         ...(derivedGraphArtifacts ? { derivedGraphArtifacts } : {}),
         recordedEvidence,
         ...(workspace ? { workspace } : {}),
@@ -1053,6 +1058,16 @@ export function createToolHandlers(
           durableIndex,
           durableIndexManifest,
         };
+      }
+
+      if (resumeStore.hasState({ repoRoot })) {
+        currentToolName = "resume_validate";
+        const loaded = resumeStore.load({ repoRoot });
+        resume = resumeStore.validate({
+          repoRoot,
+          groundTruth: buildResumeValidationGroundTruth(repoRoot, loaded.checkpoint?.changedFiles ?? []),
+        });
+        addAction({ toolName: "resume_validate", status: "ran" });
       }
 
       if (input.recordEvidence) {
@@ -1163,6 +1178,7 @@ export function createToolHandlers(
     | {
         sourceConflicts?: ReturnType<typeof analyzeSourceConflicts>;
         freshness?: StateMaintenanceFreshness;
+        resume?: ResumeValidationResult;
       }
     | undefined {
     const completedRuns = [...stateMaintenanceRuns.values()]
@@ -1170,14 +1186,18 @@ export function createToolHandlers(
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
     let sourceConflicts: ReturnType<typeof analyzeSourceConflicts> | undefined;
     let freshness: StateMaintenanceFreshness | undefined;
+    let resume: ResumeValidationResult | undefined;
     for (const run of completedRuns) {
       sourceConflicts ??= run.sourceConflicts;
       freshness ??= run.freshness;
-      if (sourceConflicts && freshness) {
+      resume ??= run.resume;
+      if (sourceConflicts && freshness && resume) {
         break;
       }
     }
-    return sourceConflicts || freshness ? { sourceConflicts, freshness } : undefined;
+    return sourceConflicts || freshness || resume
+      ? { sourceConflicts, freshness, resume }
+      : undefined;
   }
 
   return {
