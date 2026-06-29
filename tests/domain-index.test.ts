@@ -163,6 +163,64 @@ describe("domain index", () => {
     }
   });
 
+  it("discovers prefixed Fastify route modules during route scanning", () => {
+    const repoRoot = createDomainRepo();
+    try {
+      rmSync(path.join(repoRoot, "public"), { recursive: true, force: true });
+      mkdirSync(path.join(repoRoot, "backend", "src", "routes"), { recursive: true });
+      writeFileSync(
+        path.join(repoRoot, "backend", "src", "app.ts"),
+        [
+          'import { ticketRoutes } from "./routes/tickets";',
+          "export function buildApp(fastify) {",
+          "  fastify.register(ticketRoutes, { prefix: '/api' });",
+          "}",
+        ].join("\n"),
+      );
+      writeFileSync(
+        path.join(repoRoot, "backend", "src", "routes", "tickets.ts"),
+        [
+          "export async function ticketRoutes(fastify) {",
+          "  fastify.get('/tickets', { preHandler: authenticate }, async () => []);",
+          "}",
+        ].join("\n"),
+      );
+      writeFileSync(
+        path.join(repoRoot, ".wormhole", "domain-index.json"),
+        JSON.stringify({
+          schemaVersion: "domain-index.v0",
+          features: [{ featureId: "tickets", roots: ["backend/src"], aliases: ["ticket"], tables: [] }],
+          fileGroups: {
+            routes: ["backend/src/app.ts", "backend/src/routes/*.ts"],
+            hooks: [],
+            services: [],
+            migrations: [],
+            openapi: [],
+            conventions: [],
+            memory: [],
+          },
+        }),
+      );
+
+      const index = buildDomainIndex({ repoRoot });
+
+      expect(index.apiEndpoints).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            featureId: "tickets",
+            method: "GET",
+            pathTemplate: "/api/tickets",
+            source: "route-scan",
+            authRequired: true,
+            sourcePath: "backend/src/routes/tickets.ts",
+          }),
+        ]),
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("reports generic indexed features that are missing from the manifest", () => {
     const repoRoot = createDomainRepo();
     try {

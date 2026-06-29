@@ -11,6 +11,12 @@ import {
   isSupportedTextPath,
   languageForPath,
 } from "./language-profile.js";
+import {
+  extractRepoFileFacts,
+  type RepoIndexCallDraft,
+  type RepoIndexEdgeDraft,
+  type RepoIndexParserInfo,
+} from "./repo-index-extraction.js";
 
 export type RepoIndexSymbolKind =
   | "function"
@@ -44,6 +50,7 @@ export type RepoIndexEdge = {
 export type RepoIndexFile = {
   path: string;
   language: string;
+  parser?: RepoIndexParserInfo;
   lineCount: number;
   byteLength: number;
   mtimeMs: number;
@@ -161,13 +168,9 @@ export type RepoIndexPathResult = {
   indexHealth: IndexHealthSnapshot;
 };
 
-type EdgeDraft = {
-  from: string;
-  specifier: string;
-  kind: Extract<RepoIndexEdgeKind, "imports" | "links">;
-  line: number;
-};
+type EdgeDraft = RepoIndexEdgeDraft;
 
+export const REPO_INDEX_EXTRACTOR_VERSION = "ast-v1";
 const DEFAULT_MAX_FILES = 1_000;
 const DEFAULT_MAX_FILE_BYTES = 512 * 1024;
 const DEFAULT_MAX_TOTAL_BYTES = 10 * 1024 * 1024;
@@ -204,6 +207,7 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
   const symbols: RepoIndexSymbol[] = [];
   const edges: RepoIndexEdge[] = [];
   const edgeDrafts: EdgeDraft[] = [];
+  const callDrafts: RepoIndexCallDraft[] = [];
   let totalBytes = 0;
 
   for (const relativePath of selectedFiles) {
@@ -220,10 +224,12 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
 
     const content = normalizeLineEndings(readFileSync(absolutePath, "utf8"));
     const language = languageForPath(relativePath);
-    const fileSymbols = extractSymbols(relativePath, language, content);
+    const extracted = extractRepoFileFacts({ path: relativePath, language, content });
+    const fileSymbols = extracted.symbols;
     const file: RepoIndexFile = {
       path: relativePath,
       language,
+      parser: extracted.parser,
       lineCount: countLines(content),
       byteLength: Buffer.byteLength(content, "utf8"),
       mtimeMs: stat.mtimeMs,
@@ -245,7 +251,8 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
         label: symbol.name,
       })),
     );
-    pushAll(edgeDrafts, extractEdgeDrafts(relativePath, language, content));
+    pushAll(edgeDrafts, extracted.edgeDrafts);
+    pushAll(callDrafts, extracted.callDrafts);
   }
 
   const knownFiles = new Set(files.map((file) => file.path));
@@ -265,7 +272,7 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
     });
   }
   pushAll(edges, extractReferenceEdges(files, symbols, edges));
-  pushAll(edges, extractCallEdges(files, symbols, edges));
+  pushAll(edges, extractCallEdges(files, symbols, edges, callDrafts));
 
   return {
     repoRoot,
@@ -345,6 +352,13 @@ export function createRepoIndexHealth(index: RepoIndex): IndexHealthSnapshot {
     repoRoot: index.repoRoot,
     indexedFiles: index.files.map((file) => file.path),
   });
+  const parserFallbackCount = index.files.filter((file) =>
+    file.parser?.reason?.startsWith("PARSER_FALLBACK:"),
+  ).length;
+  const parserReasons =
+    parserFallbackCount > 0
+      ? [`PARSER_FALLBACK: ${parserFallbackCount} parser-capable files used fallback extraction.`]
+      : [];
   return createIndexHealthSnapshot({
     source: "repo_index",
     present: true,
@@ -354,7 +368,7 @@ export function createRepoIndexHealth(index: RepoIndex): IndexHealthSnapshot {
     fileCount: index.files.length,
     skippedFiles: index.skippedFiles,
     languageCoverage: languageProfile.languages,
-    reasons: languageProfile.health.reasons,
+    reasons: [...languageProfile.health.reasons, ...parserReasons],
   });
 }
 
@@ -839,17 +853,82 @@ function extractCallEdges(
   files: RepoIndexFile[],
   symbols: RepoIndexSymbol[],
   existingEdges: RepoIndexEdge[],
+  callDrafts: RepoIndexCallDraft[],
 ): RepoIndexEdge[] {
   const existingKeys = new Set(
     existingEdges.map((edge) => `${edge.from}\0${edge.to}\0${edge.kind}`),
   );
   const symbolsByPath = new Map<string, RepoIndexSymbol[]>();
+  const functionSymbolsByName = new Map<string, RepoIndexSymbol[]>();
   for (const symbol of symbols) {
     symbolsByPath.set(symbol.path, [...(symbolsByPath.get(symbol.path) ?? []), symbol]);
+    if (symbol.kind === "function") {
+      functionSymbolsByName.set(symbol.name, [
+        ...(functionSymbolsByName.get(symbol.name) ?? []),
+        symbol,
+      ]);
+    }
   }
 
   const edges: RepoIndexEdge[] = [];
+
+  function addCallEdge(
+    caller: RepoIndexSymbol,
+    callee: RepoIndexSymbol,
+    confidence: number,
+    line?: number,
+  ): void {
+    if (callee.id === caller.id || callee.kind !== "function") {
+      return;
+    }
+    const key = `${caller.id}\0${callee.id}\0calls`;
+    if (existingKeys.has(key)) {
+      return;
+    }
+    existingKeys.add(key);
+    edges.push({
+      from: caller.id,
+      to: callee.id,
+      kind: "calls",
+      provenance: "inferred",
+      confidence,
+      label: callee.name,
+      line: line ?? caller.line,
+    });
+  }
+
+  for (const draft of callDrafts) {
+    const fileSymbols = (symbolsByPath.get(draft.path) ?? []).sort((left, right) => left.line - right.line);
+    const caller =
+      (draft.callerName
+        ? fileSymbols.find(
+            (symbol) => symbol.kind === "function" && symbol.name === draft.callerName,
+          )
+        : undefined) ?? nearestFunctionSymbol(fileSymbols, draft.line);
+    if (!caller) {
+      continue;
+    }
+    const candidates = functionSymbolsByName.get(draft.calleeName) ?? [];
+    const callee = [...candidates]
+      .filter((candidate) => candidate.id !== caller.id)
+      .sort((left, right) => {
+        const leftSamePath = left.path === draft.path ? 0 : 1;
+        const rightSamePath = right.path === draft.path ? 0 : 1;
+        if (leftSamePath !== rightSamePath) {
+          return leftSamePath - rightSamePath;
+        }
+        return left.path.localeCompare(right.path) || left.line - right.line;
+      })[0];
+    if (!callee) {
+      continue;
+    }
+    addCallEdge(caller, callee, callee.path === draft.path ? 0.9 : 0.78, draft.line);
+  }
+
   for (const file of files) {
+    if (file.parser?.engine === "tree-sitter") {
+      continue;
+    }
     const fileSymbols = (symbolsByPath.get(file.path) ?? []).sort((left, right) => left.line - right.line);
     if (fileSymbols.length === 0) {
       continue;
@@ -888,6 +967,22 @@ function extractCallEdges(
     }
   }
   return edges;
+}
+
+function nearestFunctionSymbol(
+  fileSymbols: RepoIndexSymbol[],
+  line: number,
+): RepoIndexSymbol | undefined {
+  let nearest: RepoIndexSymbol | undefined;
+  for (const symbol of fileSymbols) {
+    if (symbol.kind !== "function" || symbol.line > line) {
+      continue;
+    }
+    if (!nearest || symbol.line > nearest.line) {
+      nearest = symbol;
+    }
+  }
+  return nearest;
 }
 
 function identifierTokens(content: string): Set<string> {
@@ -1131,10 +1226,11 @@ function createRepoIndexFingerprint(
 ): string {
   const candidateFiles = listCandidateFiles(repoRoot, options);
   const selectedFiles = candidateFiles.slice(0, options.maxFiles);
-  const entries = candidateFiles.slice(options.maxFiles).map((relativePath) => {
+  const entries = [`extractor:${REPO_INDEX_EXTRACTOR_VERSION}`];
+  entries.push(...candidateFiles.slice(options.maxFiles).map((relativePath) => {
     const stat = statSync(path.join(repoRoot, relativePath));
     return `skipped-by-count:${relativePath}:${stat.size}:${stat.mtimeMs}`;
-  });
+  }));
   let totalBytes = 0;
 
   for (const relativePath of selectedFiles) {

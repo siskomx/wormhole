@@ -2,7 +2,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { analyzeRepoGraph } from "../src/repo-graph-analysis.js";
 import {
+  REPO_INDEX_EXTRACTOR_VERSION,
   buildRepoIndex,
   explainRepoIndex,
   findRepoIndexPath,
@@ -73,6 +75,9 @@ describe("repo index", () => {
           provenance: "extracted",
           confidence: 1,
         }),
+      );
+      expect(index.files.find((file) => file.path === "src/server.ts")?.parser).toEqual(
+        expect.objectContaining({ engine: "tree-sitter", language: "typescript" }),
       );
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
@@ -442,6 +447,58 @@ describe("repo index", () => {
         ]),
       );
       expect(summary.indexHealth.status).not.toBe("degraded");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("records parser fallback health when a parser-capable file cannot be parsed", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-index-parser-fallback-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "src", "broken.ts"), "export function broken( {\n");
+
+    try {
+      const index = buildRepoIndex({ repoRoot });
+      const file = index.files.find((candidate) => candidate.path === "src/broken.ts");
+      const summary = summarizeRepoIndex(index);
+
+      expect(file?.parser).toEqual(
+        expect.objectContaining({
+          engine: "fallback",
+          reason: expect.stringContaining("PARSER_FALLBACK:"),
+        }),
+      );
+      expect(summary.indexHealth.reasons.join("\n")).toContain("PARSER_FALLBACK:");
+      expect(REPO_INDEX_EXTRACTOR_VERSION).toBe("ast-v1");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("analyzes graph structure and parser coverage from the native index", () => {
+    const repoRoot = createFixtureRepo();
+
+    try {
+      const index = buildRepoIndex({ repoRoot });
+      const analysis = analyzeRepoGraph({
+        index,
+        changedFiles: ["src/server.ts"],
+        limit: 5,
+      });
+
+      expect(analysis.repoRoot).toBe(repoRoot);
+      expect(analysis.indexHealth.source).toBe("repo_index");
+      expect(analysis.summary.fileCount).toBe(3);
+      expect(analysis.hubs.length).toBeGreaterThan(0);
+      expect(analysis.parserCoverage.treeSitterFiles).toBeGreaterThan(0);
+      expect(analysis.parserCoverage.byLanguage.typescript?.treeSitterFiles).toBe(2);
+      expect(analysis.affectedFlows[0]).toEqual(
+        expect.objectContaining({
+          source: "src/server.ts",
+          reachableCount: expect.any(Number),
+          truncated: false,
+        }),
+      );
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

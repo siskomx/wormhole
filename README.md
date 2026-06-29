@@ -22,8 +22,9 @@ The goal is simple: make coding agents faster and more precise in large reposito
 ### Repo Intelligence
 
 - Deterministic repo-local graph indexing over files, symbols, imports, links, references, and inferred calls.
+- AST-first extraction for TypeScript/TSX, JavaScript/JSX, Python, Rust, and C# through pinned Tree-sitter grammars, with regex fallback for parser failures, Markdown, and unsupported text formats.
 - SQLite-backed durable repo indexes under `.wormhole/indexes`, plus JSON compatibility exports and shard manifests.
-- `repo_index_build`, `repo_index_query`, `repo_index_explain`, `repo_index_path`, and `repo_index_report` for immediate repo graph work.
+- `repo_index_build`, `repo_index_query`, `repo_index_explain`, `repo_index_path`, `repo_index_report`, and `repo_graph_analyze` for immediate repo graph work.
 - `durable_repo_index_refresh`, `durable_index_status`, `durable_index_manifest_refresh`, `durable_index_manifest_status`, and `durable_repo_index_query` for persistent large-repo retrieval.
 - Project contracts, dependency inventory, command maps, architecture maps, entrypoint discovery, blast-radius analysis, and generated project context packs.
 - Repo-native coverage packs and feature-slice queries over feature indexes, scripts, conventions, schema evidence, verification gates, source conflicts, and coverage gaps.
@@ -36,7 +37,7 @@ Domain indexing joins:
 
 - Feature ids, aliases, roots, portals, and owned database tables from `.wormhole/domain-index.json`.
 - Route, hook, service, migration, OpenAPI, convention, and memory files.
-- OpenAPI endpoint observations, route-scan fallback endpoints, auth hints, query keys, and response schema refs.
+- OpenAPI endpoint observations, route-scan fallback endpoints, registered Fastify/Express prefixes, auth hints, query keys, and response schema refs.
 - Folded SQL migration facts: tables, columns, indexes, foreign keys, and migration provenance.
 - Domain verification gates mapped from feature side effects such as `authz`, `database_schema`, `http_mutation`, and `realtime`.
 - Coverage and drift signals for missing manifests, generic features missing from the manifest, routes without OpenAPI, APIs without feature ownership, tables without owners, stale indexes, and source conflicts.
@@ -97,6 +98,7 @@ Domain tools:
 2. Use `durable_index_status` or `durable_index_manifest_status` to inspect freshness.
 3. Query through `durable_repo_index_query`.
 4. Pass `requireFresh: true` when stale data must be refused instead of returned with warnings.
+5. After upgrading to `0.8.0`, refresh each repo once because extractor-versioned fingerprints mark pre-AST durable indexes stale.
 
 ### Domain-Indexed Repos
 
@@ -170,12 +172,31 @@ Notes:
 - Script names are preserved exactly so package scripts like `lint:org-filter` continue to work.
 - Manifest-declared `.wormhole/memory` files are indexed by the domain layer even though the broad repo index ignores `.wormhole` runtime state.
 - If OpenAPI files are absent, route scanning still produces endpoint facts and reports `route-without-openapi` coverage gaps.
+- Route scanning detects direct `app/router/fastify.method()` calls, `fastify.route({ method, url })`, local `register(..., { prefix })` route modules, and `router.use("/prefix", childRouter)` when the child router is imported from the repo.
+
+## AST-First Repo Intelligence
+
+The native repo index now uses Tree-sitter first for parser-supported source files. Each indexed file records parser provenance as `tree-sitter` or `fallback`, and index health reports `PARSER_FALLBACK:` when a parser-capable file had to use fallback extraction.
+
+What AST improves:
+
+- More precise symbols, imports, exports, and direct call edges for TypeScript/TSX, JavaScript/JSX, Python, Rust, and C#.
+- Fewer false call edges from comments or string literals in parser-supported files.
+- Shared route and framework signals that domain manifest seeders can use to create or maintain repo-specific seeders.
+- Extractor-versioned fingerprints so durable indexes built by older extraction logic become stale instead of being silently reused.
+
+What AST does not replace:
+
+- It is not a type checker or LSP. Runtime wiring, generated routes, decorators, dynamic imports, framework config, OpenAPI specs, tests, and command output still need their own evidence.
+- It does not persist raw ASTs. Wormhole persists compact graph facts and parser coverage only.
+
+Use `repo_graph_analyze` when relationships matter. It is read-only and returns hubs, connector nodes, cycles, disconnected files, orphan symbols, parser coverage, bounded changed-file impact flows, truncation state, and index health.
 
 ## Index Lifecycle Coverage
 
 Wormhole has several index-like artifacts, but they do not all need the same seeder lifecycle:
 
-- Repo graph indexes are generated from source files. Use `repo_index_build`, `repo_index_query`, `repo_index_explain`, `repo_index_path`, and `repo_index_report`.
+- Repo graph indexes are generated from source files. Use `repo_index_build`, `repo_index_query`, `repo_index_explain`, `repo_index_path`, `repo_index_report`, and `repo_graph_analyze`.
 - Durable repo indexes and shard manifests are generated artifacts. Use `durable_repo_index_refresh`, `durable_index_manifest_refresh`, `durable_index_status`, `durable_index_manifest_status`, and `durable_repo_index_query`.
 - Semantic fallback indexes are generated from caller-provided records. Use `durable_semantic_index_refresh` and `durable_semantic_search`.
 - Repo-native packs are read-only synthesized coverage over existing repo evidence. Use `repo_native_pack_build` and `feature_slice_query`.
@@ -228,6 +249,8 @@ Large-repo caps are:
 Explicit `maxFiles`, `maxFileBytes`, or `maxTotalBytes` values override the preset.
 
 Durable SQLite status reports `ftsAvailable` and `retrievalModes`. Durable query results report `retrievalMode` so agents can distinguish SQLite FTS, SQLite LIKE, JSON, and manifest fallback paths.
+
+Pre-`0.8.0` durable repo indexes are stale after upgrade because the repo fingerprint now includes the AST extractor generation. Run `durable_repo_index_refresh`, `durable_index_manifest_refresh`, or `state_maintenance_run` once per repo to rebuild AST-backed durable facts.
 
 ## Python Runtime
 

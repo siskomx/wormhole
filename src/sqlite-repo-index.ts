@@ -7,6 +7,7 @@ import {
   type IndexHealthSnapshot,
 } from "./index-health.js";
 import {
+  REPO_INDEX_EXTRACTOR_VERSION,
   isRepoIndexFresh,
   summarizeRepoIndex,
   type RepoIndex,
@@ -111,6 +112,12 @@ export function readSqliteRepoIndexStatus(repoRootInput: string): SqliteRepoInde
       skippedFiles: JSON.parse(metadata.skippedFiles ?? "[]") as string[],
     });
     const skippedFiles = Array.isArray(summary.skippedFiles) ? summary.skippedFiles : [];
+    const metadataReasons =
+      metadata.extractorVersion === REPO_INDEX_EXTRACTOR_VERSION
+        ? []
+        : [
+            `EXTRACTOR_VERSION: stored ${metadata.extractorVersion ?? "unknown"} current ${REPO_INDEX_EXTRACTOR_VERSION}.`,
+          ];
     const indexHealth = createIndexHealthSnapshot({
       source: "durable_sqlite_index",
       present: true,
@@ -121,7 +128,10 @@ export function readSqliteRepoIndexStatus(repoRootInput: string): SqliteRepoInde
       fileCount: summary.fileCount,
       skippedFiles,
       languageCoverage: summary.indexHealth?.languageCoverage ?? [],
-      reasons: summary.indexHealth?.languageCoverage?.flatMap((coverage) => coverage.reasons) ?? [],
+      reasons: [
+        ...(summary.indexHealth?.languageCoverage?.flatMap((coverage) => coverage.reasons) ?? []),
+        ...metadataReasons,
+      ],
     });
     return {
       indexPath,
@@ -313,6 +323,7 @@ function writeMetadata(db: DatabaseSync, index: RepoIndex, schema: SqliteRepoInd
     repoRoot: index.repoRoot,
     builtAt: index.builtAt,
     buildOptions: JSON.stringify(index.buildOptions),
+    extractorVersion: REPO_INDEX_EXTRACTOR_VERSION,
     fingerprint: index.fingerprint,
     truncated: String(index.truncated),
     skippedFiles: JSON.stringify(index.skippedFiles),

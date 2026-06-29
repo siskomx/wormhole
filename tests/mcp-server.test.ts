@@ -77,6 +77,7 @@ describe("Wormhole MCP server", () => {
         "repo_watch_stop",
         "repo_change_scan",
         "repo_activity_record",
+        "repo_graph_analyze",
         "repo_graph_refresh_incremental",
         "repo_graph_refresh_full",
         "state_maintenance_run",

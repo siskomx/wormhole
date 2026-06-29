@@ -1088,12 +1088,19 @@ describe("Wormhole MCP tool handlers", () => {
         from: "src/server.ts",
         to: "src/db.ts",
       });
+      const graphAnalysis = tools.repoGraphAnalyze({
+        repoRoot,
+        changedFiles: ["src/server.ts"],
+        limit: 5,
+      });
 
       expect(summary.fileCount).toBe(2);
       expect(summary.symbolCount).toBeGreaterThanOrEqual(2);
       expect(query.results[0].excerpt).toContain("database pool");
       expect(explanation.resolved?.name).toBe("connectDatabase");
       expect(dependencyPath.path).toEqual(["src/server.ts", "src/db.ts"]);
+      expect(graphAnalysis.parserCoverage.treeSitterFiles).toBe(2);
+      expect(graphAnalysis.affectedFlows[0]?.source).toBe("src/server.ts");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

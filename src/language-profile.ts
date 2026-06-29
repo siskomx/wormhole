@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { detectFrameworkProfile } from "./framework-profile.js";
 
 export type LanguageSupportLevel = "supported" | "partial" | "unsupported";
 export type LanguageCoverageStatus = "ok" | "warning" | "blocker";
@@ -296,32 +297,9 @@ function healthStatusFor(languages: LanguageCoverage[]): LanguageProfileHealth["
 }
 
 function detectFrameworks(repoRoot: string, repoFiles: string[]): string[] {
-  const frameworks = new Set<string>();
-  const cargoFiles = repoFiles.filter((file) => path.basename(file) === "Cargo.toml");
-  if (cargoFiles.length > 0) {
-    frameworks.add("cargo");
-  }
-  const dotnetFiles = repoFiles.filter((file) => file.endsWith(".sln") || file.endsWith(".csproj"));
-  if (dotnetFiles.length > 0) {
-    frameworks.add("dotnet");
-  }
-  if (repoFiles.some((file) => path.basename(file) === "tauri.conf.json")) {
-    frameworks.add("tauri");
-  }
-
-  for (const cargoFile of cargoFiles) {
-    if (safeRead(repoRoot, cargoFile).toLowerCase().includes("tauri")) {
-      frameworks.add("tauri");
-    }
-  }
-  for (const projectFile of dotnetFiles.filter((file) => file.endsWith(".csproj"))) {
-    const content = safeRead(repoRoot, projectFile);
-    if (/Microsoft\.NET\.Sdk\.Web|AspNetCore/i.test(content)) {
-      frameworks.add("aspnetcore");
-    }
-  }
-
-  return [...frameworks].sort((left, right) => left.localeCompare(right));
+  return detectFrameworkProfile({ repoRoot, repoFiles }).frameworks
+    .map((framework) => framework.id)
+    .sort((left, right) => left.localeCompare(right));
 }
 
 function manifestFilesForLanguage(language: string, manifestFiles: string[]): string[] {

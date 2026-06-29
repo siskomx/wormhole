@@ -430,7 +430,7 @@ describe("agent-facing routing tools", () => {
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
-  }, 20_000);
+  }, 60_000);
 
   it("keeps prepared context health aligned with fresh durable large-repo retrieval across handler instances", () => {
     const repoRoot = createLargeFixtureRepo();

@@ -121,6 +121,7 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("repo_index_query");
     expect(manifest.tools.map((tool) => tool.name)).toContain("repo_index_explain");
     expect(manifest.tools.map((tool) => tool.name)).toContain("repo_index_report");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("repo_graph_analyze");
     expect(manifest.tools.map((tool) => tool.name)).toContain("repo_graph_export");
     expect(manifest.tools.map((tool) => tool.name)).toContain("project_contract_detect");
     expect(manifest.tools.map((tool) => tool.name)).toContain("dependency_inventory");

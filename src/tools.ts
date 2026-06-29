@@ -298,6 +298,7 @@ import {
   type RepoIndexPathInput,
   type RepoIndexQueryInput,
 } from "./repo-index.js";
+import { analyzeRepoGraph } from "./repo-graph-analysis.js";
 import { analyzeSourceConflicts } from "./source-conflicts.js";
 import {
   auditCapabilityRelations,
@@ -1627,6 +1628,16 @@ export function createToolHandlers(
 
     repoIndexReport(input: { repoRoot: string }) {
       return getRepoGraphReport(getRepoIndex(input.repoRoot));
+    },
+
+    repoGraphAnalyze(input: { repoRoot: string; changedFiles?: string[]; limit?: number }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const changedFiles = input.changedFiles?.map((file) => repoRelativePath(repoRoot, file));
+      return analyzeRepoGraph({
+        index: getRepoIndex(repoRoot),
+        changedFiles,
+        limit: input.limit,
+      });
     },
 
     sourceConflictsAnalyze(input: { repoRoot: string }) {

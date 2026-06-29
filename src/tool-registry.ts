@@ -172,6 +172,7 @@ const TOOL_NAMES = [
   "repo_index_explain",
   "repo_index_path",
   "repo_index_report",
+  "repo_graph_analyze",
   "agent_register",
   "agent_list",
   "agent_dispatch",
@@ -597,6 +598,15 @@ const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
     risk: "write",
     summary: "Build an in-memory repo graph with explicit default or large-repo indexing caps.",
     inputs: ["repoRoot", "preset", "include", "exclude", "maxFiles", "maxFileBytes", "maxTotalBytes"],
+  },
+  repo_graph_analyze: {
+    plane: "project",
+    phase: "impact",
+    pack: "large-repo",
+    risk: "read",
+    summary:
+      "Analyze the native repo graph for hubs, connector nodes, cycles, orphan symbols, disconnected files, parser coverage, and changed-file impact flows.",
+    inputs: ["repoRoot", "changedFiles", "limit"],
   },
   architecture_map: { plane: "project", phase: "orient", pack: "large-repo", risk: "read" },
   source_conflicts_analyze: {

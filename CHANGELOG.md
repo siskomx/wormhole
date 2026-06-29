@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.8.0 - 2026-06-29
+
+- Added AST-first repo extraction with pinned Tree-sitter grammars for TypeScript/TSX, JavaScript/JSX, Python, Rust, and C#.
+- Preserved regex fallback extraction for Markdown, unsupported text formats, parser load failures, and malformed parser-capable files, with `PARSER_FALLBACK:` index-health reasons.
+- Added `repo_graph_analyze` for read-only graph hubs, connector nodes, cycles, disconnected files, orphan symbols, parser coverage, and bounded changed-file impact flows.
+- Added shared framework and route extraction signals, including Fastify/Express registered prefixes, so domain manifest seeders can identify route groups beyond `*Routes.ts` conventions.
+- Added extractor-versioned repo fingerprints and durable SQLite metadata; pre-0.8 durable repo indexes should be refreshed once after upgrade.
+
 ## 0.7.0 - 2026-06-28
 
 - Added a domain manifest seeder lifecycle with `domain_manifest_generate`, `domain_manifest_diff`, `domain_manifest_status`, and guarded `domain_manifest_apply`.

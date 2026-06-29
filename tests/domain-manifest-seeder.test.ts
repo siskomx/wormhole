@@ -138,6 +138,42 @@ describe("domain manifest seeder lifecycle", () => {
     }
   });
 
+  it("infers route file groups from registered Fastify route modules", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-domain-seeder-routes-"));
+    try {
+      mkdirSync(path.join(repoRoot, "backend", "src", "routes"), { recursive: true });
+      writeFileSync(
+        path.join(repoRoot, "package.json"),
+        JSON.stringify({ dependencies: { fastify: "^5.0.0" } }, null, 2),
+      );
+      writeFileSync(
+        path.join(repoRoot, "backend", "src", "app.ts"),
+        [
+          'import { ticketRoutes } from "./routes/tickets";',
+          "export function buildApp(fastify) {",
+          "  fastify.register(ticketRoutes, { prefix: '/api' });",
+          "}",
+        ].join("\n"),
+      );
+      writeFileSync(
+        path.join(repoRoot, "backend", "src", "routes", "tickets.ts"),
+        [
+          "export async function ticketRoutes(fastify) {",
+          "  fastify.get('/tickets', async () => []);",
+          "}",
+        ].join("\n"),
+      );
+      const tools = domainManifestTools(createToolHandlers(createInMemoryKernel(), { allowedRepoRoots: [repoRoot] }));
+
+      const result = tools.domainManifestGenerate({ repoRoot });
+
+      expect(result.manifest.fileGroups.routes).toContain("backend/src/routes/**/*.ts");
+      expect(result.warnings.join("\n")).not.toContain("ROUTE_CANDIDATE_CAP:");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("preserves manual aliases, portals, and verification gates when regenerating", () => {
     const repoRoot = createFixtureRepo({ existingManifest: true, includeCustomers: true });
     try {

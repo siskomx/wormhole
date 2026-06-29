@@ -27,7 +27,7 @@ export function createWormholeMcpServer(
 ): McpServer {
   const server = new McpServer({
     name: "wormhole",
-    version: "0.1.0",
+    version: "0.8.0",
   });
   const tools = createToolHandlers(kernel, options);
   const taskStatusSchema = z.enum([
@@ -942,6 +942,19 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.repoIndexReport(input)),
+  );
+
+  server.registerTool(
+    "repo_graph_analyze",
+    {
+      description: "Analyze the native repo graph for hubs, bridges, cycles, parser coverage, orphan symbols, disconnected files, and changed-file impact flows.",
+      inputSchema: {
+        repoRoot: z.string(),
+        changedFiles: z.array(z.string()).optional(),
+        limit: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.repoGraphAnalyze(input)),
   );
 
   server.registerTool(

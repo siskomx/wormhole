@@ -110,7 +110,7 @@ Wormhole includes a native Graphify-style repo index for codebase discovery. It 
 
 The tools are:
 
-- `repo_index_build`: build or rebuild an in-memory file, symbol, import, link, and reference graph for a repo root.
+- `repo_index_build`: build or rebuild an in-memory AST-first file, symbol, import, link, reference, and inferred-call graph for a repo root.
 - `repo_index_query`: search the graph and indexed snippets before broad grep or raw file reads.
 - `repo_index_explain`: explain a file or symbol using indexed symbols plus inbound and outbound edges.
 - `repo_index_path`: find a graph path between two files or symbols.
@@ -118,7 +118,7 @@ The tools are:
 
 Edges carry explicit provenance and confidence: source-backed definitions/imports/links are `extracted` with confidence `1`, while text references are `inferred` with lower confidence. This is not a replacement for source evidence. Query results are discovery hints; important claims still need `record_evidence` entries with source paths and line ranges before the gate opens. The capability model also declares a `graphify` connector target so a full external Graphify graph or MCP server can be registered later without changing the Wormhole mission loop.
 
-The MCP-exposed repo index tools are confined to allowed workspace roots. By default, the only allowed root is the server working directory. Hosts can set `WORMHOLE_ALLOWED_REPO_ROOTS` to a comma- or semicolon-separated allowlist when they need multiple repo roots. Index caches are keyed by repo root plus build options and refreshed from a content fingerprint before query, explain, or path operations. `include` and `exclude` are path patterns: plain names match path segments, slash-containing values match exact paths or descendants, and `*`/`**`/`?` provide glob-style matching. Default index caps remain conservative at 1,000 files, 512 KiB per file, and 10 MiB total indexed bytes; callers can pass `preset: "large_repo"` to `repo_index_build`, `durable_repo_index_refresh`, or `durable_index_manifest_refresh` for explicit 50,000-file, 1 MiB per-file, and 512 MiB total caps, with explicit max options still taking precedence.
+The MCP-exposed repo index tools are confined to allowed workspace roots. By default, the only allowed root is the server working directory. Hosts can set `WORMHOLE_ALLOWED_REPO_ROOTS` to a comma- or semicolon-separated allowlist when they need multiple repo roots. Index caches are keyed by repo root plus build options and refreshed from a content fingerprint before query, explain, or path operations. `include` and `exclude` are path patterns: plain names match path segments, slash-containing values match exact paths or descendants, and `*`/`**`/`?` provide glob-style matching. Default index caps remain conservative at 1,000 files, 512 KiB per file, and 10 MiB total indexed bytes; callers can pass `preset: "large_repo"` to `repo_index_build`, `durable_repo_index_refresh`, or `durable_index_manifest_refresh` for explicit 50,000-file, 1 MiB per-file, and 512 MiB total caps, with explicit max options still taking precedence. Parser-supported TypeScript/TSX, JavaScript/JSX, Python, Rust, and C# files use Tree-sitter first and report parser fallback through index health. `repo_graph_analyze` adds read-only hubs, connector nodes, cycles, parser coverage, orphan symbols, disconnected files, and bounded changed-file impact flows.
 
 ## Project Ground Truth Suite
 
@@ -238,7 +238,7 @@ Wormhole's tool factory is implemented as a bounded native tool-spec pipeline: H
 
 Wormhole implements these runtime surfaces as first-class native capabilities:
 
-- Repo graph artifacts: `repo_index_*`, `repo_graph_export`, `python_graph_metrics`, and `python_graph_communities`.
+- Repo graph artifacts: `repo_index_*`, `repo_graph_analyze`, `repo_graph_export`, `python_graph_metrics`, and `python_graph_communities`.
 - Repo activity watch layer: `repo_watch_*`, `repo_change_scan`, `repo_activity_record`, `repo_graph_refresh_incremental`, `repo_graph_refresh_full`, and `state_maintenance_*`.
 - Project ground truth: `project_contract_detect`, `diagnostics_*`, `impact_analyze`, `test_plan_select`, `verification_run`, `secret_scan`, `operation_risk_review`, `semantic_*`, and `lsp_*`.
 - Project-intelligence sequencing: `project_onboard`, durable index tools, LSP session tools, `test_impact_analyze_v2`, `dependency_security_report`, `action_policy_review`, `tool_admission_review`, patch transaction tools, and `optimization_adapter_*`.

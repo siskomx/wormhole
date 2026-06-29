@@ -14,6 +14,8 @@ import {
   createFeatureIndex,
   type FeatureSideEffect,
 } from "./feature-index.js";
+import { detectFrameworkProfile } from "./framework-profile.js";
+import { extractRouteEndpoints } from "./route-extraction.js";
 import {
   domainIndexManifestPath,
   readDomainIndexManifest,
@@ -145,6 +147,8 @@ const FILE_GROUP_KEYS: Array<keyof DomainIndexFileGroups> = [
   "memory",
 ];
 
+const ROUTE_CANDIDATE_LIMIT = 2_000;
+
 export function generateDomainManifestCandidate(input: { repoRoot: string }): DomainManifestGenerateResult {
   const repoRoot = path.resolve(input.repoRoot);
   const manifestPath = domainIndexManifestPath(repoRoot);
@@ -154,6 +158,12 @@ export function generateDomainManifestCandidate(input: { repoRoot: string }): Do
   const blockers = valid ? [] : ["Current .wormhole/domain-index.json is invalid; fix it before applying generated seeders."];
   const genericIndex = createFeatureIndex({ repoRoot });
   const repoFiles = listRepoFiles(repoRoot);
+  const frameworkProfile = detectFrameworkProfile({ repoRoot, repoFiles });
+  const routeCandidateSelection = selectRouteCandidateFiles(repoFiles);
+  const routeEndpoints = extractRouteEndpoints({
+    repoRoot,
+    files: routeCandidateSelection.files,
+  });
   const currentManifest = current.manifest ?? emptyManifest();
   const currentFeaturesById = new Map(currentManifest.features.map((feature) => [feature.featureId, feature]));
   const genericFeaturesById = new Set(genericIndex.features.map((feature) => feature.featureId));
@@ -192,7 +202,10 @@ export function generateDomainManifestCandidate(input: { repoRoot: string }): Do
     aliasToFeatureId.set(feature.featureId, featureId);
   }
 
-  const inferredFileGroups = inferFileGroups(repoFiles);
+  const inferredFileGroups = inferFileGroups(repoFiles, {
+    frameworkIds: frameworkProfile.frameworks.map((framework) => framework.id),
+    routeFiles: routeEndpoints.map((endpoint) => endpoint.sourcePath),
+  });
   const manifest: DomainIndexManifest = {
     schemaVersion: "domain-index.v0",
     features: [...candidateFeatures.values()].sort(compareByFeatureId),
@@ -212,7 +225,7 @@ export function generateDomainManifestCandidate(input: { repoRoot: string }): Do
     ...(currentHash ? { currentHash } : {}),
     candidateHash: hashManifest(manifest),
     manifest,
-    warnings: uniqueSorted([...current.warnings, ...staleWarnings]),
+    warnings: uniqueSorted([...current.warnings, ...staleWarnings, ...routeCandidateSelection.warnings]),
     blockers,
     sourceSummary: {
       genericFeatureCount: genericIndex.featureCount,
@@ -367,7 +380,10 @@ export function applyDomainManifestCandidate(input: { repoRoot: string; baseHash
   };
 }
 
-function inferFileGroups(repoFiles: string[]): DomainIndexFileGroups {
+function inferFileGroups(
+  repoFiles: string[],
+  signals: { frameworkIds: string[]; routeFiles: string[] },
+): DomainIndexFileGroups {
   const groups = { ...EMPTY_FILE_GROUPS };
   if (repoFiles.some((repoPath) => /^backend\/src\/modules\/[^/]+\/[^/]+Routes\.(?:ts|tsx|js|jsx|mts|mjs|cts|cjs)$/i.test(repoPath))) {
     groups.routes.push("backend/src/modules/*/*Routes.ts");
@@ -378,6 +394,7 @@ function inferFileGroups(repoFiles: string[]): DomainIndexFileGroups {
   if (repoFiles.some((repoPath) => /^src\/modules\/[^/]+\/[^/]+Routes\.(?:ts|tsx|js|jsx|mts|mjs|cts|cjs)$/i.test(repoPath))) {
     groups.routes.push("src/modules/*/*Routes.ts");
   }
+  groups.routes.push(...routeGroupPatternsFromSignals(repoFiles, signals));
   if (repoFiles.some((repoPath) => /^src\/features\/[^/]+\/hooks\/use[^/]+\.(?:ts|tsx|js|jsx)$/i.test(repoPath))) {
     groups.hooks.push("src/features/*/hooks/use*.ts");
   }
@@ -415,6 +432,98 @@ function inferFileGroups(repoFiles: string[]): DomainIndexFileGroups {
     groups.memory.push(".wormhole/memory/*.md");
   }
   return normalizeFileGroups(groups);
+}
+
+function selectRouteCandidateFiles(repoFiles: string[]): { files: string[]; warnings: string[] } {
+  const candidates = repoFiles
+    .filter((repoPath) => /\.(?:ts|tsx|js|jsx|mts|mjs|cts|cjs)$/i.test(repoPath))
+    .filter((repoPath) => !/\.d\.ts$/i.test(repoPath))
+    .sort((left, right) => routeCandidateScore(right) - routeCandidateScore(left) || left.localeCompare(right));
+  const files = candidates.slice(0, ROUTE_CANDIDATE_LIMIT).sort((left, right) => left.localeCompare(right));
+  const warnings =
+    candidates.length > ROUTE_CANDIDATE_LIMIT
+      ? [
+          `ROUTE_CANDIDATE_CAP: scanned ${ROUTE_CANDIDATE_LIMIT}/${candidates.length} JavaScript/TypeScript files for route seed evidence.`,
+        ]
+      : [];
+  return { files, warnings };
+}
+
+function routeCandidateScore(repoPath: string): number {
+  const normalized = repoPath.toLowerCase();
+  let score = 0;
+  if (/(^|\/)(routes?|controllers?|api)(\/|$)/.test(normalized)) score += 8;
+  if (/(route|router|controller)\.(?:ts|tsx|js|jsx|mts|mjs|cts|cjs)$/.test(normalized)) score += 6;
+  if (/(server|app|main|index)\.(?:ts|tsx|js|jsx|mts|mjs|cts|cjs)$/.test(normalized)) score += 4;
+  if (normalized.includes("/src/")) score += 2;
+  return score;
+}
+
+function routeGroupPatternsFromSignals(
+  repoFiles: string[],
+  signals: { frameworkIds: string[]; routeFiles: string[] },
+): string[] {
+  const patterns = new Set<string>();
+  const routeFiles = uniqueSorted(signals.routeFiles);
+  const frameworkIds = new Set(signals.frameworkIds);
+
+  for (const routeFile of routeFiles) {
+    const routeDirectory = routeDirectoryPattern(routeFile);
+    if (routeDirectory) {
+      patterns.add(routeDirectory);
+      continue;
+    }
+    const modulePattern = moduleRoutePattern(routeFile);
+    if (modulePattern) {
+      patterns.add(modulePattern);
+    }
+  }
+
+  if (frameworkIds.has("express") || frameworkIds.has("fastify") || frameworkIds.has("nestjs")) {
+    for (const prefix of ["src", "server/src", "backend/src", "app"]) {
+      if (repoFiles.some((repoPath) => repoPath.startsWith(`${prefix}/routes/`))) {
+        patterns.add(`${prefix}/routes/**/*.ts`);
+      }
+      if (repoFiles.some((repoPath) => repoPath.startsWith(`${prefix}/controllers/`))) {
+        patterns.add(`${prefix}/controllers/**/*.ts`);
+      }
+    }
+  }
+
+  if (routeFiles.length > 0 && patterns.size === 0 && routeFiles.length <= 20) {
+    for (const routeFile of routeFiles) {
+      patterns.add(routeFile);
+    }
+  }
+
+  return [...patterns];
+}
+
+function routeDirectoryPattern(repoPath: string): string | undefined {
+  const segments = repoPath.split("/");
+  const routeIndex = segments.findIndex((segment) => /^(routes?|controllers?|api)$/i.test(segment));
+  if (routeIndex < 0) {
+    return undefined;
+  }
+  const extension = path.extname(repoPath) || ".ts";
+  return `${segments.slice(0, routeIndex + 1).join("/")}/**/*${extension}`;
+}
+
+function moduleRoutePattern(repoPath: string): string | undefined {
+  const basename = path.basename(repoPath);
+  const extension = path.extname(repoPath) || ".ts";
+  if (!/(routes?|router|controller)/i.test(basename)) {
+    return undefined;
+  }
+  const directory = path.posix.dirname(repoPath);
+  const stem = basename.slice(0, -extension.length);
+  if (/routes$/i.test(stem)) {
+    return `${directory}/*Routes${extension}`;
+  }
+  if (/controller$/i.test(stem)) {
+    return `${directory}/*Controller${extension}`;
+  }
+  return `${directory}/${basename}`;
 }
 
 function mergeFileGroups(current: DomainIndexFileGroups, inferred: DomainIndexFileGroups): DomainIndexFileGroups {

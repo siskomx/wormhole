@@ -5,6 +5,7 @@ import { createFeatureIndex, type FeatureSideEffect, type RepoFeature } from "./
 import { importOpenApi } from "./openapi-import.js";
 import { detectProjectContract, type ProjectPackageManager, type ProjectScript } from "./project-contract.js";
 import { buildRepoIndex, type RepoIndexFile } from "./repo-index.js";
+import { extractRouteEndpoints } from "./route-extraction.js";
 import type { SourceConflict } from "./source-authority.js";
 import { analyzeSourceConflicts } from "./source-conflicts.js";
 import { analyzeTestImpactV2 } from "./test-impact-v2.js";
@@ -375,31 +376,24 @@ function scanRouteEndpoints(
 ): DomainApiEndpoint[] {
   const existingKeys = new Set(existing.map((endpoint) => `${endpoint.method} ${endpoint.pathTemplate}`));
   const endpoints: DomainApiEndpoint[] = [];
-  for (const file of files.filter((item) => item.role === "route")) {
-    const content = safeRead(path.join(repoRoot, file.path));
-    for (const match of content.matchAll(/\b(?:app|router|fastify)\.(get|post|put|patch|delete)\s*\(\s*["']([^"']+)["']/gi)) {
-      const method = match[1]?.toUpperCase();
-      const pathTemplate = match[2];
-      if (!method || !pathTemplate) {
-        continue;
-      }
-      const key = `${method} ${pathTemplate}`;
-      if (existingKeys.has(key)) {
-        continue;
-      }
-      existingKeys.add(key);
-      endpoints.push({
-        featureId: featureForPath(file.path, features) ?? featureForEndpoint(pathTemplate, features),
-        method,
-        origin: "http://localhost",
-        pathTemplate,
-        source: "route-scan",
-        queryKeys: [],
-        responseSchemas: [],
-        authRequired: /\b(authenticate|authorization|requirePermission|permission|preHandler|security)\b/i.test(content),
-        sourcePath: file.path,
-      });
+  const routeFiles = files.filter((item) => item.role === "route").map((file) => file.path);
+  for (const route of extractRouteEndpoints({ repoRoot, files: routeFiles })) {
+    const key = `${route.method} ${route.pathTemplate}`;
+    if (existingKeys.has(key)) {
+      continue;
     }
+    existingKeys.add(key);
+    endpoints.push({
+      featureId: featureForPath(route.sourcePath, features) ?? featureForEndpoint(route.pathTemplate, features),
+      method: route.method,
+      origin: "http://localhost",
+      pathTemplate: route.pathTemplate,
+      source: "route-scan",
+      queryKeys: [],
+      responseSchemas: [],
+      authRequired: route.authRequired,
+      sourcePath: route.sourcePath,
+    });
   }
   return endpoints;
 }

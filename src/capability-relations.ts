@@ -165,6 +165,7 @@ export const CAPABILITY_RELATIONS: CapabilityRelation[] = [
       "repo_index_explain",
       "repo_index_path",
       "repo_index_report",
+      "repo_graph_analyze",
       "repo_graph_export",
       "durable_repo_index_query",
     ],
@@ -371,7 +372,7 @@ export const CAPABILITY_RELATIONS: CapabilityRelation[] = [
   },
   {
     capabilityId: "orchestration.graph-artifact-suite",
-    primaryTools: ["repo_graph_export", "python_graph_metrics", "python_graph_communities"],
+    primaryTools: ["repo_graph_analyze", "repo_graph_export", "python_graph_metrics", "python_graph_communities"],
     artifactKinds: ["graphJson", "graphHtml", "graphReport"],
     testFiles: ["tests/graph-artifacts.test.ts", "tests/python-sidecar.test.ts"],
   },
@@ -424,7 +425,7 @@ export const CAPABILITY_RELATIONS: CapabilityRelation[] = [
   },
   {
     capabilityId: "adaptive.graph-first-codebase-query",
-    primaryTools: ["repo_index_query", "repo_index_explain", "durable_repo_index_query"],
+    primaryTools: ["repo_index_query", "repo_index_explain", "repo_graph_analyze", "durable_repo_index_query"],
     supportingTools: ["tool_catalog_query"],
     testFiles: ["tests/repo-index.test.ts", "tests/durable-index-store.test.ts"],
   },

@@ -54,7 +54,7 @@ export type WormholeCapabilityManifest = {
 export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
   return {
     name: "wormhole",
-    version: "0.1.0",
+    version: "0.8.0",
     maxOrchestrationDepth: 4,
     layers: [
       {
@@ -239,7 +239,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "orchestration.repo-index-graph",
         area: "orchestration",
         status: "implemented",
-        description: "Deterministic repo-local index with file, symbol, import, link, reference, provenance, confidence, SQLite-backed durable query, JSON compatibility exports, explain, report, and dependency-path tools.",
+        description: "Deterministic repo-local index with AST-first symbols, parser coverage, file, symbol, import, link, reference, call, provenance, confidence, SQLite-backed durable query, JSON compatibility exports, graph analysis, explain, report, and dependency-path tools.",
       },
       {
         id: "orchestration.project-ground-truth-suite",
