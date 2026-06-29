@@ -238,3 +238,15 @@ describe("resume store", () => {
     }
   });
 });
+
+describe("resume store hasState", () => {
+  it("reports existence per normalized repo root", () => {
+    const store = createResumeStore();
+    expect(store.hasState({ repoRoot: "/repo/a" })).toBe(false);
+    store.record({ repoRoot: "/repo/a", objective: "o", kind: "exact_next_action", summary: "s" });
+    expect(store.hasState({ repoRoot: "/repo/a" })).toBe(true);
+    // normalization: trailing-slash / segment forms resolve to the same root
+    expect(store.hasState({ repoRoot: "/repo/a/" })).toBe(true);
+    expect(store.hasState({ repoRoot: "/repo/b" })).toBe(false);
+  });
+});

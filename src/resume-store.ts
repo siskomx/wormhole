@@ -520,6 +520,21 @@ export function createResumeStore(
       };
     },
 
+    hasState(input: { repoRoot: string }): boolean {
+      const root = normalizeRepoRoot(input.repoRoot);
+      for (const record of records.values()) {
+        if (normalizeRepoRoot(record.repoRoot) === root) {
+          return true;
+        }
+      }
+      for (const checkpoint of checkpoints.values()) {
+        if (normalizeRepoRoot(checkpoint.repoRoot) === root) {
+          return true;
+        }
+      }
+      return false;
+    },
+
     retainedCheckpointIds(input: { repoRoot: string }): string[] {
       return [...checkpoints.values()]
         .filter((checkpoint) => normalizeRepoRoot(checkpoint.repoRoot) === normalizeRepoRoot(input.repoRoot))
