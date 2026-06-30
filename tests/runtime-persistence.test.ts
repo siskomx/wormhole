@@ -6,7 +6,7 @@ import { createInMemoryKernel } from "../src/kernel.js";
 import { createToolHandlers } from "../src/tools.js";
 
 describe("runtime handler persistence", () => {
-  it("restores agent, model, context, optimization, behavior, stats, and policy state", async () => {
+  it("restores agent, model, context, optimization, behavior, stats, tool promotion, and policy state", async () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "wormhole-handler-state-"));
     const runtimeStatePath = path.join(root, "runtime-state.json");
 
@@ -183,6 +183,10 @@ describe("runtime handler persistence", () => {
       expect(restoredPromotion.records[0]?.promotedTools.map((candidate) => candidate.tool.name)).toEqual([
         "patch_apply",
         "verification_run",
+        "record_evidence",
+      ]);
+      expect(restoredPromotion.records[1]?.promotedTools.map((candidate) => candidate.tool.name)).toEqual([
+        "gate_request",
         "record_evidence",
       ]);
       expect(second.orchestrationPolicyGet()?.policyId).toBe("persisted-policy");
