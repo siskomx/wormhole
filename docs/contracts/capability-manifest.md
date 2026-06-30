@@ -79,6 +79,7 @@ Implemented `adaptive` capabilities include:
 - `adaptive.connector-registry`: capability-based connector discovery and selection.
 - `adaptive.graph-first-codebase-query`: query-first codebase discovery workflow that asks the repo graph before broad grep or raw file-reading passes.
 - `adaptive.agent-facing-routing`: curated project snapshots, next-tool recommendations, mission routes, and prepared context packs that keep agents off the full tool surface unless needed.
+- `adaptive.tool-surface-compression`: declarative task profiles, registry search, advisory tool promotion, and prepared-context tool-set compression over the broad MCP surface.
 - `adaptive.model-profile-learning`: native model-profile registration, deterministic selection, outcome recording, and replayable route trace export.
 - `adaptive.required-python-runtime`: required Python runtime for deterministic graph metrics, graph communities, media extraction, model-profile trace summaries, and offline policy jobs, bounded by TypeScript-owned MCP schemas, startup probes, timeouts, and evidence hashes.
 - `adaptive.deterministic-conductor`: deterministic planner, worker, and verifier scaffolds with replayable conductor traces.

@@ -163,6 +163,11 @@ describe("Claude Desktop extension metadata", () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain("project_intelligence_snapshot");
     expect(manifest.tools.map((tool) => tool.name)).toContain("tool_layer_map");
     expect(manifest.tools.map((tool) => tool.name)).toContain("tool_catalog_query");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("tool_profile_list");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("tool_profile_get");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("tool_search");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("tool_promote");
+    expect(manifest.tools.map((tool) => tool.name)).toContain("tool_promotion_status");
     expect(manifest.tools.map((tool) => tool.name)).toContain("next_best_tool");
     expect(manifest.tools.map((tool) => tool.name)).toContain("mission_route");
     expect(manifest.tools.map((tool) => tool.name)).toContain("agent_context_prepare");
@@ -171,7 +176,7 @@ describe("Claude Desktop extension metadata", () => {
       source_of_truth: "runtime-tool-registry",
       full_runtime_tool_surface: true,
       manifest_tools_are_curated: true,
-      discovery_tools: ["tool_layer_map", "tool_catalog_query"],
+      discovery_tools: ["tool_layer_map", "tool_catalog_query", "tool_search"],
     });
     expect(manifest.tools.map((tool) => tool.name)).toContain("durable_repo_index_refresh");
     expect(manifest.tools.map((tool) => tool.name)).toContain("durable_index_manifest_refresh");
@@ -247,6 +252,12 @@ describe("Claude Desktop extension metadata", () => {
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "tool_catalog_query",
+    );
+    expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
+      "tool_search",
+    );
+    expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
+      "tool_promote",
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "state_maintenance_run",

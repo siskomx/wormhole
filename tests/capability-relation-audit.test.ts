@@ -101,6 +101,13 @@ describe("capability relation audit", () => {
     expect(CAPABILITY_RELATIONS).toContainEqual(
       expect.objectContaining({
         capabilityId: "adaptive.agent-facing-routing",
+        primaryTools: expect.arrayContaining([
+          "tool_profile_list",
+          "tool_profile_get",
+          "tool_search",
+          "tool_promote",
+          "tool_promotion_status",
+        ]),
         supportingTools: expect.arrayContaining([
           "ctx_pack_refresh",
           "durable_repo_index_query",
@@ -108,7 +115,12 @@ describe("capability relation audit", () => {
           "context_pack_generate",
           "runtime_behavior_audit",
         ]),
-        stateOwners: expect.arrayContaining(["context-store", "durable-index-store", "workflow-files"]),
+        stateOwners: expect.arrayContaining([
+          "context-store",
+          "durable-index-store",
+          "workflow-files",
+          "tool-promotion-state",
+        ]),
         artifactKinds: expect.arrayContaining(["context_pack", "workflow_state", "workflow_resume", "workflow_latest"]),
         freshnessChecks: expect.arrayContaining(["durable-index-status", "workflow-artifact-freshness"]),
       }),

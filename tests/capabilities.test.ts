@@ -142,6 +142,7 @@ describe("capability manifest", () => {
         "adaptive.connector-registry",
         "adaptive.graph-first-codebase-query",
         "adaptive.agent-facing-routing",
+        "adaptive.tool-surface-compression",
         "adaptive.model-profile-learning",
         "adaptive.required-python-runtime",
         "adaptive.deterministic-conductor",

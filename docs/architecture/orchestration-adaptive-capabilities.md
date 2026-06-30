@@ -208,6 +208,10 @@ The tools are:
 
 The routing layer is advisory. It does not bypass evidence recording, verification, action policy, or gate requirements; it narrows the default path so agents start from the most useful Wormhole tools before falling back to lower-level graph, diagnostic, discovery, or adapter tools.
 
+### Tool Surface Compression
+
+Wormhole supports declarative capability profiles and advisory tool promotion for large MCP tool surfaces. Profiles define allowed tools, bootstrap tools, evidence expectations, verification gates, and recovery tools. `tool_search` ranks registry entries by query, filters, and profile fit; `tool_promote` records a mission/session-scoped promoted tool set in Wormhole runtime state. This is advisory in the first slice: registered MCP tools remain visible for compatibility, and out-of-profile use is recovered through explicit override reasons plus `tool_admission_review`.
+
 ## External Agent Adapters
 
 External AI agents and model providers are registered as bounded Wormhole workers through `agent_register`.

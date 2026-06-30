@@ -417,6 +417,12 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         description: "Curated agent-facing routing tools that produce project-intelligence snapshots, next-tool recommendations, mission routes, and prepared context packs.",
       },
       {
+        id: "adaptive.tool-surface-compression",
+        area: "adaptive",
+        status: "implemented",
+        description: "Declarative task profiles, registry search, advisory tool promotion, and prepared-context tool-set compression over the broad MCP surface.",
+      },
+      {
         id: "adaptive.model-pool",
         area: "adaptive",
         status: "implemented",
