@@ -254,10 +254,19 @@ import {
   reviewToolAdmission as reviewRegistryToolAdmission,
   toolExposureProfile as createRegistryToolExposureProfile,
   toolLayerMap as createRegistryToolLayerMap,
+  TOOL_REGISTRY,
   type ToolAdmissionReviewInput,
   type ToolCatalogQueryInput,
   type ToolExposureProfileInput,
 } from "./tool-registry.js";
+import { getToolProfile, listToolProfiles, type ToolProfileId } from "./tool-profiles.js";
+import {
+  createToolPromotionRecord,
+  reviewToolPromotion,
+  type ToolPromotionRecord,
+  type ToolPromotionRecordInput,
+  type ToolPromotionReviewInput,
+} from "./tool-promotion.js";
 import {
   analyzeAgentDrift,
   createAgentRemit,
@@ -512,6 +521,7 @@ type RuntimeToolState = {
   repoActivity?: Partial<RepoActivitySnapshot>;
   patchTransactions?: Partial<PatchTransactionSnapshot>;
   stateMaintenance?: Partial<StateMaintenanceSnapshot>;
+  toolPromotion?: Partial<{ records: ToolPromotionRecord[] }>;
 };
 
 function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): string {
@@ -655,6 +665,27 @@ export function createToolHandlers(
   function saveStateMaintenanceRun(run: StateMaintenanceRunRecord): void {
     stateMaintenanceRuns.set(run.runId, cloneStateMaintenanceRun(run));
     persistStateMaintenance();
+  }
+  const toolPromotionRecords = new Map<string, ToolPromotionRecord>(
+    (runtimeState.toolPromotion?.records ?? []).map((record) => [record.promotionId, record]),
+  );
+  function cloneToolPromotionRecord(record: ToolPromotionRecord): ToolPromotionRecord {
+    return JSON.parse(JSON.stringify(record)) as ToolPromotionRecord;
+  }
+  function persistToolPromotions(): void {
+    persistRuntimeState("toolPromotion", {
+      records: [...toolPromotionRecords.values()].map((record) => cloneToolPromotionRecord(record)),
+    });
+  }
+  function saveToolPromotionRecord(record: ToolPromotionRecord): void {
+    toolPromotionRecords.set(record.promotionId, cloneToolPromotionRecord(record));
+    persistToolPromotions();
+  }
+  function nextToolPromotionSequence(input: { missionId?: string; sessionId?: string }): number {
+    const matchingRecords = [...toolPromotionRecords.values()].filter(
+      (record) => record.scope.missionId === input.missionId && record.scope.sessionId === input.sessionId,
+    );
+    return matchingRecords.length + 1;
   }
   const lspSessionManager = createLspSessionManager();
   const shellHookPlans = new Map<string, {
@@ -2496,6 +2527,42 @@ export function createToolHandlers(
 
     toolAdmissionReview(input: ToolAdmissionReviewInput) {
       return reviewRegistryToolAdmission(input);
+    },
+
+    toolProfileList() {
+      const profiles = listToolProfiles();
+      return { profiles, count: profiles.length };
+    },
+
+    toolProfileGet(input: { profileId: ToolProfileId }) {
+      const profile = getToolProfile(input.profileId);
+      if (!profile) {
+        throw new Error(`Unknown tool profile: ${input.profileId}`);
+      }
+      return profile;
+    },
+
+    toolSearch(input: ToolPromotionReviewInput = {}) {
+      return reviewToolPromotion({ ...input, registry: TOOL_REGISTRY });
+    },
+
+    toolPromote(input: ToolPromotionRecordInput) {
+      const record = createToolPromotionRecord({
+        ...input,
+        registry: TOOL_REGISTRY,
+        sequence: nextToolPromotionSequence(input),
+      });
+      saveToolPromotionRecord(record);
+      return record;
+    },
+
+    toolPromotionStatus(input: { promotionId?: string; missionId?: string; sessionId?: string } = {}) {
+      const records = [...toolPromotionRecords.values()]
+        .filter((record) => input.promotionId === undefined || record.promotionId === input.promotionId)
+        .filter((record) => input.missionId === undefined || record.scope.missionId === input.missionId)
+        .filter((record) => input.sessionId === undefined || record.scope.sessionId === input.sessionId)
+        .map((record) => cloneToolPromotionRecord(record));
+      return { records, count: records.length };
     },
 
     workflowStartFeature(input: WorkflowInput) {

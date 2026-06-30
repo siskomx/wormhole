@@ -9,6 +9,7 @@ import {
   TOOL_PLANES,
   TOOL_RISKS,
 } from "./tool-registry.js";
+import { TOOL_PROFILE_IDS } from "./tool-profiles.js";
 import { PROJECT_LANES } from "./project-lanes.js";
 
 type ToolResult = {
@@ -319,6 +320,7 @@ export function createWormholeMcpServer(
   const toolPackSchema = z.enum(TOOL_PACKS);
   const toolRiskSchema = z.enum(TOOL_RISKS);
   const toolExposureModeSchema = z.enum(TOOL_EXPOSURE_MODES);
+  const toolProfileIdSchema = z.enum(TOOL_PROFILE_IDS);
   const projectLaneSchema = z.enum(PROJECT_LANES);
   const repoIndexPresetSchema = z.enum(["default", "large_repo"]);
   const domainCoverageGapKindSchema = z.enum([
@@ -357,6 +359,20 @@ export function createWormholeMcpServer(
     changedFiles: z.array(z.string()).optional(),
     diffText: z.string().optional(),
     limit: z.number().optional(),
+  };
+  const toolPromotionInputSchema = {
+    query: z.string().optional(),
+    objective: z.string().optional(),
+    profileId: toolProfileIdSchema.optional(),
+    plane: toolPlaneSchema.optional(),
+    phase: toolPhaseSchema.optional(),
+    pack: toolPackSchema.optional(),
+    risk: toolRiskSchema.optional(),
+    toolNames: z.array(z.string()).optional(),
+    limit: z.number().int().min(1).max(200).optional(),
+    maxPromotedTools: z.number().int().min(1).max(200).optional(),
+    allowOutOfProfile: z.boolean().optional(),
+    overrideReason: z.string().optional(),
   };
 
   server.registerTool(
@@ -2325,6 +2341,61 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.toolAdmissionReview(input)),
+  );
+
+  server.registerTool(
+    "tool_profile_list",
+    {
+      description: "List Wormhole tool capability profiles for guided tool selection.",
+      inputSchema: {},
+    },
+    async () => jsonResult(tools.toolProfileList()),
+  );
+
+  server.registerTool(
+    "tool_profile_get",
+    {
+      description: "Return one Wormhole tool capability profile by profile id.",
+      inputSchema: {
+        profileId: toolProfileIdSchema,
+      },
+    },
+    async (input) => jsonResult(tools.toolProfileGet(input)),
+  );
+
+  server.registerTool(
+    "tool_search",
+    {
+      description: "Search registry metadata and profile rules for tools that fit the current objective.",
+      inputSchema: toolPromotionInputSchema,
+    },
+    async (input) => jsonResult(tools.toolSearch(input)),
+  );
+
+  server.registerTool(
+    "tool_promote",
+    {
+      description: "Record an advisory tool promotion decision for a mission or session.",
+      inputSchema: {
+        ...toolPromotionInputSchema,
+        missionId: z.string().optional(),
+        sessionId: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.toolPromote(input)),
+  );
+
+  server.registerTool(
+    "tool_promotion_status",
+    {
+      description: "List stored advisory tool promotion records by promotion, mission, or session.",
+      inputSchema: {
+        promotionId: z.string().optional(),
+        missionId: z.string().optional(),
+        sessionId: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.toolPromotionStatus(input)),
   );
 
   server.registerTool(

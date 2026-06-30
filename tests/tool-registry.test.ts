@@ -53,6 +53,19 @@ describe("tool registry conformance", () => {
     expect(TOOL_REGISTRY.map((tool) => tool.name)).toEqual(registeredToolNamesInRegistrationOrder());
   });
 
+  it("registers promotion discovery tools immediately after admission review", () => {
+    const registryToolNames = TOOL_REGISTRY.map((tool) => tool.name);
+    const admissionReviewIndex = registryToolNames.indexOf("tool_admission_review");
+
+    expect(registryToolNames.slice(admissionReviewIndex + 1, admissionReviewIndex + 6)).toEqual([
+      "tool_profile_list",
+      "tool_profile_get",
+      "tool_search",
+      "tool_promote",
+      "tool_promotion_status",
+    ]);
+  });
+
   it("serves a layered map and structured catalog queries", () => {
     const layerMap = toolLayerMap();
     const projectOrient = queryToolCatalog({ plane: "project", phase: "orient" });
@@ -70,6 +83,10 @@ describe("tool registry conformance", () => {
         "tool_layer_map",
         "tool_catalog_query",
         "workflow_start_feature",
+        "tool_profile_list",
+        "tool_search",
+        "tool_promote",
+        "tool_promotion_status",
         "workflow_fix_bug",
         "workflow_review_pr",
         "workflow_onboard_repo",
@@ -107,6 +124,11 @@ describe("tool registry conformance", () => {
         "mission_start",
         "tool_layer_map",
         "tool_catalog_query",
+        "tool_profile_list",
+        "tool_profile_get",
+        "tool_search",
+        "tool_promote",
+        "tool_promotion_status",
         "mission_route",
         "agent_context_prepare",
         "workflow_start_feature",
@@ -124,6 +146,95 @@ describe("tool registry conformance", () => {
     );
     expect(layered.visibleTools).not.toContain("patch_apply");
     expect(layered.hiddenToolCount).toBeGreaterThan(0);
+  });
+
+  it("advertises tool profile and promotion metadata", () => {
+    const catalog = queryToolCatalog({
+      toolNames: [
+        "tool_profile_list",
+        "tool_profile_get",
+        "tool_search",
+        "tool_promote",
+        "tool_promotion_status",
+      ],
+    });
+
+    expect(catalog.tools).toEqual([
+      expect.objectContaining({
+        name: "tool_profile_list",
+        plane: "policy",
+        phase: "orient",
+        pack: "core",
+        risk: "read",
+        inputs: ["none"],
+      }),
+      expect.objectContaining({
+        name: "tool_profile_get",
+        plane: "policy",
+        phase: "orient",
+        pack: "core",
+        risk: "read",
+        inputs: ["profileId"],
+      }),
+      expect.objectContaining({
+        name: "tool_search",
+        plane: "policy",
+        phase: "gather",
+        pack: "core",
+        risk: "read",
+        inputs: [
+          "query",
+          "objective",
+          "profileId",
+          "plane",
+          "phase",
+          "pack",
+          "risk",
+          "toolNames",
+          "limit",
+        ],
+      }),
+      expect.objectContaining({
+        name: "tool_promote",
+        plane: "policy",
+        phase: "plan",
+        pack: "core",
+        risk: "write",
+        inputs: [
+          "missionId",
+          "sessionId",
+          "profileId",
+          "objective",
+          "query",
+          "toolNames",
+          "allowOutOfProfile",
+        ],
+      }),
+      expect.objectContaining({
+        name: "tool_promotion_status",
+        plane: "policy",
+        phase: "maintain",
+        pack: "core",
+        risk: "read",
+        inputs: ["promotionId", "missionId", "sessionId"],
+      }),
+    ]);
+  });
+
+  it("exempts safe advisory tool promotion writes from admission preflight", () => {
+    const admission = reviewToolAdmission({ toolNames: ["tool_promote"] });
+
+    expect(admission.approval).toBe("not_required");
+    expect(admission.decisions).toEqual([
+      expect.objectContaining({
+        toolName: "tool_promote",
+        known: true,
+        risk: "write",
+        approval: "not_required",
+        requiredPreflightTools: [],
+        reasons: ["tool_promote is a safe advisory promotion write and can be called directly."],
+      }),
+    ]);
   });
 
   it("does not classify mutating maintenance and patch tools as read-only", () => {

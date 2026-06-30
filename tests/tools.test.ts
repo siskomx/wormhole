@@ -33,6 +33,62 @@ describe("Wormhole MCP tool handlers", () => {
     expect(status.evidenceCount).toBe(0);
   });
 
+  it("exposes tool profile search, promotion, and status handlers", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-promotion-handlers-"));
+    try {
+      const runtimeStatePath = path.join(repoRoot, ".wormhole", "runtime-state.json");
+      const tools = createToolHandlers(createInMemoryKernel(), { runtimeStatePath });
+
+      const profileList = tools.toolProfileList();
+      const profile = tools.toolProfileGet({ profileId: "feature-implementation" });
+      const search = tools.toolSearch({
+        profileId: "feature-implementation",
+        toolNames: ["patch_apply", "verification_run"],
+      });
+      const firstPromotion = tools.toolPromote({
+        missionId: "M1",
+        sessionId: "S1",
+        profileId: "feature-implementation",
+        objective: "Apply a verified patch",
+        toolNames: ["patch_apply"],
+      });
+      const secondPromotion = tools.toolPromote({
+        missionId: "M1",
+        sessionId: "S1",
+        profileId: "feature-implementation",
+        objective: "Run verification",
+        toolNames: ["verification_run"],
+      });
+      const status = tools.toolPromotionStatus({ missionId: "M1", sessionId: "S1" });
+      const reloadedTools = createToolHandlers(createInMemoryKernel(), { runtimeStatePath });
+      const reloadedStatus = reloadedTools.toolPromotionStatus({ missionId: "M1", sessionId: "S1" });
+
+      expect(profileList.count).toBe(profileList.profiles.length);
+      expect(profileList.profiles.map((candidate) => candidate.profileId)).toContain("feature-implementation");
+      expect(profile.profileId).toBe("feature-implementation");
+      expect(() => tools.toolProfileGet({ profileId: "unknown-profile" as never })).toThrow(
+        "Unknown tool profile: unknown-profile",
+      );
+      expect(search.promotedTools.map((candidate) => candidate.tool.name)).toEqual([
+        "patch_apply",
+        "verification_run",
+      ]);
+      expect(firstPromotion.promotionId).toBe("tool-promotion-M1-S1-1");
+      expect(secondPromotion.promotionId).toBe("tool-promotion-M1-S1-2");
+      expect(status.count).toBe(2);
+      expect(status.records.map((record) => record.promotionId)).toEqual([
+        "tool-promotion-M1-S1-1",
+        "tool-promotion-M1-S1-2",
+      ]);
+      expect(tools.toolPromotionStatus({ promotionId: firstPromotion.promotionId }).records).toEqual([
+        expect.objectContaining({ promotionId: "tool-promotion-M1-S1-1" }),
+      ]);
+      expect(reloadedStatus.count).toBe(2);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("runs repo reachability review through generic tool handlers", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-reachability-tools-"));
     try {

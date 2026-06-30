@@ -273,6 +273,11 @@ const TOOL_NAMES = [
   "tool_exposure_profile",
   "tool_catalog_query",
   "tool_admission_review",
+  "tool_profile_list",
+  "tool_profile_get",
+  "tool_search",
+  "tool_promote",
+  "tool_promotion_status",
   "workflow_start_feature",
   "workflow_fix_bug",
   "workflow_review_pr",
@@ -376,6 +381,11 @@ const ENTRY_TOOLS = [
   "tool_exposure_profile",
   "tool_catalog_query",
   "tool_admission_review",
+  "tool_profile_list",
+  "tool_profile_get",
+  "tool_search",
+  "tool_promote",
+  "tool_promotion_status",
   "workflow_start_feature",
   "workflow_fix_bug",
   "workflow_review_pr",
@@ -432,6 +442,46 @@ const TOOL_OVERRIDES: Record<string, Partial<ToolRegistryEntry>> = {
     risk: "policy",
     summary: "Review selected tool names for advisory approval and preflight requirements before write or execute work.",
     inputs: ["toolNames"],
+  },
+  tool_profile_list: {
+    plane: "policy",
+    phase: "orient",
+    pack: "core",
+    risk: "read",
+    summary: "List available Wormhole tool capability profiles for guided tool selection.",
+    inputs: ["none"],
+  },
+  tool_profile_get: {
+    plane: "policy",
+    phase: "orient",
+    pack: "core",
+    risk: "read",
+    summary: "Return one Wormhole tool capability profile by profile id.",
+    inputs: ["profileId"],
+  },
+  tool_search: {
+    plane: "policy",
+    phase: "gather",
+    pack: "core",
+    risk: "read",
+    summary: "Search registry metadata and profile rules for tools that fit the current objective.",
+    inputs: ["query", "objective", "profileId", "plane", "phase", "pack", "risk", "toolNames", "limit"],
+  },
+  tool_promote: {
+    plane: "policy",
+    phase: "plan",
+    pack: "core",
+    risk: "write",
+    summary: "Record an advisory tool promotion decision for a mission or session.",
+    inputs: ["missionId", "sessionId", "profileId", "objective", "query", "toolNames", "allowOutOfProfile"],
+  },
+  tool_promotion_status: {
+    plane: "policy",
+    phase: "maintain",
+    pack: "core",
+    risk: "read",
+    summary: "List stored advisory tool promotion records by promotion, mission, or session.",
+    inputs: ["promotionId", "missionId", "sessionId"],
   },
   workflow_start_feature: {
     plane: "mission",
@@ -1188,6 +1238,11 @@ const LAYERED_VISIBLE_TOOLS = [
   "tool_exposure_profile",
   "tool_catalog_query",
   "tool_admission_review",
+  "tool_profile_list",
+  "tool_profile_get",
+  "tool_search",
+  "tool_promote",
+  "tool_promotion_status",
   "workflow_start_feature",
   "workflow_fix_bug",
   "workflow_review_pr",
@@ -1272,6 +1327,7 @@ const PREFLIGHT_EXEMPT_TOOLS = new Set([
   "patch_status",
   "shell_hook_plan",
   "shell_hook_verify",
+  "tool_promote",
   "tool_factory_validate",
 ]);
 
@@ -1295,6 +1351,17 @@ export function reviewToolAdmission(
         approval: "required",
         requiredPreflightTools: ["action_policy_review"],
         reasons: ["Tool is not in the Wormhole registry; require explicit policy review before use."],
+      };
+    }
+
+    if (tool.name === "tool_promote") {
+      return {
+        toolName,
+        known: true,
+        risk: tool.risk,
+        approval: "not_required",
+        requiredPreflightTools: [],
+        reasons: ["tool_promote is a safe advisory promotion write and can be called directly."],
       };
     }
 
