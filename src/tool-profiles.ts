@@ -11,14 +11,14 @@ export const TOOL_PROFILE_IDS = [
 export type ToolProfileId = (typeof TOOL_PROFILE_IDS)[number];
 
 export type ToolCapabilityProfile = {
-  profileId: ToolProfileId;
-  label: string;
-  description: string;
-  bootstrapTools: string[];
-  allowedTools: string[];
-  requiredEvidence: string[];
-  verificationGates: string[];
-  recoveryTools: string[];
+  readonly profileId: ToolProfileId;
+  readonly label: string;
+  readonly description: string;
+  readonly bootstrapTools: readonly string[];
+  readonly allowedTools: readonly string[];
+  readonly requiredEvidence: readonly string[];
+  readonly verificationGates: readonly string[];
+  readonly recoveryTools: readonly string[];
 };
 
 export type ToolProfileValidation = {
@@ -34,7 +34,7 @@ const PLANNED_TOOL_PROFILE_TOOLS = new Set([
   "tool_promotion_status",
 ]);
 
-export const TOOL_CAPABILITY_PROFILES: ToolCapabilityProfile[] = [
+export const TOOL_CAPABILITY_PROFILES = freezeProfiles([
   {
     profileId: "feature-implementation",
     label: "Feature Implementation",
@@ -153,6 +153,7 @@ export const TOOL_CAPABILITY_PROFILES: ToolCapabilityProfile[] = [
       "source_conflicts_analyze",
       "gate_request",
       "git_lifecycle_status",
+      "resume_load",
     ],
     requiredEvidence: ["changed_files", "diff_findings", "risk_assessment", "gate_decision"],
     verificationGates: ["gate_request"],
@@ -256,7 +257,7 @@ export const TOOL_CAPABILITY_PROFILES: ToolCapabilityProfile[] = [
     verificationGates: ["gate_request"],
     recoveryTools: ["durable_index_status", "domain_index_status", "mission_delta_replan", "resume_load"],
   },
-];
+]);
 
 export function listToolProfiles(): ToolCapabilityProfile[] {
   return TOOL_CAPABILITY_PROFILES.map((profile) => cloneProfile(profile));
@@ -268,8 +269,8 @@ export function getToolProfile(profileId: ToolProfileId): ToolCapabilityProfile 
 }
 
 export function validateToolProfiles(
-  profiles: ToolCapabilityProfile[],
-  registry: ToolRegistryEntry[],
+  profiles: readonly ToolCapabilityProfile[],
+  registry: readonly ToolRegistryEntry[],
 ): ToolProfileValidation {
   const errors: string[] = [];
   const registryTools = new Set(registry.map((tool) => tool.name));
@@ -287,6 +288,7 @@ export function validateToolProfiles(
     validateToolList(profile, "recoveryTools", registryTools, errors);
     validateIncluded(profile, "bootstrapTools", "allowedTools", errors);
     validateIncluded(profile, "verificationGates", "allowedTools", errors);
+    validateIncluded(profile, "recoveryTools", "allowedTools", errors);
   }
 
   return { valid: errors.length === 0, errors };
@@ -303,6 +305,18 @@ function cloneProfile(profile: ToolCapabilityProfile): ToolCapabilityProfile {
     verificationGates: [...profile.verificationGates],
     recoveryTools: [...profile.recoveryTools],
   };
+}
+
+function freezeProfiles(profiles: ToolCapabilityProfile[]): readonly ToolCapabilityProfile[] {
+  for (const profile of profiles) {
+    Object.freeze(profile.bootstrapTools);
+    Object.freeze(profile.allowedTools);
+    Object.freeze(profile.requiredEvidence);
+    Object.freeze(profile.verificationGates);
+    Object.freeze(profile.recoveryTools);
+    Object.freeze(profile);
+  }
+  return Object.freeze(profiles);
 }
 
 function validateToolList(
@@ -326,7 +340,7 @@ function validateToolList(
 
 function validateIncluded(
   profile: ToolCapabilityProfile,
-  subsetField: "bootstrapTools" | "verificationGates",
+  subsetField: "bootstrapTools" | "verificationGates" | "recoveryTools",
   supersetField: "allowedTools",
   errors: string[],
 ): void {
