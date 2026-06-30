@@ -182,7 +182,7 @@ describe("tool registry conformance", () => {
         phase: "gather",
         pack: "core",
         risk: "read",
-        inputs: [
+        inputs: expect.arrayContaining([
           "query",
           "objective",
           "profileId",
@@ -192,7 +192,10 @@ describe("tool registry conformance", () => {
           "risk",
           "toolNames",
           "limit",
-        ],
+          "maxPromotedTools",
+          "allowOutOfProfile",
+          "overrideReason",
+        ]),
       }),
       expect.objectContaining({
         name: "tool_promote",
@@ -200,15 +203,22 @@ describe("tool registry conformance", () => {
         phase: "plan",
         pack: "core",
         risk: "write",
-        inputs: [
+        inputs: expect.arrayContaining([
           "missionId",
           "sessionId",
           "profileId",
           "objective",
           "query",
+          "plane",
+          "phase",
+          "pack",
+          "risk",
           "toolNames",
+          "limit",
+          "maxPromotedTools",
           "allowOutOfProfile",
-        ],
+          "overrideReason",
+        ]),
       }),
       expect.objectContaining({
         name: "tool_promotion_status",

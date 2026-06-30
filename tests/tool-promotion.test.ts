@@ -180,6 +180,23 @@ describe("tool promotion search", () => {
     ]);
   });
 
+  it("limits promoted tools with maxPromotedTools even when candidate limit allows more", () => {
+    const result = reviewToolPromotion({
+      profileId: "feature-implementation",
+      toolNames: ["record_evidence", "patch_apply", "verification_run"],
+      limit: 3,
+      maxPromotedTools: 1,
+    });
+
+    expect(result.candidates.map((candidate) => candidate.tool.name)).toEqual([
+      "record_evidence",
+      "patch_apply",
+      "verification_run",
+    ]);
+    expect(result.promotedTools.map((candidate) => candidate.tool.name)).toEqual(["record_evidence"]);
+    expect(result.admission.decisions.map((decision) => decision.toolName)).toEqual(["record_evidence"]);
+  });
+
   it("includes admission guidance for promoted write and execute tools", () => {
     const result = reviewToolPromotion({
       profileId: "feature-implementation",

@@ -2547,11 +2547,20 @@ export function createToolHandlers(
     },
 
     toolPromote(input: ToolPromotionRecordInput) {
-      const record = createToolPromotionRecord({
+      let sequence = nextToolPromotionSequence(input);
+      let record = createToolPromotionRecord({
         ...input,
         registry: TOOL_REGISTRY,
-        sequence: nextToolPromotionSequence(input),
+        sequence,
       });
+      while (toolPromotionRecords.has(record.promotionId)) {
+        sequence += 1;
+        record = createToolPromotionRecord({
+          ...input,
+          registry: TOOL_REGISTRY,
+          sequence,
+        });
+      }
       saveToolPromotionRecord(record);
       return record;
     },

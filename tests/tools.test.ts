@@ -89,6 +89,33 @@ describe("Wormhole MCP tool handlers", () => {
     }
   });
 
+  it("keeps promotions whose raw scopes normalize to the same id prefix", () => {
+    const tools = createToolHandlers(createInMemoryKernel());
+
+    const firstPromotion = tools.toolPromote({
+      missionId: "Mission/A",
+      sessionId: "S1",
+      profileId: "feature-implementation",
+      toolNames: ["patch_apply"],
+    });
+    const secondPromotion = tools.toolPromote({
+      missionId: "Mission:A",
+      sessionId: "S1",
+      profileId: "feature-implementation",
+      toolNames: ["verification_run"],
+    });
+    const status = tools.toolPromotionStatus({});
+
+    expect(firstPromotion.promotionId).toBe("tool-promotion-Mission-A-S1-1");
+    expect(secondPromotion.promotionId).toBe("tool-promotion-Mission-A-S1-2");
+    expect(status.count).toBe(2);
+    expect(status.records.map((record) => record.promotionId)).toEqual([
+      "tool-promotion-Mission-A-S1-1",
+      "tool-promotion-Mission-A-S1-2",
+    ]);
+    expect(status.records.map((record) => record.scope.missionId)).toEqual(["Mission/A", "Mission:A"]);
+  });
+
   it("runs repo reachability review through generic tool handlers", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-reachability-tools-"));
     try {

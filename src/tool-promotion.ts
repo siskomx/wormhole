@@ -23,6 +23,7 @@ export type ToolSearchForPromotionInput = ToolPromotionFilters & {
   objective?: string;
   toolNames?: string[];
   limit?: number;
+  maxPromotedTools?: number;
   allowOutOfProfile?: boolean;
   overrideReason?: string;
   registry?: ToolRegistryEntry[];
@@ -192,6 +193,9 @@ export function searchToolsForPromotion(
       );
   const limitedCandidates = applyLimit(orderedCandidates, input.limit);
   const candidates = limitedCandidates.map(toPromotionCandidate);
+  const promotedTools = applyLimit(limitedCandidates, input.maxPromotedTools ?? input.limit).map(
+    toPromotionCandidate,
+  );
 
   return {
     ...(profile ? { profile: cloneProfile(profile) } : {}),
@@ -200,7 +204,7 @@ export function searchToolsForPromotion(
     ...(input.query !== undefined ? { query: input.query } : {}),
     filters,
     candidates,
-    promotedTools: candidates.map(cloneCandidate),
+    promotedTools: promotedTools.map(cloneCandidate),
     hiddenTools,
     unknownTools,
     warnings,
