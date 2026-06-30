@@ -10,6 +10,7 @@ import {
 } from "../src/agent-routing.js";
 import { auditRuntimeBehavior, type RuntimeBehaviorAuditInput } from "../src/runtime-behavior-audit.js";
 import { TOOL_REGISTRY } from "../src/tool-registry.js";
+import { getToolProfile } from "../src/tool-profiles.js";
 import { createInMemoryKernel } from "../src/kernel.js";
 import { createToolHandlers } from "../src/tools.js";
 
@@ -210,8 +211,18 @@ describe("agent-facing routing tools", () => {
         query: "load user API tests",
         changedFiles: ["src/services/user-service.ts"],
         maxChars: 3_000,
+        toolProfileId: "feature-implementation",
       });
 
+      expect(prepared.toolProfile?.profileId).toBe("feature-implementation");
+      expect(prepared.toolPromotion).toBeDefined();
+      const promotedToolNames = prepared.toolPromotion?.promotedTools.map((candidate) => candidate.tool.name) ?? [];
+      expect(promotedToolNames).toEqual(
+        expect.arrayContaining(["agent_context_prepare", "verification_run", "gate_request"]),
+      );
+      expect(prepared.toolPromotion?.admission.decisions.map((decision) => decision.toolName)).toEqual(
+        expect.arrayContaining(promotedToolNames),
+      );
       expect(prepared.contextPack.rendered).toContain("Context Pack");
       expect(prepared.indexHealth.source).toBe("repo_index");
       expect(prepared.snapshot.indexHealth.source).toBe("repo_index");
@@ -288,6 +299,10 @@ describe("agent-facing routing tools", () => {
       expect(prepared.stateMaintenance.coordinator.toolName).toBe("state_maintenance_run");
       expect(prepared.stateMaintenance.context.ownerTools).toContain("ctx_pack_refresh");
       expect(prepared.agentInstructions).toContain("Start with tool_layer_map before browsing the full MCP surface.");
+      expect(prepared.agentInstructions).toContain(
+        "Use tool_search and tool_promote to keep the active tool set small before selecting lower-level tools.",
+      );
+      expect(prepared.agentInstructions).toContain("Selected tool profile: feature-implementation.");
       expect(prepared.agentInstructions).toContain("Continue into implementation and verification for coding tasks.");
       expect(prepared.agentInstructions).toContain("Run gate_request after verification_run");
       expect(prepared.agentInstructions).toContain("Call emit_plan only when the user explicitly asks for a plan");
@@ -415,6 +430,19 @@ describe("agent-facing routing tools", () => {
           maxChars: 2_000,
         }).contextPack.rendered,
       ).toContain("Context Pack");
+      const profiledPrepared = tools.agentContextPrepare({
+        repoRoot,
+        objective: "Change user loading behavior",
+        query: "load user",
+        changedFiles: ["src/services/user-service.ts"],
+        maxChars: 2_000,
+        toolProfileId: "feature-implementation",
+      });
+      expect(profiledPrepared.toolProfile?.profileId).toBe("feature-implementation");
+      expect(profiledPrepared.toolPromotion?.recoveryTools).toEqual(
+        getToolProfile("feature-implementation")?.recoveryTools,
+      );
+      expect(profiledPrepared.toolPromotion?.recoveryTools).toContain("patch_status");
       expect(tools.toolLayerMap().entryTools).toContain("tool_catalog_query");
       expect(tools.toolCatalogQuery({ plane: "project", phase: "orient" }).tools.map((tool) => tool.name)).toEqual(
         expect.arrayContaining(["architecture_map", "entrypoint_flow_discover"]),

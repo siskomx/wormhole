@@ -2492,6 +2492,7 @@ export function createWormholeMcpServer(
         diffText: z.string().optional(),
         completedTools: z.array(z.string()).optional(),
         maxChars: z.number().optional(),
+        toolProfileId: toolProfileIdSchema.optional(),
       },
     },
     async (input) => jsonResult(tools.agentContextPrepare(input)),

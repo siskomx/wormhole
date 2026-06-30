@@ -15,6 +15,8 @@ import type { RepoIndexBuildOptions, RepoIndexSearchResult } from "./repo-index.
 import { buildRepoNativePack, type RepoNativePack } from "./repo-native-pack.js";
 import type { RuntimeRecommendedTool } from "./runtime-behavior-audit.js";
 import { TOOL_REGISTRY } from "./tool-registry.js";
+import { getToolProfile, type ToolCapabilityProfile, type ToolProfileId } from "./tool-profiles.js";
+import { reviewToolPromotion, type ToolPromotionReview } from "./tool-promotion.js";
 
 export type AgentRoute = "fast" | "balanced" | "deep";
 
@@ -115,6 +117,8 @@ export type PreparedAgentContext = {
   recommendedDiscovery: AgentToolCall[];
   stateMaintenance: StateMaintenanceAdvice;
   durableRetrieval?: AgentDurableRetrieval;
+  toolProfile?: ToolCapabilityProfile;
+  toolPromotion?: ToolPromotionReview;
   agentInstructions: string;
 };
 
@@ -128,6 +132,7 @@ export type AgentRoutingInput = {
   maxChars?: number;
   indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">;
   preferredSources?: string[];
+  toolProfileId?: ToolProfileId;
   durableRetrieval?: AgentDurableRetrieval;
   repoNativePack?: RepoNativePack;
   projectModelCache?: ProjectModelCache;
@@ -397,6 +402,7 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
       ? [`Language coverage gaps: ${languageCoverageReasons.join(" ")}`]
       : []),
     "Use tool_catalog_query when the route recommends a plane, phase, pack, risk, or exact tool name.",
+    "Use tool_search and tool_promote to keep the active tool set small before selecting lower-level tools.",
     "Prefer the recommended route over browsing the full MCP tool surface.",
     "Refresh graph and context state only through the stateMaintenance owner tools.",
     "Use durable_repo_index_query, ctx_pack_refresh, workflow_write_artifacts, resume_record, resume_checkpoint, resume_validate, and resume_load for durable handoff and resume paths.",
@@ -427,6 +433,25 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     ]),
   ];
   const runtimeAuditToolCall = createRuntimeBehaviorAuditToolCall(route, finalNextToolCalls);
+  const toolProfile = input.toolProfileId ? getToolProfile(input.toolProfileId) : undefined;
+  const toolPromotion = reviewToolPromotion({
+    ...(input.toolProfileId ? { profileId: input.toolProfileId } : {}),
+    objective: input.objective,
+    query: input.query,
+    toolNames: uniqueSorted([
+      "agent_context_prepare",
+      "mission_route",
+      "tool_search",
+      "tool_promote",
+      ...route.stages.flatMap((stage) => stage.toolCalls.map((call) => call.toolName)),
+      ...finalNextToolCalls.map((call) => call.toolName),
+    ]),
+    maxPromotedTools: 24,
+    registry: TOOL_REGISTRY,
+  });
+  if (toolProfile) {
+    instructionParts.push(`Selected tool profile: ${toolProfile.profileId}.`);
+  }
   return {
     repoRoot: input.repoRoot,
     objective: input.objective,
@@ -437,6 +462,8 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     recommendedDiscovery: createDiscoveryToolCalls(),
     stateMaintenance: createStateMaintenanceAdvice(),
     ...(input.durableRetrieval ? { durableRetrieval: input.durableRetrieval } : {}),
+    ...(toolProfile ? { toolProfile } : {}),
+    toolPromotion,
     nextToolCalls: [...finalNextToolCalls, runtimeAuditToolCall],
     agentInstructions: instructionParts.join(" "),
   };
