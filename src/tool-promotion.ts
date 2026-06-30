@@ -17,7 +17,7 @@ export type ToolPromotionFilters = {
   risk?: ToolRisk;
 };
 
-export type ToolPromotionSearchInput = ToolPromotionFilters & {
+export type ToolSearchForPromotionInput = ToolPromotionFilters & {
   profileId?: ToolProfileId;
   query?: string;
   objective?: string;
@@ -25,7 +25,10 @@ export type ToolPromotionSearchInput = ToolPromotionFilters & {
   limit?: number;
   allowOutOfProfile?: boolean;
   overrideReason?: string;
+  registry?: ToolRegistryEntry[];
 };
+
+export type ToolPromotionSearchInput = ToolSearchForPromotionInput;
 
 export type ToolPromotionCandidate = {
   tool: ToolRegistryEntry;
@@ -45,12 +48,13 @@ export type HiddenToolPromotion = {
 };
 
 export type ToolPromotionSearchResult = {
+  profile?: ToolCapabilityProfile;
   profileId?: ToolProfileId;
   objective?: string;
   query?: string;
   filters: ToolPromotionFilters;
   candidates: ToolPromotionCandidate[];
-  promotedTools: ToolRegistryEntry[];
+  promotedTools: ToolPromotionCandidate[];
   hiddenTools: HiddenToolPromotion[];
   unknownTools: string[];
   warnings: string[];
@@ -68,15 +72,11 @@ export type ToolPromotionReview = ToolPromotionSearchResult & {
 export type ToolPromotionScope = {
   missionId?: string;
   sessionId?: string;
-  mission?: string;
-  session?: string;
 };
 
-export type ToolPromotionRecordInput = {
-  scope: ToolPromotionScope;
-  review: ToolPromotionReview;
-  objective?: string;
-  query?: string;
+export type ToolPromotionRecordInput = ToolPromotionReviewInput & {
+  missionId?: string;
+  sessionId?: string;
   sequence?: number;
   createdAt?: string;
 };
@@ -87,7 +87,6 @@ export type ToolPromotionRecord = ToolPromotionReview & {
   scope: ToolPromotionScope;
   objective?: string;
   query?: string;
-  review: ToolPromotionReview;
 };
 
 type ScoredTool = {
@@ -104,11 +103,12 @@ type ScoredTool = {
 const FALLBACK_RECOVERY_TOOLS = ["tool_catalog_query", "tool_admission_review"] as const;
 
 export function searchToolsForPromotion(
-  input: ToolPromotionSearchInput = {},
+  input: ToolSearchForPromotionInput = {},
   registry: ToolRegistryEntry[] = TOOL_REGISTRY,
 ): ToolPromotionSearchResult {
+  const activeRegistry = input.registry ?? registry;
   const profile = input.profileId ? getToolProfile(input.profileId) : undefined;
-  const registryByName = new Map(registry.map((tool, index) => [tool.name, { tool, index }]));
+  const registryByName = new Map(activeRegistry.map((tool, index) => [tool.name, { tool, index }]));
   const requestedToolNames = input.toolNames ? uniqueInOrder(input.toolNames) : undefined;
   const unknownTools = requestedToolNames?.filter((toolName) => !registryByName.has(toolName)) ?? [];
   const filters = promotionFilters(input);
@@ -130,7 +130,7 @@ export function searchToolsForPromotion(
           }),
         ];
       })
-    : registry
+    : activeRegistry
         .map((tool, registryIndex) =>
           scoreTool({
             tool,
@@ -189,12 +189,13 @@ export function searchToolsForPromotion(
   const candidates = limitedCandidates.map(toPromotionCandidate);
 
   return {
+    ...(profile ? { profile: cloneProfile(profile) } : {}),
     ...(profile ? { profileId: profile.profileId } : {}),
     ...(input.objective !== undefined ? { objective: input.objective } : {}),
     ...(input.query !== undefined ? { query: input.query } : {}),
     filters,
     candidates,
-    promotedTools: candidates.map((candidate) => cloneTool(candidate.tool)),
+    promotedTools: candidates.map(cloneCandidate),
     hiddenTools,
     unknownTools,
     warnings,
@@ -208,12 +209,13 @@ export function reviewToolPromotion(
   input: ToolPromotionReviewInput = {},
   registry: ToolRegistryEntry[] = TOOL_REGISTRY,
 ): ToolPromotionReview {
-  const search = searchToolsForPromotion(input, registry);
+  const activeRegistry = input.registry ?? registry;
+  const search = searchToolsForPromotion(input, activeRegistry);
   return {
     ...search,
     admission: reviewToolAdmission(
-      { toolNames: search.promotedTools.map((tool) => tool.name) },
-      registry,
+      { toolNames: search.promotedTools.map((candidate) => candidate.tool.name) },
+      activeRegistry,
     ),
   };
 }
@@ -221,18 +223,21 @@ export function reviewToolPromotion(
 export function createToolPromotionRecord(input: ToolPromotionRecordInput): ToolPromotionRecord {
   const sequence = input.sequence ?? 1;
   const createdAt = input.createdAt ?? new Date().toISOString();
-  const missionPart = normalizeScopePart(input.scope.missionId ?? input.scope.mission);
-  const sessionPart = normalizeScopePart(input.scope.sessionId ?? input.scope.session);
+  const review = reviewToolPromotion(input, input.registry ?? TOOL_REGISTRY);
+  const missionPart = normalizeScopePart(input.missionId);
+  const sessionPart = normalizeScopePart(input.sessionId);
 
   return {
-    ...input.review,
+    ...review,
     promotionId: `tool-promotion-${missionPart}-${sessionPart}-${sequence}`,
     createdAt,
-    scope: { ...input.scope },
+    scope: {
+      ...(input.missionId !== undefined ? { missionId: input.missionId } : {}),
+      ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
+    },
     ...(input.objective !== undefined ? { objective: input.objective } : {}),
     ...(input.query !== undefined ? { query: input.query } : {}),
-    review: input.review,
-    promotedTools: input.review.promotedTools.map(cloneTool),
+    promotedTools: review.promotedTools.map(cloneCandidate),
   };
 }
 
@@ -365,6 +370,25 @@ function cloneTool(tool: ToolRegistryEntry): ToolRegistryEntry {
   return {
     ...tool,
     inputs: [...tool.inputs],
+  };
+}
+
+function cloneCandidate(candidate: ToolPromotionCandidate): ToolPromotionCandidate {
+  return {
+    ...candidate,
+    tool: cloneTool(candidate.tool),
+    matchedTerms: [...candidate.matchedTerms],
+  };
+}
+
+function cloneProfile(profile: ToolCapabilityProfile): ToolCapabilityProfile {
+  return {
+    ...profile,
+    bootstrapTools: [...profile.bootstrapTools],
+    allowedTools: [...profile.allowedTools],
+    requiredEvidence: [...profile.requiredEvidence],
+    verificationGates: [...profile.verificationGates],
+    recoveryTools: [...profile.recoveryTools],
   };
 }
 

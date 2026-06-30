@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getToolProfile } from "../src/tool-profiles.js";
-import { reviewToolAdmission } from "../src/tool-registry.js";
+import { TOOL_REGISTRY, reviewToolAdmission } from "../src/tool-registry.js";
 import {
   createToolPromotionRecord,
   reviewToolPromotion,
@@ -16,7 +16,7 @@ describe("tool promotion search", () => {
       limit: 20,
     });
 
-    const promotedToolNames = result.promotedTools.map((tool) => tool.name);
+    const promotedToolNames = result.promotedTools.map((candidate) => candidate.tool.name);
     expect(promotedToolNames).toEqual(
       expect.arrayContaining(["patch_apply", "verification_run", "record_evidence"]),
     );
@@ -52,8 +52,8 @@ describe("tool promotion search", () => {
 
     expect(second).toEqual(first);
     expect(first.promotedTools.length).toBeGreaterThan(0);
-    for (const tool of first.promotedTools) {
-      expect(tool).toEqual(
+    for (const candidate of first.promotedTools) {
+      expect(candidate.tool).toEqual(
         expect.objectContaining({
           plane: "project",
           phase: "gather",
@@ -72,7 +72,7 @@ describe("tool promotion search", () => {
       toolNames: ["patch_apply", "diff_scope_review"],
     });
 
-    expect(blocked.promotedTools.map((tool) => tool.name)).toEqual(["diff_scope_review"]);
+    expect(blocked.promotedTools.map((candidate) => candidate.tool.name)).toEqual(["diff_scope_review"]);
     expect(blocked.hiddenTools).toEqual([
       expect.objectContaining({
         toolName: "patch_apply",
@@ -99,7 +99,7 @@ describe("tool promotion search", () => {
       allowOutOfProfile: true,
       overrideReason: "Emergency patch review",
     });
-    expect(overridden.promotedTools.map((tool) => tool.name)).toEqual(["patch_apply"]);
+    expect(overridden.promotedTools.map((candidate) => candidate.tool.name)).toEqual(["patch_apply"]);
     expect(overridden.hiddenTools).toEqual([]);
     expect(overridden.warnings.join("\n")).toContain("Emergency patch review");
   });
@@ -111,7 +111,7 @@ describe("tool promotion search", () => {
     });
 
     expect(result.unknownTools).toEqual(["ghost_tool", "missing_tool"]);
-    expect(result.promotedTools.map((tool) => tool.name)).toEqual([
+    expect(result.promotedTools.map((candidate) => candidate.tool.name)).toEqual([
       "record_evidence",
       "patch_apply",
       "verification_run",
@@ -124,6 +124,7 @@ describe("tool promotion search", () => {
       toolNames: ["patch_apply", "verification_run"],
     });
 
+    expect(result.profile?.profileId).toBe("feature-implementation");
     expect(result.admission).toEqual(
       reviewToolAdmission({ toolNames: ["patch_apply", "verification_run"] }),
     );
@@ -134,17 +135,14 @@ describe("tool promotion search", () => {
   });
 
   it("creates deterministic promotion records with normalized scope ids", () => {
-    const review = reviewToolPromotion({
-      profileId: "feature-implementation",
-      toolNames: ["patch_apply"],
-      query: "patch",
-      objective: "Apply verification patch",
-    });
     const baseInput = {
-      scope: { missionId: "Mission: Alpha/42", sessionId: " session!* " },
+      missionId: "Mission: Alpha/42",
+      sessionId: " session!* ",
+      profileId: "feature-implementation" as const,
+      toolNames: ["patch_apply"],
       objective: "Apply verification patch",
       query: "patch",
-      review,
+      registry: TOOL_REGISTRY,
       createdAt: "2026-06-30T12:00:00.000Z",
     };
 
@@ -154,15 +152,23 @@ describe("tool promotion search", () => {
     expect(first.promotionId).toBe("tool-promotion-Mission-Alpha-42-session-1");
     expect(second.promotionId).toBe("tool-promotion-Mission-Alpha-42-session-2");
     expect(first.createdAt).toBe("2026-06-30T12:00:00.000Z");
-    expect(first.scope).toEqual(baseInput.scope);
+    expect(first.scope).toEqual({ missionId: "Mission: Alpha/42", sessionId: " session!* " });
     expect(first.objective).toBe("Apply verification patch");
     expect(first.query).toBe("patch");
-    expect(first.review).toEqual(review);
-    expect(first.promotedTools.map((tool) => tool.name)).toEqual(["patch_apply"]);
+    expect(first.promotedTools.map((candidate) => candidate.tool.name)).toEqual(["patch_apply"]);
+    expect(first.promotedTools[0]).toEqual(
+      expect.objectContaining({
+        tool: expect.objectContaining({ name: "patch_apply" }),
+        requested: true,
+      }),
+    );
+    expect(first.admission).toEqual(reviewToolAdmission({ toolNames: ["patch_apply"] }));
 
     const normalized = createToolPromotionRecord({
-      scope: { missionId: "***", sessionId: `${"a".repeat(70)}!` },
-      review,
+      missionId: "***",
+      sessionId: `${"a".repeat(70)}!`,
+      profileId: "feature-implementation",
+      toolNames: ["patch_apply"],
       createdAt: "2026-06-30T12:00:00.000Z",
     });
     expect(normalized.promotionId).toBe(`tool-promotion-none-${"a".repeat(64)}-1`);
