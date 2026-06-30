@@ -90,6 +90,19 @@ describe("capability relation audit", () => {
         runtimeToolNames: runtimeToolNames(),
       }),
     );
+    const toolSurfaceTools = [
+      "tool_profile_list",
+      "tool_profile_get",
+      "tool_search",
+      "tool_promote",
+      "tool_promotion_status",
+    ];
+    const agentFacingRelation = CAPABILITY_RELATIONS.find(
+      (relation) => relation.capabilityId === "adaptive.agent-facing-routing",
+    );
+    const toolSurfaceRelation = CAPABILITY_RELATIONS.find(
+      (relation) => relation.capabilityId === "adaptive.tool-surface-compression",
+    );
 
     expect(audit.gaps.filter((gap) => gap.severity === "error")).toEqual([]);
     expect(CAPABILITY_RELATIONS).toContainEqual(
@@ -101,14 +114,8 @@ describe("capability relation audit", () => {
     expect(CAPABILITY_RELATIONS).toContainEqual(
       expect.objectContaining({
         capabilityId: "adaptive.agent-facing-routing",
-        primaryTools: expect.arrayContaining([
-          "tool_profile_list",
-          "tool_profile_get",
-          "tool_search",
-          "tool_promote",
-          "tool_promotion_status",
-        ]),
         supportingTools: expect.arrayContaining([
+          ...toolSurfaceTools,
           "ctx_pack_refresh",
           "durable_repo_index_query",
           "durable_index_manifest_status",
@@ -119,10 +126,26 @@ describe("capability relation audit", () => {
           "context-store",
           "durable-index-store",
           "workflow-files",
-          "tool-promotion-state",
         ]),
         artifactKinds: expect.arrayContaining(["context_pack", "workflow_state", "workflow_resume", "workflow_latest"]),
         freshnessChecks: expect.arrayContaining(["durable-index-status", "workflow-artifact-freshness"]),
+      }),
+    );
+    for (const toolName of toolSurfaceTools) {
+      expect(agentFacingRelation?.primaryTools ?? []).not.toContain(toolName);
+    }
+    expect(agentFacingRelation?.stateOwners ?? []).not.toContain("tool-promotion-state");
+    expect(toolSurfaceRelation).toEqual(
+      expect.objectContaining({
+        primaryTools: expect.arrayContaining(toolSurfaceTools),
+        stateOwners: expect.arrayContaining(["tool-promotion-state"]),
+        testFiles: expect.arrayContaining([
+          "tests/tool-profiles.test.ts",
+          "tests/tool-registry.test.ts",
+          "tests/agent-routing.test.ts",
+          "tests/tools.test.ts",
+          "tests/runtime-persistence.test.ts",
+        ]),
       }),
     );
     expect(CAPABILITY_RELATIONS).toContainEqual(

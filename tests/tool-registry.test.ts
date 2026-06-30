@@ -518,7 +518,7 @@ describe("tool registry conformance", () => {
       source_of_truth: "runtime-tool-registry",
       full_runtime_tool_surface: true,
       manifest_tools_are_curated: true,
-      discovery_tools: ["tool_layer_map", "tool_catalog_query"],
+      discovery_tools: ["tool_layer_map", "tool_catalog_query", "tool_search"],
     });
     expect(manifestTools).toEqual([...new Set(manifestTools)]);
     expect(manifestTools).toEqual(

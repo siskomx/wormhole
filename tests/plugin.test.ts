@@ -260,6 +260,9 @@ describe("Claude Desktop extension metadata", () => {
       "tool_promote",
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
+      "tool profiles/promotions are advisory",
+    );
+    expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
       "state_maintenance_run",
     );
     expect(manifest.prompts.map((prompt) => prompt.text).join("\n")).toContain(
