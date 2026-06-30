@@ -296,9 +296,10 @@ function scoreTerm(tool: ToolRegistryEntry, term: string): number {
   const summaryTerms = searchableTerms([tool.summary]);
   const inputTerms = searchableTerms(tool.inputs);
   const metadataTerms = searchableTerms([tool.plane, tool.phase, tool.pack, tool.risk]);
+  const exactCompoundWeight = term.includes("-") || term.includes("_");
 
   if (nameTerms.has(term)) {
-    score += 10;
+    score += exactCompoundWeight ? 30 : 10;
   }
   if (summaryTerms.has(term)) {
     score += 4;
@@ -307,7 +308,7 @@ function scoreTerm(tool: ToolRegistryEntry, term: string): number {
     score += 2;
   }
   if (metadataTerms.has(term)) {
-    score += 3;
+    score += exactCompoundWeight ? 30 : 3;
   }
 
   return score;

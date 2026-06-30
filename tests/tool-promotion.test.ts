@@ -119,6 +119,13 @@ describe("tool promotion search", () => {
     expect(result.promotedTools.map((candidate) => candidate.tool.name)).toEqual(["custom_lookup"]);
   });
 
+  it("ranks exact hyphenated metadata matches above weaker split-token matches", () => {
+    const result = searchToolsForPromotion({ query: "runtime-ops", registry: TOOL_REGISTRY, limit: 12 });
+
+    expect(result.promotedTools[0]?.tool.pack).toBe("runtime-ops");
+    expect(result.promotedTools[0]?.tool.name).not.toBe("runtime_behavior_audit");
+  });
+
   it("hides out-of-profile tools unless an override includes a reason", () => {
     const hiddenReason =
       "Tool is outside profile code-review. Pass allowOutOfProfile with overrideReason to include it.";
