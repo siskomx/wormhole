@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.14.1 - 2026-06-30
+
+- Strengthened existing feature/domain inference so direct source-root subsystem files such as `repo-index`, `domain-index`, `project-intelligence`, `tool-registry`, and `feature-index` seed feature maps and domain manifest candidates without adding new tools or approval workflows.
+- Added guards so single-token source-root files such as `index`, `types`, and `utils` do not become feature IDs.
+
 ## 0.13.0 - 2026-06-29
 
 - Added resume validation as a gate signal, including resume state detection, state-maintenance auto-validation when resume state exists, `gate_request` resume inputs, workflow done-gate enforcement, and relation freshness coverage.

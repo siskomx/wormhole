@@ -172,6 +172,58 @@ describe("blueprint compiler", () => {
     }
   });
 
+  it("discovers source-root subsystem features from kebab-case module families", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      writeFileSync(path.join(repoRoot, "src", "repo-index.ts"), "export function buildRepoIndex() { return []; }\n");
+      writeFileSync(
+        path.join(repoRoot, "src", "repo-index-extraction.ts"),
+        "export function extractRepoIndexSymbols() { return []; }\n",
+      );
+      writeFileSync(path.join(repoRoot, "tests", "repo-index.test.ts"), "import '../src/repo-index.js';\n");
+      writeFileSync(path.join(repoRoot, "src", "project-intelligence.ts"), "export function createArchitectureMap() { return {}; }\n");
+      writeFileSync(
+        path.join(repoRoot, "src", "project-intelligence-spine.ts"),
+        "export function createProjectSpine() { return {}; }\n",
+      );
+      writeFileSync(path.join(repoRoot, "tests", "project-intelligence-tools.test.ts"), "import '../src/project-intelligence.js';\n");
+      writeFileSync(path.join(repoRoot, "src", "tool-registry.ts"), "export const toolRegistry = new Map();\n");
+      writeFileSync(path.join(repoRoot, "tests", "tool-registry.test.ts"), "import '../src/tool-registry.js';\n");
+      writeFileSync(path.join(repoRoot, "src", "feature-index.ts"), "export function createFeatureIndex() { return {}; }\n");
+      writeFileSync(path.join(repoRoot, "tests", "feature-index.test.ts"), "import '../src/feature-index.js';\n");
+      writeFileSync(path.join(repoRoot, "src", "index.ts"), "export const index = true;\n");
+      writeFileSync(path.join(repoRoot, "src", "types.ts"), "export type Id = string;\n");
+      writeFileSync(path.join(repoRoot, "tests", "utils.test.ts"), "export const helper = true;\n");
+
+      const result = compileFixture(repoRoot);
+      const featureIds = result.blueprint.featureIndex.features.map((feature) => feature.featureId);
+      const repoIndex = result.blueprint.featureIndex.features.find((feature) => feature.featureId === "repo-index");
+      const projectIntelligence = result.blueprint.featureIndex.features.find(
+        (feature) => feature.featureId === "project-intelligence",
+      );
+
+      expect(featureIds).toEqual(
+        expect.arrayContaining(["repo-index", "project-intelligence", "tool-registry", "feature-index"]),
+      );
+      expect(repoIndex?.files.map((file) => file.path)).toEqual(
+        expect.arrayContaining(["src/repo-index.ts", "src/repo-index-extraction.ts", "tests/repo-index.test.ts"]),
+      );
+      expect(projectIntelligence?.files.map((file) => file.path)).toEqual(
+        expect.arrayContaining([
+          "src/project-intelligence.ts",
+          "src/project-intelligence-spine.ts",
+          "tests/project-intelligence-tools.test.ts",
+        ]),
+      );
+      expect(repoIndex?.evidence).toEqual(expect.arrayContaining(["src/repo-index.ts"]));
+      expect(featureIds).not.toContain("index");
+      expect(featureIds).not.toContain("types");
+      expect(featureIds).not.toContain("utils");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("creates compound feature maps for client-agent workflow files", () => {
     const repoRoot = createFixtureRepo();
     try {

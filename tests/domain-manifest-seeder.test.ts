@@ -2,26 +2,12 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import type { DomainManifestGenerateResult } from "../src/domain-manifest-seeder.js";
 import { createInMemoryKernel } from "../src/kernel.js";
 import { createToolHandlers } from "../src/tools.js";
 
 type DomainManifestToolHandlers = {
-  domainManifestGenerate(input: { repoRoot: string }): {
-    manifestPath: string;
-    candidateHash: string;
-    manifest: {
-      features: Array<{
-        featureId: string;
-        aliases: string[];
-        roots: string[];
-        portals: string[];
-        tables: string[];
-      }>;
-      fileGroups: { routes: string[]; services: string[]; migrations: string[]; conventions: string[] };
-      verificationGates: Array<{ gateId: string; scriptNames: string[]; whenFeatureTouches: string[] }>;
-    };
-    warnings: string[];
-  };
+  domainManifestGenerate(input: { repoRoot: string }): DomainManifestGenerateResult;
   domainManifestDiff(input: { repoRoot: string }): {
     baseHash: string;
     candidateHash: string;
@@ -133,6 +119,39 @@ describe("domain manifest seeder lifecycle", () => {
       expect(result.manifest.fileGroups.services).toContain("backend/src/modules/**/*Service.ts");
       expect(result.manifest.fileGroups.migrations).toContain("migrations/*.sql");
       expect(result.manifest.fileGroups.conventions).toContain("docs/conventions/*.md");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("seeds source-root subsystem features through the existing feature index", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-domain-source-root-"));
+    try {
+      mkdirSync(path.join(repoRoot, ".wormhole"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+      mkdirSync(path.join(repoRoot, "tests"), { recursive: true });
+      writeFileSync(path.join(repoRoot, "package.json"), JSON.stringify({ scripts: { test: "vitest run" } }, null, 2));
+      writeFileSync(path.join(repoRoot, "src", "domain-index.ts"), "export function buildDomainIndex() { return {}; }\n");
+      writeFileSync(
+        path.join(repoRoot, "src", "domain-index-manifest.ts"),
+        "export function readDomainIndexManifest() { return {}; }\n",
+      );
+      writeFileSync(path.join(repoRoot, "tests", "domain-index.test.ts"), "import '../src/domain-index.js';\n");
+      writeFileSync(path.join(repoRoot, "src", "repo-index.ts"), "export function buildRepoIndex() { return {}; }\n");
+      writeFileSync(path.join(repoRoot, "src", "repo-index-extraction.ts"), "export function extractRepoIndex() { return {}; }\n");
+      writeFileSync(path.join(repoRoot, "tests", "repo-index.test.ts"), "import '../src/repo-index.js';\n");
+      writeFileSync(path.join(repoRoot, "src", "tool-registry.ts"), "export const registry = [];\n");
+      writeFileSync(path.join(repoRoot, "tests", "tool-registry.test.ts"), "import '../src/tool-registry.js';\n");
+
+      const tools = domainManifestTools(createToolHandlers(createInMemoryKernel(), { allowedRepoRoots: [repoRoot] }));
+
+      const result = tools.domainManifestGenerate({ repoRoot });
+      const featureIds = result.manifest.features.map((feature) => feature.featureId);
+      const domainIndex = result.manifest.features.find((feature) => feature.featureId === "domain-index");
+
+      expect(featureIds).toEqual(expect.arrayContaining(["domain-index", "repo-index", "tool-registry"]));
+      expect(domainIndex?.roots).toEqual(expect.arrayContaining(["src/domain-index.ts"]));
+      expect(result.sourceSummary.inferredFeatureCount).toBeGreaterThanOrEqual(3);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

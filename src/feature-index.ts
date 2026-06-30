@@ -113,6 +113,27 @@ const ROLE_PRIORITY: FeatureFileRole[] = [
   "other",
 ];
 
+const SOURCE_ROOT_FEATURE_FILE_PATTERN =
+  /^(?:src|tests)\/([^/]+?)(?:\.(?:test|spec))?\.(?:cjs|cts|js|jsx|mjs|mts|ts|tsx)$/i;
+
+const SOURCE_STEM_DETAIL_SUFFIXES = new Set([
+  "adapter",
+  "adapters",
+  "files",
+  "handlers",
+  "handler",
+  "helpers",
+  "helper",
+  "manifest",
+  "runner",
+  "seeder",
+  "spine",
+  "tools",
+  "tool",
+  "types",
+  "type",
+]);
+
 export function createFeatureIndex(input: { repoRoot: string; generatedAt?: string }): RepoFeatureIndex {
   const repoRoot = path.resolve(input.repoRoot);
   const generatedAt = input.generatedAt ?? new Date().toISOString();
@@ -296,6 +317,9 @@ function structuralFeatureIds(repoPath: string): Set<string> {
   const ids = new Set<string>();
   const normalized = toRepoPath(repoPath);
   const lower = normalized.toLowerCase();
+  for (const featureId of sourceRootFeatureIds(normalized)) {
+    addFeatureId(ids, featureId);
+  }
   const structuralPatterns = [
     /(?:^|\/)src\/features\/([^/]+)/,
     /(?:^|\/)frontend\/src\/features\/([^/]+)/,
@@ -327,6 +351,40 @@ function structuralFeatureIds(repoPath: string): Set<string> {
     addFeatureId(ids, hookPrefix[1]);
   }
   return ids;
+}
+
+function sourceRootFeatureIds(repoPath: string): Set<string> {
+  const ids = new Set<string>();
+  const match = toRepoPath(repoPath).match(SOURCE_ROOT_FEATURE_FILE_PATTERN);
+  if (!match?.[1]) {
+    return ids;
+  }
+  for (const candidate of sourceStemFeatureCandidates(match[1])) {
+    addFeatureId(ids, candidate);
+  }
+  return ids;
+}
+
+function sourceStemFeatureCandidates(stem: string): string[] {
+  const normalized = normalizeFeatureId(stem);
+  const parts = normalized.split("-").filter(Boolean);
+  if (parts.length < 2) {
+    return [];
+  }
+  const trimmed = trimSourceStemDetails(parts);
+  if (trimmed.length < 2) {
+    return [];
+  }
+  const primary = trimmed.slice(0, 2).join("-");
+  return uniqueSorted([primary]);
+}
+
+function trimSourceStemDetails(parts: string[]): string[] {
+  const trimmed = [...parts];
+  while (trimmed.length > 2 && SOURCE_STEM_DETAIL_SUFFIXES.has(trimmed[trimmed.length - 1] ?? "")) {
+    trimmed.pop();
+  }
+  return trimmed;
 }
 
 function semanticFeatureIds(repoPath: string, content: string): Set<string> {
@@ -547,11 +605,13 @@ function pushMapArray<T>(map: Map<string, T[]>, key: string, value: T): void {
 
 function pushEvidence(map: Map<string, Set<string>>, featureId: string, repoPath: string): void {
   const evidence = ensureSet(map, featureId);
+  const sourceRootIds = sourceRootFeatureIds(repoPath);
   if (
     repoPath.startsWith("src/features/") ||
     repoPath.startsWith("backend/src/modules/") ||
     repoPath.startsWith("docs/discoveries/") ||
-    repoPath.startsWith("migrations/")
+    repoPath.startsWith("migrations/") ||
+    sourceRootIds.has(featureId)
   ) {
     evidence.add(repoPath);
   }
@@ -617,6 +677,10 @@ function isNoisyFeatureId(featureId: string): boolean {
     "utils",
     "shared",
   ]).has(featureId);
+}
+
+function uniqueSorted<T extends string>(values: T[]): T[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
 }
 
 function titleCase(featureId: string): string {
