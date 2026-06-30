@@ -316,6 +316,9 @@ describe("agent-facing routing tools", () => {
         "Use tool_search and tool_promote to keep the active tool set small before selecting lower-level tools.",
       );
       expect(prepared.agentInstructions).toContain("Selected tool profile: feature-implementation.");
+      expect(prepared.agentInstructions).toContain(
+        "The selected profile is advisory; route-required tools remain available when promoted for prepared context.",
+      );
       expect(prepared.agentInstructions).toContain("Continue into implementation and verification for coding tasks.");
       expect(prepared.agentInstructions).toContain("Run gate_request after verification_run");
       expect(prepared.agentInstructions).toContain("Call emit_plan only when the user explicitly asks for a plan");
@@ -332,6 +335,22 @@ describe("agent-facing routing tools", () => {
       expect(prepared.agentInstructions).toContain(
         "Run runtime_behavior_audit before final claims when observed tool calls are available.",
       );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects unknown agent context tool profiles", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      expect(() =>
+        prepareAgentContext({
+          repoRoot,
+          objective: "Change user loading behavior",
+          query: "load user API tests",
+          toolProfileId: "unknown-profile" as never,
+        }),
+      ).toThrow("Unknown tool profile: unknown-profile");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

@@ -346,6 +346,10 @@ export function recommendMissionRoute(input: AgentRoutingInput): MissionRouteRec
 }
 
 export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "repoRoot" | "objective" | "query">> & AgentRoutingInput): PreparedAgentContext {
+  const toolProfile = input.toolProfileId ? getToolProfile(input.toolProfileId) : undefined;
+  if (input.toolProfileId && !toolProfile) {
+    throw new Error(`Unknown tool profile: ${input.toolProfileId}`);
+  }
   const changedFiles = normalizeChangedFiles(input.changedFiles);
   const projectModelCache = input.projectModelCache ?? createProjectModelCache();
   const cachedInput = { ...input, projectModelCache };
@@ -433,7 +437,6 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     ]),
   ];
   const runtimeAuditToolCall = createRuntimeBehaviorAuditToolCall(route, finalNextToolCalls);
-  const toolProfile = input.toolProfileId ? getToolProfile(input.toolProfileId) : undefined;
   const toolPromotion = reviewToolPromotion({
     ...(input.toolProfileId ? { profileId: input.toolProfileId } : {}),
     objective: input.objective,
@@ -453,6 +456,9 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
   });
   if (toolProfile) {
     instructionParts.push(`Selected tool profile: ${toolProfile.profileId}.`);
+    instructionParts.push(
+      "The selected profile is advisory; route-required tools remain available when promoted for prepared context.",
+    );
   }
   return {
     repoRoot: input.repoRoot,
