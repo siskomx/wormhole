@@ -22,6 +22,7 @@ The goal is simple: make coding agents faster and more precise in large reposito
 ### Repo Intelligence
 
 - Deterministic repo-local graph indexing over files, symbols, imports, links, references, and inferred calls.
+- `symbol_context` for compact symbol-level inspection that combines repo graph definitions, edges, nearby symbols, and diagnostics with live TypeScript LSP definition, hover, and optional capped references when a language server is available.
 - AST-first extraction for TypeScript/TSX, JavaScript/JSX, Python, Rust, and C# through pinned Tree-sitter grammars, with regex fallback for parser failures, Markdown, and unsupported text formats.
 - SQLite-backed durable repo indexes under `.wormhole/indexes`, plus JSON compatibility exports and shard manifests.
 - `repo_index_build`, `repo_index_query`, `repo_index_explain`, `repo_index_path`, `repo_index_report`, and `repo_graph_analyze` for immediate repo graph work.
@@ -108,6 +109,13 @@ Domain tools:
 3. Query through `durable_repo_index_query`.
 4. Pass `requireFresh: true` when stale data must be refused instead of returned with warnings.
 5. After upgrading to `0.8.0`, refresh each repo once because extractor-versioned fingerprints mark pre-AST durable indexes stale.
+
+### Symbol-Level Context
+
+1. Build or refresh the repo index so graph facts are current.
+2. Call `symbol_context` with `repoRoot` plus either `file`/`line`/`character` or `symbol`.
+3. Request `aspects` such as `definition`, `hover`, or `references`; use `referencesLimit` when reference lists could be large.
+4. Inspect `graphStatus`, per-aspect LSP status, warnings, truncated counts, and external-location flags before treating the result as evidence.
 
 ### Cross-Chat Resume
 
@@ -250,11 +258,14 @@ What AST improves:
 - Fewer false call edges from comments or string literals in parser-supported files.
 - Shared route and framework signals that domain manifest seeders can use to create or maintain repo-specific seeders.
 - Extractor-versioned fingerprints so durable indexes built by older extraction logic become stale instead of being silently reused.
+- Graph facts that `symbol_context` can use as the stable fallback around live language-server results.
 
 What AST does not replace:
 
-- It is not a type checker or LSP. Runtime wiring, generated routes, decorators, dynamic imports, framework config, OpenAPI specs, tests, and command output still need their own evidence.
+- AST extraction itself is not a type checker or LSP. Use `symbol_context`, LSP diagnostics, command output, and tests when live language-server or runtime evidence is needed.
 - It does not persist raw ASTs. Wormhole persists compact graph facts and parser coverage only.
+
+`symbol_context` currently enriches TypeScript targets through live LSP requests when a configured server is available. Unsupported, external, oversized, or unavailable targets still return graph-backed context with warnings instead of silently claiming LSP precision.
 
 Use `repo_graph_analyze` when relationships matter. It is read-only and returns hubs, connector nodes, cycles, disconnected files, orphan symbols, parser coverage, bounded changed-file impact flows, truncation state, and index health.
 

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.14.2 - 2026-06-30
+
+- Added `symbol_context`, a large-repo context tool that merges repo graph facts with live TypeScript LSP definition, hover, and optional capped references.
+- Hardened process-local LSP session handling for bounded startup/request timeouts, retained-session reuse, one-shot sessions, graceful stop, and partial failure reporting.
+- Wired symbol context into MCP registration, tool registry metadata, admission review, README guidance, and focused tests.
+
 ## 0.14.1 - 2026-06-30
 
 - Strengthened existing feature/domain inference so direct source-root subsystem files such as `repo-index`, `domain-index`, `project-intelligence`, `tool-registry`, and `feature-index` seed feature maps and domain manifest candidates without adding new tools or approval workflows.
