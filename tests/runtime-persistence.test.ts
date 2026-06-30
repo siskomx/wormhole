@@ -78,6 +78,23 @@ describe("runtime handler persistence", () => {
         timeoutMs: 2_000,
       });
       first.behaviorModeSet({ brevity: "dense", minimality: "strict" });
+      const promotion = first.toolPromote({
+        missionId: "M1",
+        sessionId: "S1",
+        profileId: "feature-implementation",
+        objective: "Persist promoted tools",
+        query: "patch verify evidence",
+        toolNames: ["patch_apply", "verification_run", "record_evidence"],
+      });
+      const secondPromotion = first.toolPromote({
+        missionId: "M1",
+        sessionId: "S1",
+        profileId: "feature-implementation",
+        objective: "Persist promoted tools",
+        query: "gate evidence",
+        toolNames: ["gate_request", "record_evidence"],
+      });
+      expect(secondPromotion.promotionId).not.toBe(promotion.promotionId);
 
       const trace = {
         traceId: "trace-1",
@@ -120,6 +137,7 @@ describe("runtime handler persistence", () => {
       first.orchestrationPolicyActivate({ evaluationId: evaluation.evaluationId });
 
       const second = createToolHandlers(createInMemoryKernel(), { runtimeStatePath, allowedRepoRoots: [root] });
+      const restoredPromotion = second.toolPromotionStatus({ missionId: "M1", sessionId: "S1" });
       const run = second.agentDispatch({
         missionId: "M1",
         taskId: "T1",
@@ -157,6 +175,16 @@ describe("runtime handler persistence", () => {
       );
       expect(second.optimizationStats().runCount).toBe(1);
       expect(second.behaviorModeGet()).toEqual({ brevity: "dense", minimality: "strict" });
+      expect(restoredPromotion.count).toBe(2);
+      expect(restoredPromotion.records.map((record) => record.promotionId)).toEqual([
+        promotion.promotionId,
+        secondPromotion.promotionId,
+      ]);
+      expect(restoredPromotion.records[0]?.promotedTools.map((candidate) => candidate.tool.name)).toEqual([
+        "patch_apply",
+        "verification_run",
+        "record_evidence",
+      ]);
       expect(second.orchestrationPolicyGet()?.policyId).toBe("persisted-policy");
       expect(conductor.trace.reasonCodes).toContain("policy:persisted-policy");
     } finally {
