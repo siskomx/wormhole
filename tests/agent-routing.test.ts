@@ -217,9 +217,22 @@ describe("agent-facing routing tools", () => {
       expect(prepared.toolProfile?.profileId).toBe("feature-implementation");
       expect(prepared.toolPromotion).toBeDefined();
       const promotedToolNames = prepared.toolPromotion?.promotedTools.map((candidate) => candidate.tool.name) ?? [];
+      const routeScopedToolNames = [
+        "agent_context_prepare",
+        "mission_route",
+        "tool_promote",
+        "architecture_map",
+        "entrypoint_flow_discover",
+        "blast_radius_analyze",
+        "test_impact_analyze_v2",
+        "verification_run",
+        "gate_request",
+      ];
       expect(promotedToolNames).toEqual(
-        expect.arrayContaining(["agent_context_prepare", "verification_run", "gate_request"]),
+        expect.arrayContaining(routeScopedToolNames),
       );
+      const hiddenToolNames = prepared.toolPromotion?.hiddenTools.map((tool) => tool.toolName) ?? [];
+      expect(hiddenToolNames.filter((toolName) => routeScopedToolNames.includes(toolName))).toEqual([]);
       expect(prepared.toolPromotion?.admission.decisions.map((decision) => decision.toolName)).toEqual(
         expect.arrayContaining(promotedToolNames),
       );

@@ -447,6 +447,8 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
       ...finalNextToolCalls.map((call) => call.toolName),
     ]),
     maxPromotedTools: 24,
+    allowOutOfProfile: true,
+    overrideReason: "Prepared context wraps route-scoped tool guidance without hiding tools outside the selected profile.",
     registry: TOOL_REGISTRY,
   });
   if (toolProfile) {
