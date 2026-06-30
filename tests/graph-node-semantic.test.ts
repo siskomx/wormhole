@@ -97,6 +97,30 @@ describe("graph-node semantic index", () => {
       const result = searchGraphNodeSemanticIndex({ repoRoot, query: "anything" });
 
       expect(result.results).toEqual([]);
+      expect(result.refused).toBe(true);
+      expect(result.reason).toContain("missing");
+      expect(result.hint).toContain("graph_node_semantic_index_refresh");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses stale persisted graph-node records when the current repo fingerprint differs", () => {
+    const { repoRoot, communities, flows } = createFixtureRepo();
+    try {
+      const index = buildRepoIndex({ repoRoot });
+      refreshGraphNodeSemanticIndex({ repoRoot, index, communities, flows });
+
+      const result = searchGraphNodeSemanticIndex({
+        repoRoot,
+        query: "invoice approval",
+        currentFingerprint: "newer-repo-fingerprint",
+      });
+
+      expect(result.results).toEqual([]);
+      expect(result.refused).toBe(true);
+      expect(result.reason).toContain("stale");
+      expect(result.fingerprint).toBe(index.fingerprint);
       expect(result.hint).toContain("graph_node_semantic_index_refresh");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });

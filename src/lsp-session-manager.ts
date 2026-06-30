@@ -315,6 +315,15 @@ export function createLspSessionManager(): LspSessionManager {
         if (startupSettled) {
           return;
         }
+        if (child.exitCode !== null || child.signalCode !== null) {
+          const status = session.exitedStatus ?? exitStatus(session, child.exitCode);
+          const error = session.exitedError ?? exitError(status, child.exitCode, child.signalCode);
+          session.exitedStatus = status;
+          session.exitedError = error;
+          handleChildEnd(session, status, error);
+          rejectStartup();
+          return;
+        }
         startupSettled = true;
         sessions.set(sessionId, session);
         retainedByKey.set(key, sessionId);

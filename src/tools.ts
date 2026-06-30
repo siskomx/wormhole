@@ -2208,7 +2208,11 @@ export function createToolHandlers(
       kinds?: GraphNodeKind[];
     }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      return searchGraphNodeSemanticIndex({ ...input, repoRoot });
+      return searchGraphNodeSemanticIndex({
+        ...input,
+        repoRoot,
+        currentFingerprint: getRepoIndex(repoRoot).fingerprint,
+      });
     },
 
     repoWatchStart(input: RepoWatchStartInput) {

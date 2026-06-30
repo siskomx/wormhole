@@ -26,6 +26,7 @@ export type GraphNodeSemanticIndex = Omit<SemanticIndex, "records"> & {
 export type GraphNodeSemanticSearchResult = {
   query: string;
   provider: SemanticIndex["provider"];
+  fingerprint?: string;
   results: Array<{
     id: string;
     path?: string;
@@ -33,10 +34,13 @@ export type GraphNodeSemanticSearchResult = {
     score: number;
     excerpt: string;
   }>;
+  refused?: true;
+  reason?: string;
   hint?: string;
 };
 
 const STORE_RELATIVE_PATH = ".wormhole/indexes/graph-node-semantic-index.json";
+const REFRESH_HINT = "Run graph_node_semantic_index_refresh before graph_node_semantic_search.";
 
 export function createGraphNodeSemanticRecords(input: {
   index: RepoIndex;
@@ -131,6 +135,7 @@ export function searchGraphNodeSemanticIndex(input: {
   query: string;
   limit?: number;
   kinds?: GraphNodeKind[];
+  currentFingerprint?: string;
 }): GraphNodeSemanticSearchResult {
   const index = readGraphNodeSemanticIndex(input.repoRoot);
   if (!index) {
@@ -138,7 +143,20 @@ export function searchGraphNodeSemanticIndex(input: {
       query: input.query,
       provider: "deterministic-token-overlap",
       results: [],
-      hint: "Run graph_node_semantic_index_refresh before graph_node_semantic_search.",
+      refused: true,
+      reason: "Graph-node semantic index is missing.",
+      hint: REFRESH_HINT,
+    };
+  }
+  if (input.currentFingerprint && index.fingerprint !== input.currentFingerprint) {
+    return {
+      query: input.query,
+      provider: index.provider,
+      fingerprint: index.fingerprint,
+      results: [],
+      refused: true,
+      reason: "Graph-node semantic index is stale for the current repo index.",
+      hint: REFRESH_HINT,
     };
   }
   const requestedKinds = new Set(input.kinds ?? ["file", "symbol", "community", "flow"]);
@@ -152,6 +170,7 @@ export function searchGraphNodeSemanticIndex(input: {
   return {
     query: search.query,
     provider: search.provider,
+    fingerprint: index.fingerprint,
     results: search.results.map((result) => ({
       ...result,
       kind: recordById.get(result.id)?.kind ?? "file",

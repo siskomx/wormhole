@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.14.3 - 2026-06-30
+
+- Refused missing or stale persisted graph-node semantic indexes instead of returning empty search results that could be mistaken for complete coverage.
+- Passed the current repo fingerprint into `graph_node_semantic_search` from the tool handler so stale graph-node records are detected before use.
+- Aligned package, lockfile, plugin, MCP server, and capability manifest version metadata to the release version.
+
 ## 0.14.2 - 2026-06-30
 
 - Added `symbol_context`, a large-repo context tool that merges repo graph facts with live TypeScript LSP definition, hover, and optional capped references.
