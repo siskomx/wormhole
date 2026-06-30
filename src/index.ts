@@ -40,6 +40,7 @@ export * from "./verification-runner.js";
 export * from "./safety-scan.js";
 export * from "./semantic-search.js";
 export * from "./lsp-ground-truth.js";
+export * from "./lsp-symbol-context.js";
 export * from "./action-policy.js";
 export * from "./dependency-security.js";
 export * from "./git-lifecycle.js";

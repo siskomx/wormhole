@@ -115,6 +115,11 @@ import {
   normalizeLspLocation,
   type LspProtocolLocation,
 } from "./lsp-ground-truth.js";
+import {
+  createSymbolContext,
+  type SymbolContextGraphStatus,
+  type SymbolContextInput,
+} from "./lsp-symbol-context.js";
 import { reviewActionPolicy, type ActionPolicyOperation } from "./action-policy.js";
 import {
   createPrivilegedActionGate,
@@ -751,6 +756,95 @@ export function createToolHandlers(
 
   function preservedRepoIndexOptions(repoRoot: string): Omit<RepoIndexBuildOptions, "repoRoot"> | undefined {
     return durableRepoIndexBuildOptions({ repoRoot });
+  }
+
+  function loadSymbolContextIndex(repoRoot: string): {
+    index?: RepoIndex;
+    graphStatus: SymbolContextGraphStatus;
+    warnings: string[];
+  } {
+    try {
+      const index = getRepoIndex(repoRoot, preservedRepoIndexOptions(repoRoot));
+      const fresh = isRepoIndexFresh(index);
+      return {
+        index,
+        graphStatus: fresh ? (index.truncated ? "degraded" : "fresh") : "stale",
+        warnings: fresh ? [] : ["Repo index fingerprint is stale for the current workspace state."],
+      };
+    } catch (error) {
+      return {
+        graphStatus: "missing",
+        warnings: [
+          `Unable to load repo index for symbol_context: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ],
+      };
+    }
+  }
+
+  function symbolContextDiagnostics(repoRoot: string, diagnosticFile: string | undefined): DiagnosticRecord[] {
+    if (!diagnosticFile) {
+      return [];
+    }
+    const requestedFile = repoRelativeDiagnosticPath(repoRoot, diagnosticFile);
+    if (!requestedFile) {
+      return [];
+    }
+    return diagnosticStore.query({ file: diagnosticFile }).diagnostics.filter((diagnostic) => {
+      if (!diagnostic.file) {
+        return false;
+      }
+      const relativeDiagnosticFile = repoRelativeDiagnosticPath(repoRoot, diagnostic.file);
+      if (relativeDiagnosticFile !== requestedFile) {
+        return false;
+      }
+      if (path.isAbsolute(diagnostic.file)) {
+        return true;
+      }
+      return !isAmbiguousRelativeDiagnosticPath(repoRoot, relativeDiagnosticFile);
+    });
+  }
+
+  function repoRelativeDiagnosticPath(repoRoot: string, file: string): string | undefined {
+    const absoluteRoot = path.resolve(repoRoot);
+    const absoluteFile = path.isAbsolute(file)
+      ? path.resolve(file)
+      : path.resolve(absoluteRoot, file);
+    const relativePath = path.relative(absoluteRoot, absoluteFile);
+    if (relativePath === "" || relativePath === ".." || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
+      return undefined;
+    }
+    return relativePath.replace(/\\/g, "/");
+  }
+
+  function isAmbiguousRelativeDiagnosticPath(repoRoot: string, relativeFile: string): boolean {
+    const selectedRootKey = filesystemPathKey(repoRoot);
+    for (const allowedRoot of allowedRepoRoots) {
+      const absoluteAllowedRoot = path.resolve(allowedRoot);
+      if (filesystemPathKey(absoluteAllowedRoot) === selectedRootKey) {
+        continue;
+      }
+      const absoluteCandidate = path.resolve(absoluteAllowedRoot, relativeFile);
+      const candidateRelativePath = path.relative(absoluteAllowedRoot, absoluteCandidate);
+      if (
+        candidateRelativePath === "" ||
+        candidateRelativePath === ".." ||
+        candidateRelativePath.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(candidateRelativePath)
+      ) {
+        continue;
+      }
+      if (existsSync(absoluteCandidate)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function filesystemPathKey(value: string): string {
+    const key = path.resolve(value).replace(/\\/g, "/");
+    return process.platform === "win32" ? key.toLowerCase() : key;
   }
 
   function clearRepoIndexCaches(
@@ -2361,6 +2455,35 @@ export function createToolHandlers(
 
     lspNormalizeLocation(input: LspProtocolLocation) {
       return normalizeLspLocation(input);
+    },
+
+    async symbolContext(input: SymbolContextInput) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const configs = detectLanguageServerConfigs({ repoRoot });
+      await lspSessionManager.stopIdle({ idleTimeoutMs: 10 * 60_000 });
+      const diagnosticFile = input.file ? repoRelativePath(repoRoot, input.file) : undefined;
+      const graphIndex = loadSymbolContextIndex(repoRoot);
+      return await createSymbolContext(
+        { ...input, repoRoot },
+        {
+          index: graphIndex.index,
+          graphStatus: graphIndex.graphStatus,
+          initialWarnings: graphIndex.warnings,
+          diagnostics: symbolContextDiagnostics(repoRoot, diagnosticFile),
+          lsp: {
+            configs,
+            manager: lspSessionManager,
+            async authorizeStart(config) {
+              assertPrivilegedAction({
+                toolName: "symbol_context",
+                kind: "command",
+                operations: [{ kind: "command", command: config.command, args: config.args }],
+                target: { repoRoot, command: config.command, args: config.args },
+              });
+            },
+          },
+        },
+      );
     },
 
     projectOnboard(input: Parameters<typeof projectOnboard>[0]) {

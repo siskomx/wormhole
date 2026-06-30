@@ -53,6 +53,13 @@ describe("tool registry conformance", () => {
     expect(TOOL_REGISTRY.map((tool) => tool.name)).toEqual(registeredToolNamesInRegistrationOrder());
   });
 
+  it("registers symbol context immediately after LSP location normalization", () => {
+    const registryToolNames = TOOL_REGISTRY.map((tool) => tool.name);
+    const lspNormalizeLocationIndex = registryToolNames.indexOf("lsp_normalize_location");
+
+    expect(registryToolNames[lspNormalizeLocationIndex + 1]).toBe("symbol_context");
+  });
+
   it("registers promotion discovery tools immediately after admission review", () => {
     const registryToolNames = TOOL_REGISTRY.map((tool) => tool.name);
     const admissionReviewIndex = registryToolNames.indexOf("tool_admission_review");
@@ -295,6 +302,48 @@ describe("tool registry conformance", () => {
     expect(inputsByName.get("durable_repo_index_refresh")).toContain("preset");
     expect(inputsByName.get("durable_index_manifest_refresh")).toContain("preset");
     expect(inputsByName.get("durable_repo_index_query")).toContain("requireFresh");
+  });
+
+  it("advertises symbol context as live LSP-backed large-repo context", () => {
+    const admission = reviewToolAdmission({ toolNames: ["symbol_context"] });
+
+    const catalogTool = queryToolCatalog({ toolNames: ["symbol_context"] }).tools[0];
+
+    expect(catalogTool).toEqual(
+      expect.objectContaining({
+        name: "symbol_context",
+        plane: "project",
+        phase: "gather",
+        pack: "large-repo",
+        risk: "execute",
+      }),
+    );
+    expect(catalogTool?.inputs).toEqual(
+      expect.arrayContaining([
+        "repoRoot",
+        "file",
+        "symbol",
+        "line",
+        "character",
+        "aspects",
+        "includeReferences",
+        "referencesLimit",
+        "referencesIncludeDeclaration",
+        "excludeExternal",
+        "sessionMode",
+        "startupTimeoutMs",
+        "requestTimeoutMs",
+      ]),
+    );
+    expect(admission.approval).toBe("required");
+    expect(admission.decisions[0]).toEqual(
+      expect.objectContaining({
+        toolName: "symbol_context",
+        risk: "execute",
+        approval: "required",
+        requiredPreflightTools: expect.arrayContaining(["action_policy_review"]),
+      }),
+    );
   });
 
   it("advertises objective freshness input for app-process status", () => {

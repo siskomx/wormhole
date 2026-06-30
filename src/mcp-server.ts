@@ -169,6 +169,8 @@ export function createWormholeMcpServer(
       }),
     }),
   });
+  const symbolContextAspectSchema = z.enum(["definition", "hover", "references"]);
+  const symbolContextSessionModeSchema = z.enum(["reuse", "one_shot"]);
   const actionPolicyOperationSchema = z.discriminatedUnion("kind", [
     z.object({
       kind: z.literal("command"),
@@ -2016,6 +2018,30 @@ export function createWormholeMcpServer(
       inputSchema: lspLocationSchema.shape,
     },
     async (input) => jsonResult(tools.lspNormalizeLocation(input)),
+  );
+
+  server.registerTool(
+    "symbol_context",
+    {
+      description:
+        "Return compact repo symbol context by merging static graph facts with live TypeScript LSP definition, hover, and optional capped references. May start a bounded language-server process.",
+      inputSchema: {
+        repoRoot: z.string(),
+        file: z.string().optional(),
+        symbol: z.string().optional(),
+        line: z.number().int().positive().optional(),
+        character: z.number().int().positive().optional(),
+        aspects: z.array(symbolContextAspectSchema).optional(),
+        includeReferences: z.boolean().optional(),
+        referencesLimit: z.number().int().nonnegative().optional(),
+        referencesIncludeDeclaration: z.boolean().optional(),
+        excludeExternal: z.boolean().optional(),
+        sessionMode: symbolContextSessionModeSchema.optional(),
+        startupTimeoutMs: z.number().int().positive().optional(),
+        requestTimeoutMs: z.number().int().positive().optional(),
+      },
+    },
+    async (input) => jsonResult(await tools.symbolContext(input)),
   );
 
   server.registerTool(

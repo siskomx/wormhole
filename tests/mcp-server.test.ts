@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { z } from "zod";
 import { createInMemoryKernel } from "../src/kernel.js";
 import { createWormholeMcpServer } from "../src/mcp-server.js";
 
@@ -63,6 +64,7 @@ describe("Wormhole MCP server", () => {
         "resume_validate",
         "resume_load",
         "lsp_feedback_replan",
+        "symbol_context",
         "agent_remit_create",
         "agent_capability_inventory",
         "agent_behavior_verify",
@@ -156,5 +158,23 @@ describe("Wormhole MCP server", () => {
       "requires human approval",
     );
     expect(registeredToolMetadata.code_smell_scan?.description).toContain("changed-files-only");
+    expect(registeredToolMetadata.symbol_context?.description).toContain("TypeScript LSP");
+  });
+
+  it("bounds symbol_context MCP schema enums and numeric controls", () => {
+    const server = createWormholeMcpServer(createInMemoryKernel());
+    const symbolContextTool = (server as unknown as {
+      _registeredTools: Record<string, { inputSchema: z.ZodType }>;
+    })._registeredTools.symbol_context;
+    const schema = symbolContextTool.inputSchema;
+
+    expect(schema.safeParse({ repoRoot: "/repo", referencesLimit: 0 }).success).toBe(true);
+    expect(schema.safeParse({ repoRoot: "/repo", aspects: ["definition", "bogus"] }).success).toBe(false);
+    expect(schema.safeParse({ repoRoot: "/repo", sessionMode: "sticky" }).success).toBe(false);
+    expect(schema.safeParse({ repoRoot: "/repo", line: 0 }).success).toBe(false);
+    expect(schema.safeParse({ repoRoot: "/repo", character: 0 }).success).toBe(false);
+    expect(schema.safeParse({ repoRoot: "/repo", referencesLimit: -1 }).success).toBe(false);
+    expect(schema.safeParse({ repoRoot: "/repo", startupTimeoutMs: 0 }).success).toBe(false);
+    expect(schema.safeParse({ repoRoot: "/repo", requestTimeoutMs: 0 }).success).toBe(false);
   });
 });
