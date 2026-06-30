@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getToolProfile } from "../src/tool-profiles.js";
-import { TOOL_REGISTRY, reviewToolAdmission } from "../src/tool-registry.js";
+import { TOOL_REGISTRY, reviewToolAdmission, type ToolRegistryEntry } from "../src/tool-registry.js";
 import {
   createToolPromotionRecord,
   reviewToolPromotion,
@@ -62,6 +62,61 @@ describe("tool promotion search", () => {
         }),
       );
     }
+  });
+
+  it("treats empty explicit tool names as normal search input", () => {
+    const withoutToolNames = searchToolsForPromotion({
+      profileId: "feature-implementation",
+      query: "patch",
+      limit: 10,
+    });
+    const withEmptyToolNames = searchToolsForPromotion({
+      profileId: "feature-implementation",
+      query: "patch",
+      toolNames: [],
+      limit: 10,
+    });
+
+    expect(withEmptyToolNames.promotedTools.map((candidate) => candidate.tool.name)).toEqual(
+      withoutToolNames.promotedTools.map((candidate) => candidate.tool.name),
+    );
+    expect(withEmptyToolNames.promotedTools.map((candidate) => candidate.tool.name)).toContain("patch_apply");
+  });
+
+  it("does not match query terms inside unrelated words", () => {
+    const result = searchToolsForPromotion({ query: "patch" });
+    const candidateNames = result.candidates.map((candidate) => candidate.tool.name);
+
+    expect(candidateNames).toContain("patch_apply");
+    expect(candidateNames).not.toContain("agent_dispatch");
+    expect(candidateNames).not.toContain("agent_dispatch_execute");
+  });
+
+  it("searches hyphenated metadata as free text", () => {
+    const registry: ToolRegistryEntry[] = [
+      {
+        name: "custom_lookup",
+        plane: "project",
+        phase: "gather",
+        pack: "large-repo",
+        risk: "read",
+        summary: "Find owned schema facts.",
+        inputs: ["workspace"],
+      },
+      {
+        name: "local_lookup",
+        plane: "project",
+        phase: "gather",
+        pack: "core",
+        risk: "read",
+        summary: "Find owned schema facts.",
+        inputs: ["workspace"],
+      },
+    ];
+
+    const result = searchToolsForPromotion({ query: "large-repo", registry });
+
+    expect(result.promotedTools.map((candidate) => candidate.tool.name)).toEqual(["custom_lookup"]);
   });
 
   it("hides out-of-profile tools unless an override includes a reason", () => {

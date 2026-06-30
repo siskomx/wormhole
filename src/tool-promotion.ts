@@ -109,11 +109,16 @@ export function searchToolsForPromotion(
   const activeRegistry = input.registry ?? registry;
   const profile = input.profileId ? getToolProfile(input.profileId) : undefined;
   const registryByName = new Map(activeRegistry.map((tool, index) => [tool.name, { tool, index }]));
-  const requestedToolNames = input.toolNames ? uniqueInOrder(input.toolNames) : undefined;
-  const unknownTools = requestedToolNames?.filter((toolName) => !registryByName.has(toolName)) ?? [];
+  const requestedToolNames = input.toolNames
+    ? uniqueInOrder(input.toolNames.map((toolName) => toolName.trim()).filter(Boolean))
+    : [];
+  const hasRequestedToolNames = requestedToolNames.length > 0;
+  const unknownTools = hasRequestedToolNames
+    ? requestedToolNames.filter((toolName) => !registryByName.has(toolName))
+    : [];
   const filters = promotionFilters(input);
   const terms = tokenize(`${input.query ?? ""} ${input.objective ?? ""}`);
-  const sourceTools = requestedToolNames
+  const sourceTools = hasRequestedToolNames
     ? requestedToolNames.flatMap((toolName, requestedIndex): ScoredTool[] => {
         const entry = registryByName.get(toolName);
         if (!entry || !matchesFilters(entry.tool, filters)) {
@@ -180,7 +185,7 @@ export function searchToolsForPromotion(
     }
   }
 
-  const orderedCandidates = requestedToolNames
+  const orderedCandidates = hasRequestedToolNames
     ? [...acceptedCandidates].sort((left, right) => left.requestedIndex - right.requestedIndex)
     : [...acceptedCandidates].sort(
         (left, right) => right.score - left.score || left.registryIndex - right.registryIndex,
@@ -287,20 +292,21 @@ function scoreTool(input: {
 
 function scoreTerm(tool: ToolRegistryEntry, term: string): number {
   let score = 0;
-  const name = tool.name.toLowerCase();
-  const summary = tool.summary.toLowerCase();
-  const inputs = tool.inputs.join(" ").toLowerCase();
+  const nameTerms = searchableTerms([tool.name]);
+  const summaryTerms = searchableTerms([tool.summary]);
+  const inputTerms = searchableTerms(tool.inputs);
+  const metadataTerms = searchableTerms([tool.plane, tool.phase, tool.pack, tool.risk]);
 
-  if (name.includes(term)) {
+  if (nameTerms.has(term)) {
     score += 10;
   }
-  if (summary.includes(term)) {
+  if (summaryTerms.has(term)) {
     score += 4;
   }
-  if (inputs.includes(term)) {
+  if (inputTerms.has(term)) {
     score += 2;
   }
-  if ([tool.plane, tool.phase, tool.pack, tool.risk].some((field) => field.toLowerCase() === term)) {
+  if (metadataTerms.has(term)) {
     score += 3;
   }
 
@@ -337,12 +343,28 @@ function matchesFilters(tool: ToolRegistryEntry, filters: ToolPromotionFilters):
 }
 
 function tokenize(value: string): string[] {
-  return uniqueInOrder(
+  return [...searchableTerms([value])];
+}
+
+function searchableTerms(values: readonly string[]): Set<string> {
+  const terms = new Set<string>();
+  for (const value of values) {
+    for (const chunk of normalizedSearchChunks(value)) {
+      terms.add(chunk);
+      for (const part of chunk.split(/[_-]+/).filter(Boolean)) {
+        terms.add(part);
+      }
+    }
+  }
+  return terms;
+}
+
+function normalizedSearchChunks(value: string): string[] {
+  return (
     value
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
       .toLowerCase()
-      .split(/[^a-z0-9_]+/)
-      .map((term) => term.trim())
-      .filter(Boolean),
+      .match(/[a-z0-9_-]+/g) ?? []
   );
 }
 
