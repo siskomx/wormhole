@@ -62,6 +62,8 @@ type SymbolDraft = {
   line: number;
 };
 
+const MAX_TREE_SITTER_NODES_PER_FILE = 100_000;
+
 export function extractRepoFileFacts(input: RepoFileExtractionInput): RepoFileExtractionResult {
   const treeSitterLanguage = treeSitterLanguageFor(input.path, input.language);
   if (!treeSitterLanguage) {
@@ -159,7 +161,19 @@ function extractTreeSitterFacts(
     callDrafts.push({ path: input.path, ...(callerName ? { callerName } : {}), calleeName, line });
   }
 
-  function visit(node: AstNode, currentFunctionName?: string): void {
+  const stack: Array<{ node: AstNode; currentFunctionName?: string }> = [{ node: rootNode }];
+  let visitedNodes = 0;
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) {
+      break;
+    }
+    visitedNodes += 1;
+    if (visitedNodes > MAX_TREE_SITTER_NODES_PER_FILE) {
+      break;
+    }
+    const { node, currentFunctionName } = current;
     const line = lineForOffset(lineStarts, node.startIndex);
     const symbolDrafts = symbolDraftsForNode(input.language, node, line);
     let childFunctionName = currentFunctionName;
@@ -179,15 +193,13 @@ function extractTreeSitterFacts(
       addCall(currentFunctionName, calleeName, line);
     }
 
-    for (let index = 0; index < node.namedChildCount; index += 1) {
+    for (let index = node.namedChildCount - 1; index >= 0; index -= 1) {
       const child = node.namedChild(index);
       if (child) {
-        visit(child, childFunctionName);
+        stack.push({ node: child, currentFunctionName: childFunctionName });
       }
     }
   }
-
-  visit(rootNode);
 
   return { symbols, edgeDrafts, callDrafts };
 }

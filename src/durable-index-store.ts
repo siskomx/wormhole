@@ -17,6 +17,12 @@ import {
   type RepoIndexSearchResult,
   type RepoIndexSummary,
 } from "./repo-index.js";
+import { createRepoFactGraphFromIndex } from "./repo-facts.js";
+import {
+  repoFactStoreStatus,
+  writeRepoFactGraph,
+  type RepoFactStoreStatus,
+} from "./repo-fact-store.js";
 import {
   buildSemanticIndex,
   semanticSearch,
@@ -36,6 +42,7 @@ export type DurableRepoIndexResult = {
   repoRoot: string;
   indexPath: string;
   sqliteIndexPath: string;
+  factGraph?: RepoFactStoreStatus;
   summary: RepoIndexSummary;
 };
 
@@ -54,6 +61,7 @@ export type DurableIndexStatus = {
     indexHealth: IndexHealthSnapshot;
   };
   sqliteIndex?: SqliteRepoIndexStatus;
+  factGraph?: RepoFactStoreStatus;
   semanticIndex?: {
     indexPath: string;
     recordCount: number;
@@ -122,13 +130,21 @@ export type DurableShardedRepoIndexQueryResult = RepoIndexQueryResult & {
 export function refreshDurableRepoIndex(input: RepoIndexBuildOptions): DurableRepoIndexResult {
   const repoRoot = path.resolve(input.repoRoot);
   const index = buildRepoIndex({ ...input, repoRoot });
+  return writeDurableRepoIndexArtifacts(index);
+}
+
+export function writeDurableRepoIndexArtifacts(index: RepoIndex): DurableRepoIndexResult {
+  const repoRoot = path.resolve(index.repoRoot);
   const indexPath = repoIndexPath(repoRoot);
   writeJson(indexPath, index);
   const sqliteIndexPath = writeSqliteRepoIndex(index);
+  writeRepoFactGraph(createRepoFactGraphFromIndex({ index }));
+  const factGraph = repoFactStoreStatus({ repoRoot, currentIndex: index });
   return {
     repoRoot,
     indexPath,
     sqliteIndexPath,
+    factGraph,
     summary: summarizeRepoIndex(index),
   };
 }
@@ -148,6 +164,11 @@ export function durableRepoIndexBuildOptions(
     maxFiles: index.buildOptions.maxFiles,
     maxFileBytes: index.buildOptions.maxFileBytes,
     maxTotalBytes: index.buildOptions.maxTotalBytes,
+    ...(index.buildOptions.maxDepth === undefined ? {} : { maxDepth: index.buildOptions.maxDepth }),
+    ...(index.buildOptions.maxDirs === undefined ? {} : { maxDirs: index.buildOptions.maxDirs }),
+    ...(index.buildOptions.maxElapsedMs === undefined
+      ? {}
+      : { maxElapsedMs: index.buildOptions.maxElapsedMs }),
   };
 }
 
@@ -157,6 +178,7 @@ export function refreshDurableIndexManifest(input: RepoIndexBuildOptions): Durab
   const indexPath = repoIndexPath(repoRoot);
   writeJson(indexPath, index);
   writeSqliteRepoIndex(index);
+  writeRepoFactGraph(createRepoFactGraphFromIndex({ index }));
 
   const lanes = PROJECT_LANES
     .map((lane) => {
@@ -220,6 +242,7 @@ export function durableIndexStatus(input: { repoRoot: string }): DurableIndexSta
   const repoRoot = path.resolve(input.repoRoot);
   const repoIndex = readJson<RepoIndex>(repoIndexPath(repoRoot));
   const sqliteIndex = readSqliteRepoIndexStatus(repoRoot);
+  const factGraph = repoFactStoreStatus({ repoRoot, currentIndex: repoIndex });
   const semanticIndex = readJson<SemanticIndex>(semanticIndexPath(repoRoot));
   const repoIndexFresh = repoIndex ? isRepoIndexFresh(repoIndex) : undefined;
   const repoIndexSummary = repoIndex ? summarizeRepoIndex(repoIndex) : undefined;
@@ -240,6 +263,7 @@ export function durableIndexStatus(input: { repoRoot: string }): DurableIndexSta
         }
       : {}),
     ...(sqliteIndex ? { sqliteIndex } : {}),
+    ...(factGraph.present ? { factGraph } : {}),
     ...(semanticIndex
       ? {
           semanticIndex: {
@@ -499,6 +523,10 @@ function createFilteredShard(index: RepoIndex, shardFilePaths: string[], fingerp
   return {
     ...index,
     fingerprint,
+    fingerprintEntries: [
+      `extractor:${index.extractorVersion ?? "unknown"}`,
+      ...files.map((file) => `indexed:${file.path}:${file.byteLength}:${file.hash}`),
+    ],
     files,
     symbols,
     edges,

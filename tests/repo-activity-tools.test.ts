@@ -84,6 +84,16 @@ describe("repo activity MCP tool handlers", () => {
 
     try {
       const tools = createToolHandlers(createInMemoryKernel(), { allowedRepoRoots: [repoRoot] });
+      tools.durableRepoIndexRefresh({ repoRoot });
+      writeFileSync(
+        path.join(repoRoot, "src", "app.ts"),
+        [
+          "export function runApp() {",
+          "  return 'new app';",
+          "}",
+          "",
+        ].join("\n"),
+      );
       const refresh = tools.repoGraphRefreshIncremental({
         repoRoot,
         changedFiles: ["src/app.ts"],
@@ -96,10 +106,12 @@ describe("repo activity MCP tool handlers", () => {
       const activity = tools.repoWatchStatus({ repoRoot });
 
       expect(refresh.changedFiles).toEqual(["src/app.ts"]);
-      expect(refresh.refreshMode).toBe("full_rebuild");
-      expect(refresh.incremental).toBe(false);
-      expect(refresh.compatibilityAlias).toBe(true);
-      expect(refresh.warnings).toContain("repo_graph_refresh_incremental performed a full rebuild; partial graph mutation is not implemented yet.");
+      expect(refresh.refreshMode).toBe("incremental");
+      expect(refresh.incremental).toBe(true);
+      expect(refresh.compatibilityAlias).toBe(false);
+      expect(refresh.reindexedFiles).toEqual(["src/app.ts"]);
+      expect(refresh.removedFiles).toEqual([]);
+      expect(refresh.warnings).toEqual([]);
       expect(fullRefresh.refreshMode).toBe("full_rebuild");
       expect(fullRefresh).not.toHaveProperty("compatibilityAlias", true);
       expect(refresh.index.summary.fileCount).toBe(2);

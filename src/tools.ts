@@ -89,6 +89,7 @@ import {
   type DiagnosticQuery,
 } from "./diagnostics.js";
 import { analyzeImpact } from "./impact-analysis.js";
+import { analyzeChangeImpact } from "./change-impact.js";
 import {
   detectProjectContract,
   type ProjectContract,
@@ -162,6 +163,7 @@ import {
   refreshDurableRepoIndex,
   refreshDurableSemanticIndex,
   searchDurableSemanticIndex,
+  writeDurableRepoIndexArtifacts,
 } from "./durable-index-store.js";
 import {
   queryDomainApi,
@@ -211,6 +213,12 @@ import {
   type MissionDeltaReplanInput,
 } from "./mission-delta-replan.js";
 import { analyzeTestImpactV2 } from "./test-impact-v2.js";
+import { refreshRepoIndexIncremental } from "./repo-index-incremental.js";
+import {
+  queryRepoRelations,
+  type RelationQueryInput,
+} from "./relation-query.js";
+import { hybridRepoSearch } from "./hybrid-repo-search.js";
 import { reconcileArtifacts, type ArtifactProposal } from "./reconciliation.js";
 import { createDagSchedule, type ScheduledTask } from "./scheduler.js";
 import { createShellHookManager, type ShellHookOperation, type ShellKind } from "./shell-hooks.js";
@@ -241,6 +249,13 @@ import {
   type WorkflowKind,
   type WorkflowInput,
 } from "./workflows.js";
+import {
+  evaluateEvidenceRequirements,
+  type EvidenceRequirementId,
+  type EvidenceRequirementRecord,
+} from "./evidence-requirements.js";
+import { auditToolSurface } from "./tool-surface-audit.js";
+import { planWorkflow, type PlanWorkflowInput } from "./workflow-planner.js";
 import { writeWorkflowArtifacts } from "./workflow-files.js";
 import type {
   GateFreshnessInput,
@@ -928,20 +943,58 @@ export function createToolHandlers(
     };
   }
 
-  function markIncrementalCompatibility<T extends ReturnType<typeof refreshRepoGraphForChangedFiles>>(
-    result: T,
-  ): T & {
-    incremental: false;
-    compatibilityAlias: true;
-    warnings: string[];
-  } {
+  function refreshRepoGraphIncrementalForChangedFiles(input: {
+    repoRoot: string;
+    changedFiles: string[];
+    diffText?: string;
+  }) {
+    const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+    const changedFiles = uniqueSorted(input.changedFiles.map((file) => repoRelativePath(repoRoot, file)));
+    const indexOptions = preservedRepoIndexOptions(repoRoot);
+    const incremental = refreshRepoIndexIncremental({
+      repoRoot,
+      changedFiles,
+      ...(indexOptions ? { buildOptions: indexOptions } : {}),
+    });
+    const index = writeDurableRepoIndexArtifacts(incremental.index);
+    clearRepoIndexCaches(repoRoot, indexOptions);
+    const testImpact = analyzeTestImpactV2({
+      repoRoot,
+      changedFiles,
+      diffText: input.diffText,
+    });
+    const activity = repoActivityStore.recordActivity({
+      repoRoot,
+      kind: "graph_refreshed",
+      summary: `Refreshed repo graph incrementally for changed files: ${changedFiles.join(", ")}.`,
+      paths: changedFiles,
+      metadata: {
+        refreshMode: incremental.refreshMode,
+        incremental: incremental.incremental,
+        fallbackReason: incremental.fallbackReason,
+        indexPath: index.indexPath,
+        fileCount: index.summary.fileCount,
+        edgeCount: index.summary.edgeCount,
+      },
+    });
     return {
-      ...result,
-      incremental: false,
-      compatibilityAlias: true,
-      warnings: [
-        "repo_graph_refresh_incremental performed a full rebuild; partial graph mutation is not implemented yet.",
-      ],
+      repoRoot,
+      changedFiles,
+      refreshMode: incremental.refreshMode,
+      incremental: incremental.incremental,
+      compatibilityAlias: false,
+      fallbackReason: incremental.fallbackReason,
+      previousFingerprint: incremental.previousFingerprint,
+      fingerprint: incremental.fingerprint,
+      extractorVersion: incremental.extractorVersion,
+      removedFiles: incremental.removedFiles,
+      reindexedFiles: incremental.reindexedFiles,
+      reusedFileCount: incremental.reusedFileCount,
+      index,
+      factGraph: incremental.factGraph,
+      testImpact,
+      activity,
+      warnings: incremental.warnings,
     };
   }
 
@@ -1056,6 +1109,7 @@ export function createToolHandlers(
       | undefined;
     let graph:
       | ReturnType<typeof refreshRepoGraphForChangedFiles>
+      | ReturnType<typeof refreshRepoGraphIncrementalForChangedFiles>
       | undefined;
     let context:
       | ReturnType<ReturnType<typeof createContextStore>["refreshPack"]>
@@ -1132,13 +1186,11 @@ export function createToolHandlers(
       if (input.refreshGraph || (input.refreshGraph !== false && changedFiles.length > 0)) {
         currentToolName = "repo_graph_refresh_incremental";
         if (changedFiles.length > 0) {
-          graph = markIncrementalCompatibility(
-            refreshRepoGraphForChangedFiles({
-              repoRoot,
-              changedFiles,
-              diffText: input.diffText,
-            }),
-          );
+          graph = refreshRepoGraphIncrementalForChangedFiles({
+            repoRoot,
+            changedFiles,
+            diffText: input.diffText,
+          });
           addAction({ toolName: "repo_graph_refresh_incremental", status: "ran" });
         } else {
           addAction({
@@ -1327,6 +1379,37 @@ export function createToolHandlers(
       : undefined;
   }
 
+  function evidenceRecordsForMission(missionId: string): EvidenceRequirementRecord[] {
+    return kernel
+      .evidenceRecords()
+      .filter((record) => record.missionId === missionId)
+      .flatMap((record) => {
+        const records: EvidenceRequirementRecord[] = [];
+        if (record.sourcePath) {
+          records.push({
+            kind: "source_paths",
+            summary: record.summary,
+          });
+        }
+        if (
+          /verification|test|typecheck|build/i.test(record.retrievalMethod) ||
+          /verification|test|typecheck|build/i.test(record.summary)
+        ) {
+          records.push({
+            kind: "verification_output",
+            summary: record.summary,
+          });
+        }
+        if (/gate/i.test(record.retrievalMethod) || /gate/i.test(record.summary)) {
+          records.push({
+            kind: "gate_decision",
+            summary: record.summary,
+          });
+        }
+        return records;
+      });
+  }
+
   return {
     missionStart(input: { objective: string; repoRoot: string }) {
       return kernel.startMission(input);
@@ -1390,6 +1473,10 @@ export function createToolHandlers(
       loopHealth?: GateLoopHealthInput;
       resume?: GateResumeInput;
       enforceResume?: boolean;
+      evidenceRequirements?: EvidenceRequirementId[];
+      completedTools?: string[];
+      evidenceKinds?: string[];
+      evidence?: EvidenceRequirementRecord[];
     }) {
       const storedSignals = latestMaintenanceSignalsForMission(input.missionId);
       // enforceResume blocks only on an existing resume validation: the A2-populated
@@ -1401,13 +1488,30 @@ export function createToolHandlers(
       const resume = baseResume
         ? { ...baseResume, enforce: input.enforceResume === true || baseResume.enforce === true }
         : undefined;
-      return kernel.requestGate(input.missionId, {
+      const gate = kernel.requestGate(input.missionId, {
         sourceConflicts: input.sourceConflicts ?? storedSignals?.sourceConflicts,
         freshness: input.freshness ?? storedSignals?.freshness,
         runtimeBehavior: input.runtimeBehavior,
         loopHealth: input.loopHealth,
         resume,
       });
+      if (!input.evidenceRequirements || input.evidenceRequirements.length === 0) {
+        return gate;
+      }
+      const evidenceEvaluation = evaluateEvidenceRequirements({
+        required: input.evidenceRequirements,
+        completedTools: input.completedTools,
+        evidenceKinds: input.evidenceKinds,
+        evidence: [
+          ...evidenceRecordsForMission(input.missionId),
+          ...(input.evidence ?? []),
+        ],
+      });
+      return {
+        ...gate,
+        evidenceRequirements: evidenceEvaluation,
+        missingEvidenceRecommendations: evidenceEvaluation.recommendedTools,
+      };
     },
 
     emitPlan(input: { missionId: string } & PlanInput) {
@@ -2297,7 +2401,7 @@ export function createToolHandlers(
       changedFiles: string[];
       diffText?: string;
     }) {
-      return markIncrementalCompatibility(refreshRepoGraphForChangedFiles(input));
+      return refreshRepoGraphIncrementalForChangedFiles(input);
     },
 
     repoGraphRefreshFull(input: {
@@ -2306,6 +2410,22 @@ export function createToolHandlers(
       diffText?: string;
     }) {
       return refreshRepoGraphForChangedFiles(input);
+    },
+
+    repoRelationQuery(input: RelationQueryInput) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return queryRepoRelations({ ...input, repoRoot });
+    },
+
+    repoIntelligenceSearch(input: {
+      repoRoot: string;
+      query: string;
+      changedFiles?: string[];
+      limit?: number;
+      requireFresh?: boolean;
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      return hybridRepoSearch({ ...input, repoRoot });
     },
 
     projectContractDetect(input: { repoRoot: string }): ProjectContract {
@@ -2399,6 +2519,18 @@ export function createToolHandlers(
       return analyzeImpact({ ...input, repoRoot, index: model.index });
     },
 
+    changeImpactAnalyze(input: {
+      repoRoot: string;
+      changedFiles: string[];
+      diffText?: string;
+      maxDepth?: number;
+      requireFresh?: boolean;
+    }) {
+      const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
+      const model = projectModelCache.get({ repoRoot });
+      return analyzeChangeImpact({ ...input, repoRoot, index: model.index });
+    },
+
     testPlanSelect(input: { repoRoot: string; changedFiles: string[]; tier?: VerificationCommand["tier"] }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       const model = projectModelCache.get({ repoRoot });
@@ -2419,7 +2551,7 @@ export function createToolHandlers(
       return runVerificationPlan(input);
     },
 
-    secretScan(input: { repoRoot?: string; source?: string; text?: string }) {
+    secretScan(input: { repoRoot?: string; source?: string; text?: string; maxFiles?: number; maxFileBytes?: number }) {
       if (input.text !== undefined) {
         return {
           findings: scanTextForSecrets({
@@ -2432,7 +2564,12 @@ export function createToolHandlers(
         throw new Error("secret_scan requires repoRoot or text");
       }
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      return scanRepoForSecrets({ repoRoot });
+      const result = scanRepoForSecrets({
+        repoRoot,
+        maxFiles: input.maxFiles,
+        maxFileBytes: input.maxFileBytes,
+      });
+      return result;
     },
 
     operationRiskReview(input: { command: string; args?: string[] }) {
@@ -2648,6 +2785,10 @@ export function createToolHandlers(
       return createRegistryToolExposureProfile(input);
     },
 
+    toolSurfaceAudit() {
+      return auditToolSurface({ registry: TOOL_REGISTRY });
+    },
+
     toolCatalogQuery(input: ToolCatalogQueryInput = {}) {
       return queryRegistryToolCatalog(input);
     },
@@ -2733,6 +2874,10 @@ export function createToolHandlers(
         repoRoot,
         workflow: createWorkflowByKind(input.workflow, { ...input, repoRoot }),
       });
+    },
+
+    workflowPlan(input: PlanWorkflowInput) {
+      return planWorkflow(input);
     },
 
     nextBestTool(input: Parameters<typeof recommendNextBestTool>[0]) {

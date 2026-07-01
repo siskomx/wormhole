@@ -30,6 +30,12 @@
       "name": "Implementation specificity",
       "description": "The plan gives concrete, ordered steps that a coding agent can execute in the repository.",
       "scale": [1, 2, 3, 4, 5]
+    },
+    {
+      "id": "large_repo_intelligence",
+      "name": "Large-repo intelligence",
+      "description": "The run uses relation, impact, search, and workflow evidence instead of broad ad hoc file scanning when repository scale makes that useful.",
+      "scale": [1, 2, 3, 4, 5]
     }
   ]
 }

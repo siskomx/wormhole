@@ -6,10 +6,13 @@ import { analyzeRepoGraph } from "../src/repo-graph-analysis.js";
 import {
   REPO_INDEX_EXTRACTOR_VERSION,
   buildRepoIndex,
+  createRepoIndexFingerprintFromEntries,
   explainRepoIndex,
+  extractRepoIndexFile,
   findRepoIndexPath,
   getRepoGraphReport,
   normalizeRepoIndexBuildOptions,
+  assembleRepoIndex,
   queryRepoIndex,
   summarizeRepoIndex,
 } from "../src/repo-index.js";
@@ -246,6 +249,43 @@ describe("repo index", () => {
     }
   });
 
+  it("exposes reusable file extraction and assembly helpers for incremental refresh", () => {
+    const repoRoot = createFixtureRepo();
+
+    try {
+      const full = buildRepoIndex({ repoRoot });
+      const serverFile = extractRepoIndexFile({ repoRoot, relativePath: "src/server.ts" });
+      const dbFile = extractRepoIndexFile({ repoRoot, relativePath: "src/db.ts" });
+
+      expect(serverFile?.path).toBe("src/server.ts");
+      expect(dbFile?.symbols.map((symbol) => symbol.name)).toContain("connectDatabase");
+
+      const assembled = assembleRepoIndex({
+        repoRoot,
+        buildOptions: full.buildOptions,
+        files: [serverFile, dbFile].filter((file): file is NonNullable<typeof file> => Boolean(file)),
+        fingerprintEntries: [
+          "extractor:ast-v1",
+          ...[serverFile, dbFile]
+            .filter((file): file is NonNullable<typeof file> => Boolean(file))
+            .map((file) => `indexed:${file.path}:${file.byteLength}:${file.hash}`),
+        ],
+      });
+
+      expect(assembled.extractorVersion).toBe(REPO_INDEX_EXTRACTOR_VERSION);
+      expect(assembled.fingerprint).toBe(createRepoIndexFingerprintFromEntries(assembled.fingerprintEntries ?? []));
+      expect(assembled.edges).toContainEqual(
+        expect.objectContaining({
+          from: "src/server.ts",
+          to: "src/db.ts",
+          kind: "imports",
+        }),
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("marks the index incomplete when files are skipped for size", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-index-skip-"));
     writeFileSync(path.join(repoRoot, "small.ts"), "export const small = true;\n");
@@ -267,6 +307,51 @@ describe("repo index", () => {
           skippedFileCount: 2,
         }),
       );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("marks the index degraded when traversal hits a depth limit", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-index-depth-"));
+    mkdirSync(path.join(repoRoot, "src", "feature", "deep"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "src", "shallow.ts"), "export const shallow = true;\n");
+    writeFileSync(path.join(repoRoot, "src", "feature", "deep", "hidden.ts"), "export const hidden = true;\n");
+
+    try {
+      const index = buildRepoIndex({ repoRoot, maxDepth: 2 });
+      const summary = summarizeRepoIndex(index);
+
+      expect(index.files.map((file) => file.path)).toContain("src/shallow.ts");
+      expect(index.files.map((file) => file.path)).not.toContain("src/feature/deep/hidden.ts");
+      expect(summary.truncated).toBe(true);
+      expect(summary.indexHealth.status).toBe("degraded");
+      expect(summary.indexHealth.reasons.join("\n")).toContain("depth_limit");
+      expect(summary.indexHealth.languageCoverage).toContainEqual(
+        expect.objectContaining({
+          language: "typescript",
+          totalFileCount: 1,
+          indexedFileCount: 1,
+        }),
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("returns a degraded partial index when elapsed time budget is exhausted", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-index-time-"));
+    for (let index = 0; index < 25; index += 1) {
+      writeFileSync(path.join(repoRoot, `module-${String(index).padStart(3, "0")}.ts`), `export const v${index} = ${index};\n`);
+    }
+
+    try {
+      const index = buildRepoIndex({ repoRoot, maxElapsedMs: 0 });
+      const summary = summarizeRepoIndex(index);
+
+      expect(summary.truncated).toBe(true);
+      expect(summary.indexHealth.status).toBe("degraded");
+      expect(summary.indexHealth.reasons.join("\n")).toContain("time_limit");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
@@ -541,6 +626,9 @@ describe("repo index", () => {
       expect(report.indexHealth.source).toBe("repo_index");
       expect(report.edgeCountsByProvenance.extracted).toBeGreaterThan(0);
       expect(report.markdown).toContain("## Native Repo Graph Report");
+      expect(report.markdown).toContain("### Index Health");
+      expect(report.markdown).toContain("- status:");
+      expect(report.markdown).toContain("- recommended action:");
       expect(report.topFiles[0]).toEqual(
         expect.objectContaining({
           path: expect.any(String),

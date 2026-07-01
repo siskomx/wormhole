@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.15.0 - 2026-07-01
+
+- Added large-repo intelligence gap-closure tools: canonical repo facts/fact store, typed relation queries, relation-aware change impact, hybrid repo-intelligence search, typed workflow planning, shared evidence requirements, and advisory tool-surface audit.
+- Routed large-repo workflows and agent context through `repo_intelligence_search` and `change_impact_analyze` before lower-level index/impact fallbacks.
+- Extended large-repo evals, benchmark rubric, capability relations, docs, and plugin guidance for relation, impact, search, workflow, evidence, and tool-surface coverage.
+
 ## 0.14.3 - 2026-06-30
 
 - Refused missing or stale persisted graph-node semantic indexes instead of returning empty search results that could be mistaken for complete coverage.
@@ -125,7 +131,7 @@
 
 - Added shared `indexHealth` metadata across repo index summaries/queries, durable index status/query results, project intelligence, context packs, and agent routing.
 - Added gate signal handling for index health: stale/missing indexes can block under enforcement, while degraded/truncated indexes remain warning-only.
-- Made `repo_graph_refresh_incremental` explicitly report that it is a full-rebuild compatibility alias, not a partial graph mutation engine.
+- Earlier builds made `repo_graph_refresh_incremental` explicit about full-rebuild fallback behavior; current builds perform partial refresh when the prior index, extractor version, and build options are safe.
 - Added durable repo-index `requireFresh` behavior for callers that want stale/missing durable results refused instead of warning-only.
 - Added opt-in repo-index `preset: "large_repo"` caps for native and durable index builds while preserving existing default caps.
 - Added SQLite FTS-backed durable repo-index retrieval when available, plus `ftsAvailable`, `retrievalModes`, and query `retrievalMode` metadata with LIKE/JSON fallback paths.

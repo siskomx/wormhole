@@ -15,6 +15,7 @@ import {
   type SourceProvenance,
 } from "./source-authority.js";
 import { analyzeSourceConflicts } from "./source-conflicts.js";
+import { planWorkflow, type PlannedWorkflow, type WorkflowIntent } from "./workflow-planner.js";
 
 export type WorkflowKind =
   | "workflow_start_feature"
@@ -132,6 +133,7 @@ export type WorkflowSequence = {
   verificationContract: WorkflowVerificationContract;
   requiredArtifacts: WorkflowArtifactRequirement[];
   resume: WorkflowResume;
+  planner: PlannedWorkflow;
   nextCalls: AgentToolCall[];
   phases: WorkflowPhase[];
   stateMaintenance: StateMaintenanceAdvice;
@@ -171,6 +173,11 @@ export function createFeatureWorkflow(input: WorkflowInput): WorkflowSequence {
       phase("orient", "Build the repo map and route before broad reads.", [
         toolCall("project_onboard", 100, "Collect project, safety, dependency, and policy signals.", {
           repoRoot: input.repoRoot,
+          changedFiles,
+        }),
+        toolCall("repo_intelligence_search", 95, "Search hybrid repo intelligence before broad file reads.", {
+          repoRoot: input.repoRoot,
+          query: input.query ?? input.objective,
           changedFiles,
         }),
         toolCall("architecture_map", 90, "Map modules, ownership, dependencies, and evidence.", {
@@ -222,7 +229,7 @@ export function createBugfixWorkflow(input: WorkflowInput): WorkflowSequence {
         source: input.diagnosticSource ?? "repro",
         output: "",
       }, ["failing output"]),
-      toolCall("blast_radius_analyze", 95, "Scope affected files and likely tests from the failing area.", {
+      toolCall("change_impact_analyze", 95, "Scope relation-backed impacted files and likely tests from the failing area.", {
         repoRoot: input.repoRoot,
         changedFiles,
         diffText: input.diffText,
@@ -247,6 +254,11 @@ export function createBugfixWorkflow(input: WorkflowInput): WorkflowSequence {
         }),
       ], ["Reproduction diagnostics"], ["diagnostics_from_command"]),
       phase("impact", "Bound the bug blast radius and likely tests.", [
+        toolCall("change_impact_analyze", 100, "Analyze relation-backed impacted files and tests.", {
+          repoRoot: input.repoRoot,
+          changedFiles,
+          diffText: input.diffText,
+        }),
         toolCall("blast_radius_analyze", 100, "Analyze affected files, modules, entrypoints, and tests.", {
           repoRoot: input.repoRoot,
           changedFiles,
@@ -301,7 +313,7 @@ export function createReviewWorkflow(input: WorkflowInput): WorkflowSequence {
       toolCall("repo_change_scan", 100, "Detect changed files and diff scope for review.", {
         repoRoot: input.repoRoot,
       }),
-      toolCall("blast_radius_analyze", 95, "Analyze the review blast radius.", {
+      toolCall("change_impact_analyze", 95, "Analyze relation-backed review impact.", {
         repoRoot: input.repoRoot,
         changedFiles,
         diffText: input.diffText,
@@ -323,6 +335,11 @@ export function createReviewWorkflow(input: WorkflowInput): WorkflowSequence {
         }),
       ], ["Changed-file and project context"], ["repo_change_scan"]),
       phase("impact", "Assess what the PR can affect.", [
+        toolCall("change_impact_analyze", 100, "Analyze relation-backed impacted files and tests.", {
+          repoRoot: input.repoRoot,
+          changedFiles,
+          diffText: input.diffText,
+        }),
         toolCall("blast_radius_analyze", 100, "Analyze impacted modules, entrypoints, and likely tests.", {
           repoRoot: input.repoRoot,
           changedFiles,
@@ -373,6 +390,10 @@ export function createOnboardingWorkflow(input: WorkflowInput): WorkflowSequence
       phase("orient", "Build the repo operating picture.", [
         toolCall("project_onboard", 100, "Collect contract, repo index, safety, dependency, and policy signals.", {
           repoRoot: input.repoRoot,
+        }),
+        toolCall("repo_intelligence_search", 97, "Search hybrid repo intelligence for onboarding context.", {
+          repoRoot: input.repoRoot,
+          query: input.query ?? input.objective,
         }),
         toolCall("architecture_map", 95, "Map modules and ownership.", {
           repoRoot: input.repoRoot,
@@ -439,6 +460,17 @@ function workflow(input: {
     featureIds: featureBindings.map((feature) => feature.featureId),
   });
   const requiredArtifacts = createRequiredArtifacts(runId);
+  const planner = planWorkflow({
+    repoRoot: input.input.repoRoot,
+    objective: input.input.objective,
+    reviewOnly: input.kind === "workflow_review_pr",
+    intent: workflowIntent(input.kind),
+    ...(input.input.query ? { query: input.input.query } : {}),
+    ...(input.input.changedFiles ? { changedFiles: input.input.changedFiles } : {}),
+    ...(input.kind === "workflow_fix_bug"
+      ? { observedFailure: input.input.diagnosticSource ?? true }
+      : {}),
+  });
   const verificationContract = createVerificationContract({
     workflow: input.kind,
     phases: input.phases,
@@ -487,11 +519,25 @@ function workflow(input: {
       exactNextAction,
       featureBindings,
     }),
+    planner,
     nextCalls: input.nextCalls,
     phases: input.phases,
     stateMaintenance: stateMaintenanceAdvice(),
     stopRule: input.stopRule,
   };
+}
+
+function workflowIntent(kind: WorkflowKind): WorkflowIntent {
+  switch (kind) {
+    case "workflow_start_feature":
+      return "feature_implementation";
+    case "workflow_fix_bug":
+      return "bug_fix";
+    case "workflow_review_pr":
+      return "code_review";
+    case "workflow_onboard_repo":
+      return "repo_onboarding";
+  }
 }
 
 function phase(

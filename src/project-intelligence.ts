@@ -13,6 +13,7 @@ import {
 } from "./repo-index.js";
 import type { IndexHealthSnapshot } from "./index-health.js";
 import { classifySourceProvenance } from "./source-authority.js";
+import { analyzeChangeImpact } from "./change-impact.js";
 import { analyzeTestImpactV2, type TestImpactV2Result } from "./test-impact-v2.js";
 
 export type ProjectObservationKind =
@@ -85,6 +86,7 @@ export type BlastRadiusFile = {
   moduleRoot: string;
   reasons: string[];
   confidence: number;
+  relationPath?: string[];
 };
 
 export type BlastRadiusAnalysis = {
@@ -453,6 +455,12 @@ function analyzeBlastRadiusFromModel(
     diffText: input.diffText,
     index: model.index,
   });
+  const relationImpact = analyzeChangeImpact({
+    repoRoot: model.repoRoot,
+    changedFiles,
+    diffText: input.diffText,
+    index: model.index,
+  });
   for (const symbol of impact.changedSymbols) {
     changedNodeIds.add(symbol.id);
   }
@@ -472,6 +480,14 @@ function analyzeBlastRadiusFromModel(
 
   for (const test of impact.likelyTests) {
     addImpactedFile(impacted, test.path, test.reason, test.confidence);
+  }
+
+  for (const file of relationImpact.impactedFiles) {
+    addImpactedFile(impacted, file.path, file.reason, file.confidence, file.relationPath);
+  }
+
+  for (const test of relationImpact.impactedTests) {
+    addImpactedFile(impacted, test.path, test.reason, test.confidence, test.relationPath);
   }
 
   const entrypoints = input.projectModelCache
@@ -513,8 +529,8 @@ function analyzeBlastRadiusFromModel(
     impactedEntrypoints,
     verification: {
       likelyTests: impact.likelyTests,
-      riskLevel: impact.riskLevel,
-      reasons: impact.reasons,
+      riskLevel: relationImpact.riskLevel,
+      reasons: uniqueSorted([...impact.reasons, ...relationImpact.warnings]),
     },
     evidence: [
       {
@@ -899,6 +915,7 @@ function addImpactedFile(
   repoPath: string,
   reason: string,
   confidence: number,
+  relationPath?: string[],
 ): void {
   const existing = impacted.get(repoPath) ?? {
     path: repoPath,
@@ -908,6 +925,9 @@ function addImpactedFile(
   };
   existing.reasons = uniqueSorted([...existing.reasons, reason]);
   existing.confidence = Math.max(existing.confidence, confidence);
+  if (relationPath && relationPath.length > 0) {
+    existing.relationPath = uniqueSorted([...(existing.relationPath ?? []), ...relationPath]);
+  }
   impacted.set(repoPath, existing);
 }
 

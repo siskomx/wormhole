@@ -16,6 +16,7 @@ describe("benchmark suite scaffolding", () => {
       "assumption_handling",
       "risk_awareness",
       "implementation_specificity",
+      "large_repo_intelligence",
     ]);
 
     for (const fixture of suite.fixtures) {

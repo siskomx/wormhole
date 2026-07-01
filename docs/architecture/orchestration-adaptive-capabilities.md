@@ -148,7 +148,7 @@ Project intelligence sequencing composes the ground-truth tools into a higher-le
 - `app_process_gate_check` blocks implementation or completion claims until provisional app-process drafts are accepted and required verification is reported.
 - `app_process_status` reads durable app-process run state, blocked gates, accepted sections, verification records, next action, and missing artifacts.
 - `app_process_accept_section`, `app_process_continue`, and `app_process_record_verification` persist the minimal run-controller loop: accept drafted sections, prepare one bounded story, and feed verification evidence back into the app-process gate.
-- `durable_repo_index_refresh`, `durable_index_status`, `durable_semantic_index_refresh`, and `durable_semantic_search` persist index data under `.wormhole/indexes`. Repo indexes are mirrored into `repo-index.sqlite` for large-repo query performance while retaining JSON exports and manifests for compatibility, inspection, and sharded fallback. Fresh SQLite writes create FTS tables when the runtime supports them; status exposes `ftsAvailable` and `retrievalModes`, and durable queries expose `retrievalMode` so agents can distinguish FTS, LIKE, full JSON, manifest JSON, and refused stale-result paths.
+- `durable_repo_index_refresh`, `durable_index_status`, `durable_semantic_index_refresh`, and `durable_semantic_search` persist index data under `.wormhole/indexes`. Repo indexes are mirrored into `repo-index.sqlite` for large-repo query performance while retaining JSON exports and manifests for compatibility, inspection, and sharded fallback. Fresh SQLite writes create FTS tables and canonical repo fact tables when the runtime supports them; status exposes `ftsAvailable`, `retrievalModes`, and fact freshness, and durable queries expose `retrievalMode` so agents can distinguish FTS, LIKE, full JSON, manifest JSON, and refused stale-result paths.
 - `test_impact_analyze_v2` maps unified diff hunks to changed symbols and confidence-scored test recommendations.
 - `mission_delta_replan` and `lsp_feedback_replan` re-scope missions from changed files, diagnostics, stale evidence, and LSP/typecheck feedback.
 - `dependency_security_report` summarizes package/lockfile metadata, direct and transitive counts, license data, and local-only vulnerability-provider status.
@@ -174,7 +174,10 @@ Wormhole now has native coordination tools for the mid-session states that usual
 - `state_maintenance_status` reads completed and failed maintenance records after reconnects or handoffs.
 - `state_maintenance_retry` reruns a previous maintenance input with optional corrected overrides.
 - `repo_graph_refresh_full` is the explicit full durable repo-index rebuild.
-- `repo_graph_refresh_incremental` is retained as a compatibility alias that currently performs the same full rebuild and returns `refreshMode: "full_rebuild"`, `incremental: false`, `compatibilityAlias: true`, and a warning while using changed files for impact analysis and activity metadata. It is not a partial graph-mutation engine yet.
+- `repo_graph_refresh_incremental` reuses retained durable repo-index file records, re-extracts changed files, prunes deleted files, recomputes relation edges, and persists refreshed SQLite/fact artifacts when the prior index, extractor version, and build options are safe for partial refresh. It falls back to `refreshMode: "full_rebuild"` with an explicit `fallbackReason` when partial refresh would be unsafe.
+- `repo_relation_query` reads canonical SQLite-backed repo facts by endpoint, relation kind, direction, and bounded graph path. It returns node/edge evidence, pagination cursors, stale-state warnings, and refuses results when `requireFresh` is set and fact/index freshness cannot be proven.
+- `repo_intelligence_search` fuses durable lexical/SQLite search, graph-node semantic search, and relation-neighbor evidence into one labeled result list. Agents should use it before lower-level repo-index, semantic, or graph search tools for large-repo lookup.
+- `change_impact_analyze` produces relation-backed impacted files, impacted tests, confidence scores, freshness warnings, and high-risk no-test signals for changed files.
 - `lsp_feedback_replan` normalizes LSP diagnostics, records them in runtime diagnostics, infers repo-relative changed files, and feeds `mission_delta_replan`.
 - `agent_workspace_create`, `agent_workspace_write`, `agent_workspace_read`, and `agent_workspace_merge` provide shared mission workspace memory for concurrent agents, with run attribution, provenance, snapshot persistence, and conflict detection.
 - `orchestration_policy_live_feedback` records live outcomes and returns bounded advisory hints. It does not train or activate learned policies; activation remains replay-gated through `orchestration_policy_evaluate` and `orchestration_policy_activate`.
@@ -187,6 +190,7 @@ The tools are:
 
 - `architecture_map`: groups indexed files into modules, attaches CODEOWNERS-style ownership, summarizes symbols, entrypoint counts, dependencies, dependents, and evidence.
 - `entrypoint_flow_discover`: detects API, CLI, worker, and package-script entrypoints and links them to downstream repo files through the native repo graph.
+- `change_impact_analyze`: maps changed files through repo facts and symbol references to impacted callers and tests.
 - `blast_radius_analyze`: maps changed files and diff hunks to changed symbols, impacted files, impacted modules, impacted entrypoints, and confidence-scored likely tests.
 - `context_pack_generate`: renders a task-scoped context pack from architecture, entrypoints, blast radius, and relevant source snippets within a caller-supplied character budget.
 - `repo_reachability_analyze`: runs read-only repo-wide reachability evidence collection for coding-agent deletion review. It combines repo-index edges, explicit or discovered entrypoints, workspace/package boundaries, dynamic import hints, framework/runtime conventions, manual known-used files, and optional Knip output, then returns `likely_used`, `manual_review`, `unknown`, and `candidate_remove_pending_review` categories. It never proves deletion safety; every candidate remains gated by `requiresHumanApproval: true`.
@@ -202,6 +206,7 @@ Wormhole now exposes a curated routing layer above the broad MCP tool surface. T
 The tools are:
 
 - `project_intelligence_snapshot`: returns a compact orientation snapshot, route recommendation, and default tool sequence.
+- `workflow_plan`: returns a typed deterministic plan with stages, tool contracts, required evidence, missing inputs, and stop rules.
 - `next_best_tool`: recommends the next Wormhole tool call from completed tools, task objective, and changed files.
 - `mission_route`: creates an ordered route through orientation, impact, context, verification, and gate stages.
 - `agent_context_prepare`: prepares a route, snapshot, context pack, immediate next calls, and agent instructions for the task.
@@ -210,7 +215,7 @@ The routing layer is advisory. It does not bypass evidence recording, verificati
 
 ### Tool Surface Compression
 
-Wormhole supports declarative capability profiles and advisory tool promotion for large MCP tool surfaces. Profiles define allowed tools, bootstrap tools, evidence expectations, verification gates, and recovery tools. `tool_search` ranks registry entries by query, filters, and profile fit; `tool_promote` records a mission/session-scoped promoted tool set in Wormhole runtime state. This is advisory in the first slice: registered MCP tools remain visible for compatibility, and out-of-profile use is recovered through explicit override reasons plus `tool_admission_review`.
+Wormhole supports declarative capability profiles, `tool_surface_audit`, and advisory tool promotion for large MCP tool surfaces. Profiles define allowed tools, bootstrap tools, evidence expectations, verification gates, and recovery tools. `tool_surface_audit` reports guided, expert, and catalog-only advisory tiers without hiding runtime tools. `tool_search` ranks registry entries by query, filters, and profile fit; `tool_promote` records a mission/session-scoped promoted tool set in Wormhole runtime state. This is advisory in the first slice: registered MCP tools remain visible for compatibility, and out-of-profile use is recovered through explicit override reasons plus `tool_admission_review`.
 
 ## External Agent Adapters
 

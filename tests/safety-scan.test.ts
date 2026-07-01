@@ -39,7 +39,61 @@ describe("safety scan", () => {
       const result = scanRepoForSecrets({ repoRoot });
 
       expect(result.findings.map((finding) => finding.source)).toEqual(["src/config.ts"]);
+      expect(result.candidateFiles).toBe(1);
       expect(result.scannedFiles).toBe(1);
+      expect(result.truncated).toBe(false);
+      expect(result.skippedFiles).toEqual([]);
+      expect(result.skipReasons).toEqual([]);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports deterministic skipped files and combined skip reasons", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-secret-scan-limits-"));
+    writeFileSync(path.join(repoRoot, "a-large.txt"), "x".repeat(12));
+    writeFileSync(path.join(repoRoot, "b-first.txt"), "OPENAI_API_KEY=placeholder\n");
+    writeFileSync(path.join(repoRoot, "c-over-limit.txt"), "OPENAI_API_KEY=placeholder\n");
+
+    try {
+      const result = scanRepoForSecrets({ repoRoot, maxFiles: 2, maxFileBytes: 4 });
+
+      expect(result.candidateFiles).toBe(2);
+      expect(result.scannedFiles).toBe(0);
+      expect(result.truncated).toBe(true);
+      expect(result.skippedFiles).toEqual([
+        { path: "c-over-limit.txt", reason: "file_limit" },
+        { path: "a-large.txt", reason: "file_size_limit" },
+        { path: "b-first.txt", reason: "file_size_limit" },
+      ]);
+      expect(result.skipReasons).toEqual(["file_limit", "file_size_limit"]);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports real env files generically during repository scans", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-secret-scan-env-"));
+    writeFileSync(path.join(repoRoot, ".env"), "OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz123456\n");
+    writeFileSync(path.join(repoRoot, ".env.example"), "OPENAI_API_KEY=\n");
+
+    try {
+      const result = scanRepoForSecrets({ repoRoot, maxFileBytes: 4 });
+      const serialized = JSON.stringify(result);
+
+      expect(result.findings).toContainEqual(
+        expect.objectContaining({
+          source: ".env",
+          secretType: "sensitive-env-file",
+          redacted: "[sensitive env file]",
+        }),
+      );
+      expect(result.scannedFiles).toBe(1);
+      expect(result.skippedFiles).toEqual([{ path: ".env.example", reason: "file_size_limit" }]);
+      expect(result.skipReasons).toEqual(["file_size_limit"]);
+      expect(serialized).not.toContain("openai-api-key");
+      expect(serialized).not.toContain("sk-proj");
+      expect(serialized).not.toContain("abcdefghijklmnopqrstuvwxyz123456");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

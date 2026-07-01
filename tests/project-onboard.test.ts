@@ -49,4 +49,63 @@ describe("project onboarding orchestration", () => {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
+
+  it("does not include real env names, values, or vendor labels in onboarding output", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-onboard-env-redaction-"));
+    writeFileSync(path.join(repoRoot, "package.json"), JSON.stringify({ scripts: { test: "vitest run tests" } }));
+    writeFileSync(path.join(repoRoot, "package-lock.json"), JSON.stringify({ packages: {} }));
+    writeFileSync(path.join(repoRoot, ".env.example"), "DATABASE_URL=\n");
+    writeFileSync(
+      path.join(repoRoot, ".env"),
+      "STRIPE_SECRET_KEY=not-a-real-payment-secret-placeholder\nPUBLIC_PORT=9999\n",
+    );
+
+    try {
+      const report = projectOnboard({ repoRoot });
+      const serialized = JSON.stringify(report);
+
+      expect(serialized).not.toContain("STRIPE_SECRET_KEY");
+      expect(serialized).not.toContain("sk_live");
+      expect(serialized).not.toContain("not-a-real-payment-secret-placeholder");
+      expect(serialized).not.toContain("stripe");
+      expect(serialized).not.toContain("9999");
+      expect(report.safety.findings).toContainEqual(
+        expect.objectContaining({
+          source: ".env",
+          secretType: "sensitive-env-file",
+          redacted: "[sensitive env file]",
+        }),
+      );
+      expect(report.safety.candidateFiles).toEqual(expect.any(Number));
+      expect(report.safety.truncated).toBe(false);
+      expect(report.safety.skipReasons).toEqual([]);
+      expect(report.safety.skippedFiles).toEqual([]);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports incomplete safety coverage without leaking skipped file contents", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-onboard-safety-coverage-"));
+    writeFileSync(path.join(repoRoot, "package.json"), JSON.stringify({ scripts: { test: "vitest run tests" } }));
+    writeFileSync(path.join(repoRoot, "package-lock.json"), JSON.stringify({ packages: {} }));
+    writeFileSync(
+      path.join(repoRoot, "large.txt"),
+      `${"x".repeat(300 * 1024)}\nHIDDEN_TOKEN=super-secret-value-that-must-not-leak\n`,
+    );
+
+    try {
+      const report = projectOnboard({ repoRoot });
+      const serialized = JSON.stringify(report.safety);
+
+      expect(report.safety.candidateFiles).toBeGreaterThanOrEqual(1);
+      expect(report.safety.truncated).toBe(true);
+      expect(report.safety.skippedFiles).toContainEqual({ path: "large.txt", reason: "file_size_limit" });
+      expect(report.safety.skipReasons).toEqual(["file_size_limit"]);
+      expect(serialized).not.toContain("super-secret-value");
+      expect(serialized).not.toContain("HIDDEN_TOKEN");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
 });

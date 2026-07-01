@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import {
   createIndexHealthSnapshot,
@@ -17,6 +17,11 @@ import {
   type RepoIndexEdgeDraft,
   type RepoIndexParserInfo,
 } from "./repo-index-extraction.js";
+import {
+  walkRepoFiles,
+  type RepoWalkSkipReason,
+  type RepoWalkSkipped,
+} from "./repo-walker.js";
 
 export type RepoIndexSymbolKind =
   | "function"
@@ -68,18 +73,34 @@ export type NormalizedRepoIndexBuildOptions = {
   maxFiles: number;
   maxFileBytes: number;
   maxTotalBytes: number;
+  maxDepth?: number;
+  maxDirs?: number;
+  maxElapsedMs?: number;
 };
 
 export type RepoIndex = {
   repoRoot: string;
   builtAt: string;
   buildOptions: NormalizedRepoIndexBuildOptions;
+  extractorVersion?: string;
   fingerprint: string;
+  fingerprintEntries?: string[];
   files: RepoIndexFile[];
   symbols: RepoIndexSymbol[];
   edges: RepoIndexEdge[];
   truncated: boolean;
   skippedFiles: string[];
+  skipReasons?: RepoWalkSkipReason[];
+};
+
+export type RepoIndexAssemblyInput = {
+  repoRoot: string;
+  buildOptions: NormalizedRepoIndexBuildOptions;
+  files: RepoIndexFile[];
+  skippedFiles?: string[];
+  skipReasons?: RepoWalkSkipReason[];
+  fingerprintEntries?: string[];
+  builtAt?: string;
 };
 
 export type RepoIndexBuildOptions = {
@@ -90,6 +111,9 @@ export type RepoIndexBuildOptions = {
   maxFiles?: number;
   maxFileBytes?: number;
   maxTotalBytes?: number;
+  maxDepth?: number;
+  maxDirs?: number;
+  maxElapsedMs?: number;
 };
 
 export type RepoIndexSummary = {
@@ -199,10 +223,23 @@ const LOCAL_RESOLUTION_EXTENSIONS = INDEXABLE_TEXT_EXTENSIONS;
 
 export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
   const repoRoot = path.resolve(options.repoRoot);
+  assertRepoRoot(repoRoot);
   const buildOptions = normalizeRepoIndexBuildOptions(options);
-  const candidateFiles = listCandidateFiles(repoRoot, buildOptions);
+  const startedAt = Date.now();
+  const candidateResult = listCandidateFiles(repoRoot, buildOptions);
+  const candidateFiles = candidateResult.files;
   const selectedFiles = candidateFiles.slice(0, buildOptions.maxFiles);
-  const skippedFiles = candidateFiles.slice(buildOptions.maxFiles);
+  const skippedFiles = [
+    ...candidateFiles.slice(buildOptions.maxFiles),
+    ...candidateResult.skipped.map((skipped) => skipped.path),
+  ];
+  const skipReasons = new Set<RepoWalkSkipReason>(candidateResult.reasons);
+  const fingerprintEntries = createRepoIndexFingerprintBaseEntries({
+    repoRoot,
+    buildOptions,
+    candidateFiles,
+    skippedByWalk: candidateResult.skipped,
+  });
   const files: RepoIndexFile[] = [];
   const symbols: RepoIndexSymbol[] = [];
   const edges: RepoIndexEdge[] = [];
@@ -210,7 +247,17 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
   const callDrafts: RepoIndexCallDraft[] = [];
   let totalBytes = 0;
 
+  function elapsedLimitHit(): boolean {
+    return buildOptions.maxElapsedMs !== undefined && Date.now() - startedAt >= buildOptions.maxElapsedMs;
+  }
+
   for (const relativePath of selectedFiles) {
+    if (elapsedLimitHit()) {
+      skippedFiles.push(relativePath);
+      skipReasons.add("time_limit");
+      fingerprintEntries.push(`skipped-by-time:${relativePath}`);
+      break;
+    }
     const absolutePath = path.join(repoRoot, relativePath);
     const stat = statSync(absolutePath);
     if (
@@ -218,6 +265,7 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
       totalBytes + stat.size > buildOptions.maxTotalBytes
     ) {
       skippedFiles.push(relativePath);
+      fingerprintEntries.push(`skipped-by-size:${relativePath}:${stat.size}:${stat.mtimeMs}`);
       continue;
     }
     totalBytes += stat.size;
@@ -237,6 +285,7 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
       symbols: fileSymbols,
       content,
     };
+    fingerprintEntries.push(`indexed:${relativePath}:${stat.size}:${file.hash}`);
     files.push(file);
     pushAll(symbols, fileSymbols);
     pushAll(
@@ -253,6 +302,98 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
     );
     pushAll(edgeDrafts, extracted.edgeDrafts);
     pushAll(callDrafts, extracted.callDrafts);
+  }
+
+  if (!elapsedLimitHit()) {
+    const knownFiles = new Set(files.map((file) => file.path));
+    for (const draft of edgeDrafts) {
+      const target = resolveEdgeTarget(draft, knownFiles);
+      if (!target) {
+        continue;
+      }
+      edges.push({
+        from: draft.from,
+        to: target,
+        kind: draft.kind,
+        provenance: "extracted",
+        confidence: 1,
+        line: draft.line,
+        label: draft.specifier,
+      });
+    }
+    pushAll(edges, extractReferenceEdges(files, symbols, edges));
+    pushAll(edges, extractCallEdges(files, symbols, edges, callDrafts));
+  } else {
+    skipReasons.add("time_limit");
+  }
+
+  return {
+    repoRoot,
+    builtAt: new Date().toISOString(),
+    buildOptions,
+    extractorVersion: REPO_INDEX_EXTRACTOR_VERSION,
+    fingerprint: createRepoIndexFingerprintFromEntries(fingerprintEntries),
+    fingerprintEntries,
+    files,
+    symbols,
+    edges,
+    truncated: candidateFiles.length > selectedFiles.length || skippedFiles.length > 0 || skipReasons.size > 0,
+    skippedFiles: uniqueSorted(skippedFiles),
+    skipReasons: [...skipReasons].sort((left, right) => left.localeCompare(right)),
+  };
+}
+
+export function extractRepoIndexFile(input: {
+  repoRoot: string;
+  relativePath: string;
+}): RepoIndexFile | undefined {
+  const repoRoot = path.resolve(input.repoRoot);
+  assertRepoRoot(repoRoot);
+  const relativePath = normalizeRepoRelativePath(input.relativePath);
+  if (!isSupportedTextPath(relativePath)) {
+    return undefined;
+  }
+  const absolutePath = path.join(repoRoot, relativePath);
+  const stat = statSync(absolutePath);
+  if (!stat.isFile()) {
+    return undefined;
+  }
+  const content = normalizeLineEndings(readFileSync(absolutePath, "utf8"));
+  return createRepoIndexFileFromContent({
+    relativePath,
+    content,
+    mtimeMs: stat.mtimeMs,
+  });
+}
+
+export function assembleRepoIndex(input: RepoIndexAssemblyInput): RepoIndex {
+  const repoRoot = path.resolve(input.repoRoot);
+  assertRepoRoot(repoRoot);
+  const files = [...input.files].sort((left, right) => left.path.localeCompare(right.path));
+  const symbols = files.flatMap((file) => file.symbols);
+  const edges: RepoIndexEdge[] = [];
+  const edgeDrafts: EdgeDraft[] = [];
+  const callDrafts: RepoIndexCallDraft[] = [];
+
+  for (const file of files) {
+    edges.push(
+      ...file.symbols.map((symbol) => ({
+        from: file.path,
+        to: symbol.id,
+        kind: "defines" as const,
+        provenance: "extracted" as const,
+        confidence: 1,
+        line: symbol.line,
+        label: symbol.name,
+      })),
+    );
+    const extracted = extractRepoFileFacts({
+      path: file.path,
+      language: file.language,
+      content: file.content,
+    });
+    edgeDrafts.push(...extracted.edgeDrafts);
+    callDrafts.push(...extracted.callDrafts);
   }
 
   const knownFiles = new Set(files.map((file) => file.path));
@@ -274,17 +415,40 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
   pushAll(edges, extractReferenceEdges(files, symbols, edges));
   pushAll(edges, extractCallEdges(files, symbols, edges, callDrafts));
 
+  const fingerprintEntries =
+    input.fingerprintEntries ??
+    createRepoIndexFingerprintEntriesFromFiles({
+      files,
+      skippedFiles: input.skippedFiles ?? [],
+    });
+
   return {
     repoRoot,
-    builtAt: new Date().toISOString(),
-    buildOptions,
-    fingerprint: createRepoIndexFingerprint(repoRoot, buildOptions),
+    builtAt: input.builtAt ?? new Date().toISOString(),
+    buildOptions: input.buildOptions,
+    extractorVersion: REPO_INDEX_EXTRACTOR_VERSION,
+    fingerprint: createRepoIndexFingerprintFromEntries(fingerprintEntries),
+    fingerprintEntries,
     files,
     symbols,
     edges,
-    truncated: candidateFiles.length > selectedFiles.length || skippedFiles.length > 0,
-    skippedFiles,
+    truncated: (input.skippedFiles?.length ?? 0) > 0 || (input.skipReasons?.length ?? 0) > 0,
+    skippedFiles: uniqueSorted(input.skippedFiles ?? []),
+    skipReasons: uniqueSorted(input.skipReasons ?? []) as RepoWalkSkipReason[],
   };
+}
+
+function assertRepoRoot(repoRoot: string): void {
+  try {
+    if (!statSync(repoRoot).isDirectory()) {
+      throw new Error(`Repo root is not a directory: ${repoRoot}`);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Repo root is not a directory:")) {
+      throw error;
+    }
+    throw new Error(`Repo root does not exist or cannot be read: ${repoRoot}`);
+  }
 }
 
 export function normalizeRepoIndexBuildOptions(
@@ -310,6 +474,9 @@ export function normalizeRepoIndexBuildOptions(
     maxFiles: options.maxFiles ?? presetLimits.maxFiles,
     maxFileBytes: options.maxFileBytes ?? presetLimits.maxFileBytes,
     maxTotalBytes: options.maxTotalBytes ?? presetLimits.maxTotalBytes,
+    ...(options.maxDepth === undefined ? {} : { maxDepth: options.maxDepth }),
+    ...(options.maxDirs === undefined ? {} : { maxDirs: options.maxDirs }),
+    ...(options.maxElapsedMs === undefined ? {} : { maxElapsedMs: options.maxElapsedMs }),
   };
 }
 
@@ -321,6 +488,9 @@ export function createRepoIndexCacheKey(options: RepoIndexBuildOptions): string 
 }
 
 export function isRepoIndexFresh(index: RepoIndex): boolean {
+  if (index.extractorVersion !== REPO_INDEX_EXTRACTOR_VERSION) {
+    return false;
+  }
   try {
     return index.fingerprint === createRepoIndexFingerprint(index.repoRoot, index.buildOptions);
   } catch {
@@ -351,6 +521,9 @@ export function createRepoIndexHealth(index: RepoIndex): IndexHealthSnapshot {
   const languageProfile = detectLanguageProfile({
     repoRoot: index.repoRoot,
     indexedFiles: index.files.map((file) => file.path),
+    maxDepth: index.buildOptions.maxDepth,
+    maxDirs: index.buildOptions.maxDirs,
+    maxElapsedMs: index.buildOptions.maxElapsedMs,
   });
   const parserFallbackCount = index.files.filter((file) =>
     file.parser?.reason?.startsWith("PARSER_FALLBACK:"),
@@ -359,6 +532,7 @@ export function createRepoIndexHealth(index: RepoIndex): IndexHealthSnapshot {
     parserFallbackCount > 0
       ? [`PARSER_FALLBACK: ${parserFallbackCount} parser-capable files used fallback extraction.`]
       : [];
+  const traversalReasons = (index.skipReasons ?? []).map((reason) => `repo_index_${reason}`);
   return createIndexHealthSnapshot({
     source: "repo_index",
     present: true,
@@ -368,11 +542,12 @@ export function createRepoIndexHealth(index: RepoIndex): IndexHealthSnapshot {
     fileCount: index.files.length,
     skippedFiles: index.skippedFiles,
     languageCoverage: languageProfile.languages,
-    reasons: [...languageProfile.health.reasons, ...parserReasons],
+    reasons: [...languageProfile.health.reasons, ...parserReasons, ...traversalReasons],
   });
 }
 
 export function getRepoGraphReport(index: RepoIndex): RepoGraphReport {
+  const indexHealth = createRepoIndexHealth(index);
   const edgeCountsByProvenance: Record<RepoIndexEdgeProvenance, number> = {
     extracted: 0,
     inferred: 0,
@@ -407,13 +582,21 @@ export function getRepoGraphReport(index: RepoIndex): RepoGraphReport {
     "### Top Files",
     "",
     ...topFiles.map((file) => `- ${file.path}: ${file.edgeCount} edges`),
+    "",
+    "### Index Health",
+    "",
+    `- status: ${indexHealth.status}`,
+    `- recommended action: ${indexHealth.recommendedAction}`,
+    `- truncated: ${indexHealth.truncated}`,
+    `- skipped files: ${indexHealth.skippedFileCount}`,
+    ...indexHealth.reasons.slice(0, 8).map((reason) => `- reason: ${reason}`),
   ].join("\n");
   return {
     summary,
     edgeCountsByProvenance,
     topFiles,
     markdown,
-    indexHealth: createRepoIndexHealth(index),
+    indexHealth,
   };
 }
 
@@ -599,196 +782,27 @@ export function findRepoIndexPath(
 
 function listCandidateFiles(
   repoRoot: string,
-  options: Pick<RepoIndexBuildOptions, "include" | "exclude">,
-): string[] {
-  const files: string[] = [];
-
-  function visit(directory: string): void {
-    const entries = readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
-      left.name.localeCompare(right.name),
-    );
-
-    for (const entry of entries) {
-      const absolutePath = path.join(directory, entry.name);
-      const relativePath = toRepoPath(path.relative(repoRoot, absolutePath));
-
-      if (entry.isDirectory()) {
-        if (DEFAULT_EXCLUDED_DIRECTORIES.has(entry.name) || matchesAny(relativePath, options.exclude)) {
-          continue;
-        }
-        visit(absolutePath);
-        continue;
-      }
-
-      if (
-        entry.isFile() &&
-        isSupportedTextPath(relativePath) &&
-        matchesInclude(relativePath, options.include) &&
-        !matchesAny(relativePath, options.exclude)
-      ) {
-        files.push(relativePath);
-      }
-    }
-  }
-
-  visit(repoRoot);
-  return files;
-}
-
-function extractSymbols(
-  relativePath: string,
-  language: string,
-  content: string,
-): RepoIndexSymbol[] {
-  const lineStarts = createLineStarts(content);
-  const symbols: RepoIndexSymbol[] = [];
-  const seen = new Set<string>();
-
-  function add(kind: RepoIndexSymbolKind, name: string, offset: number): void {
-    const cleanedName =
-      kind === "section" ? cleanMarkdownSymbolName(name) : cleanCodeSymbolName(name);
-    if (!cleanedName) {
-      return;
-    }
-    const line = lineForOffset(lineStarts, offset);
-    const key = `${cleanedName}:${line}`;
-    if (seen.has(key)) {
-      return;
-    }
-    seen.add(key);
-    symbols.push({
-      id: `${relativePath}#${cleanedName}:${line}`,
-      name: cleanedName,
-      kind,
-      path: relativePath,
-      line,
-    });
-  }
-
-  if (language === "markdown") {
-    for (const match of content.matchAll(/^(#{1,6})\s+(.+)$/gm)) {
-      add("section", match[2] ?? "", match.index ?? 0);
-    }
-    return symbols;
-  }
-
-  if (language === "typescript" || language === "javascript") {
-    addRegexMatches(content, /\b(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/g, "function", add);
-    addRegexMatches(content, /\b(?:export\s+)?class\s+([A-Za-z_$][\w$]*)\b/g, "class", add);
-    addRegexMatches(content, /\b(?:export\s+)?interface\s+([A-Za-z_$][\w$]*)\b/g, "interface", add);
-    addRegexMatches(content, /\b(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*=/g, "type", add);
-    addRegexMatches(
-      content,
-      /\b(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/g,
-      "function",
-      add,
-    );
-    addRegexMatches(content, /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g, "constant", add);
-  }
-
-  if (language === "python") {
-    addRegexMatches(content, /^(?:async\s+)?def\s+([A-Za-z_][\w]*)\s*\(/gm, "function", add);
-    addRegexMatches(content, /^class\s+([A-Za-z_][\w]*)\b/gm, "class", add);
-    addRegexMatches(content, /^([A-Z][A-Z0-9_]*)\s*=/gm, "constant", add);
-  }
-
-  if (language === "rust") {
-    addRegexMatches(
-      content,
-      /\b(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_][\w]*)\s*\(/g,
-      "function",
-      add,
-    );
-    addRegexMatches(content, /\b(?:pub(?:\([^)]*\))?\s+)?struct\s+([A-Za-z_][\w]*)\b/g, "class", add);
-    addRegexMatches(content, /\b(?:pub(?:\([^)]*\))?\s+)?enum\s+([A-Za-z_][\w]*)\b/g, "type", add);
-    addRegexMatches(content, /\b(?:pub(?:\([^)]*\))?\s+)?trait\s+([A-Za-z_][\w]*)\b/g, "interface", add);
-    addRegexMatches(content, /\b(?:pub(?:\([^)]*\))?\s+)?(?:const|static)\s+([A-Za-z_][\w]*)\s*:/g, "constant", add);
-  }
-
-  if (language === "csharp") {
-    addRegexMatches(content, /\b(?:public|private|protected|internal)?\s*(?:sealed\s+|abstract\s+|static\s+|partial\s+)*class\s+([A-Za-z_][\w]*)\b/g, "class", add);
-    addRegexMatches(content, /\b(?:public|private|protected|internal)?\s*(?:partial\s+)?interface\s+([A-Za-z_][\w]*)\b/g, "interface", add);
-    addRegexMatches(content, /\b(?:public|private|protected|internal)?\s*(?:readonly\s+)?(?:record|struct|enum)\s+([A-Za-z_][\w]*)\b/g, "type", add);
-    addRegexMatches(
-      content,
-      /\b(?:public|private|protected|internal)\s+(?:static\s+|async\s+|virtual\s+|override\s+|sealed\s+|new\s+|partial\s+)*[A-Za-z_][\w<>,\[\]?]*(?:\s+[A-Za-z_][\w<>,\[\]?]*)?\s+([A-Za-z_][\w]*)\s*\(/g,
-      "function",
-      add,
-    );
-  }
-
-  return symbols;
-}
-
-function addRegexMatches(
-  content: string,
-  regex: RegExp,
-  kind: RepoIndexSymbolKind,
-  add: (kind: RepoIndexSymbolKind, name: string, offset: number) => void,
-): void {
-  for (const match of content.matchAll(regex)) {
-    add(kind, match[1] ?? "", match.index ?? 0);
-  }
-}
-
-function extractEdgeDrafts(
-  relativePath: string,
-  language: string,
-  content: string,
-): EdgeDraft[] {
-  const lineStarts = createLineStarts(content);
-  const drafts: EdgeDraft[] = [];
-
-  function add(
-    kind: Extract<RepoIndexEdgeKind, "imports" | "links">,
-    specifier: string,
-    offset: number,
-  ): void {
-    if (!specifier) {
-      return;
-    }
-    drafts.push({
-      from: relativePath,
-      specifier,
-      kind,
-      line: lineForOffset(lineStarts, offset),
-    });
-  }
-
-  if (language === "typescript" || language === "javascript") {
-    for (const regex of [
-      /\bimport\s+(?:[^'"]+\s+from\s+)?["']([^"']+)["']/g,
-      /\bexport\s+[^'"]+\s+from\s+["']([^"']+)["']/g,
-      /\brequire\(\s*["']([^"']+)["']\s*\)/g,
-    ]) {
-      for (const match of content.matchAll(regex)) {
-        add("imports", match[1] ?? "", match.index ?? 0);
-      }
-    }
-  }
-
-  if (language === "python") {
-    for (const match of content.matchAll(/^\s*from\s+(\.+[A-Za-z0-9_.]*)\s+import\s+/gm)) {
-      add("imports", normalizePythonRelativeSpecifier(match[1] ?? ""), match.index ?? 0);
-    }
-  }
-
-  if (language === "rust") {
-    for (const match of content.matchAll(/^\s*(?:pub\s+)?mod\s+([A-Za-z_][\w]*)\s*;/gm)) {
-      add("imports", `./${match[1] ?? ""}`, match.index ?? 0);
-    }
-    for (const match of content.matchAll(/^\s*use\s+crate::([A-Za-z_][\w:]*)/gm)) {
-      add("imports", normalizeRustCrateSpecifier(relativePath, match[1] ?? ""), match.index ?? 0);
-    }
-  }
-
-  if (language === "markdown") {
-    for (const match of content.matchAll(/\[[^\]]+\]\(([^)#?]+)(?:[)#?][^)]*)?\)/g)) {
-      add("links", match[1] ?? "", match.index ?? 0);
-    }
-  }
-
-  return drafts;
+  options: Pick<
+    NormalizedRepoIndexBuildOptions,
+    "include" | "exclude" | "maxDepth" | "maxDirs" | "maxElapsedMs"
+  >,
+): { files: string[]; skipped: RepoWalkSkipped[]; reasons: RepoWalkSkipReason[] } {
+  const result = walkRepoFiles(repoRoot, {
+    excludedDirectories: DEFAULT_EXCLUDED_DIRECTORIES,
+    maxDepth: options.maxDepth,
+    maxDirs: options.maxDirs,
+    maxElapsedMs: options.maxElapsedMs,
+    shouldSkipDirectory: (relativePath) => matchesAny(relativePath, options.exclude),
+    shouldIncludeFile: (relativePath) =>
+      isSupportedTextPath(relativePath) &&
+      matchesInclude(relativePath, options.include) &&
+      !matchesAny(relativePath, options.exclude),
+  });
+  return {
+    files: result.files.map((file) => file.relativePath),
+    skipped: result.skipped,
+    reasons: result.reasons,
+  };
 }
 
 function extractReferenceEdges(
@@ -1193,29 +1207,6 @@ function matchesPattern(relativePath: string, pattern: string): boolean {
     );
 }
 
-function normalizePythonRelativeSpecifier(specifier: string): string {
-  const dots = specifier.match(/^\.+/)?.[0] ?? "";
-  const rest = specifier.slice(dots.length).replace(/\./g, "/");
-  if (dots.length <= 1) {
-    return `./${rest}`;
-  }
-  return `${"../".repeat(dots.length - 1)}${rest}`;
-}
-
-function normalizeRustCrateSpecifier(relativePath: string, modulePath: string): string {
-  const targetPath = path.posix.join("src", modulePath.replace(/::/g, "/"));
-  const relativeTarget = path.posix.relative(path.posix.dirname(relativePath), targetPath);
-  return relativeTarget.startsWith(".") ? relativeTarget : `./${relativeTarget}`;
-}
-
-function cleanCodeSymbolName(name: string): string {
-  return name.trim();
-}
-
-function cleanMarkdownSymbolName(name: string): string {
-  return name.replace(/[`*_]/g, "").trim();
-}
-
 function stripSpecifierSuffix(specifier: string): string {
   return specifier.split(/[?#]/, 1)[0] ?? "";
 }
@@ -1224,13 +1215,26 @@ function createRepoIndexFingerprint(
   repoRoot: string,
   options: NormalizedRepoIndexBuildOptions,
 ): string {
-  const candidateFiles = listCandidateFiles(repoRoot, options);
+  return createRepoIndexFingerprintFromEntries(createRepoIndexFingerprintEntries(repoRoot, options));
+}
+
+export function createRepoIndexFingerprintFromEntries(entries: readonly string[]): string {
+  return createHash("sha256").update(entries.join("\n")).digest("hex");
+}
+
+function createRepoIndexFingerprintEntries(
+  repoRoot: string,
+  options: NormalizedRepoIndexBuildOptions,
+): string[] {
+  const candidateResult = listCandidateFiles(repoRoot, options);
+  const candidateFiles = candidateResult.files;
   const selectedFiles = candidateFiles.slice(0, options.maxFiles);
-  const entries = [`extractor:${REPO_INDEX_EXTRACTOR_VERSION}`];
-  entries.push(...candidateFiles.slice(options.maxFiles).map((relativePath) => {
-    const stat = statSync(path.join(repoRoot, relativePath));
-    return `skipped-by-count:${relativePath}:${stat.size}:${stat.mtimeMs}`;
-  }));
+  const entries = createRepoIndexFingerprintBaseEntries({
+    repoRoot,
+    buildOptions: options,
+    candidateFiles,
+    skippedByWalk: candidateResult.skipped,
+  });
   let totalBytes = 0;
 
   for (const relativePath of selectedFiles) {
@@ -1247,7 +1251,37 @@ function createRepoIndexFingerprint(
     entries.push(`indexed:${relativePath}:${stat.size}:${contentHash}`);
   }
 
-  return createHash("sha256").update(entries.join("\n")).digest("hex");
+  return entries;
+}
+
+function createRepoIndexFingerprintBaseEntries(input: {
+  repoRoot: string;
+  buildOptions: NormalizedRepoIndexBuildOptions;
+  candidateFiles: string[];
+  skippedByWalk: RepoWalkSkipped[];
+}): string[] {
+  const entries = [`extractor:${REPO_INDEX_EXTRACTOR_VERSION}`];
+  entries.push(
+    ...input.skippedByWalk.map((skipped) => `skipped-by-walk:${skipped.reason}:${skipped.path}`),
+  );
+  entries.push(
+    ...input.candidateFiles.slice(input.buildOptions.maxFiles).map((relativePath) => {
+      const stat = statSync(path.join(input.repoRoot, relativePath));
+      return `skipped-by-count:${relativePath}:${stat.size}:${stat.mtimeMs}`;
+    }),
+  );
+  return entries;
+}
+
+function createRepoIndexFingerprintEntriesFromFiles(input: {
+  files: RepoIndexFile[];
+  skippedFiles: string[];
+}): string[] {
+  return [
+    `extractor:${REPO_INDEX_EXTRACTOR_VERSION}`,
+    ...input.skippedFiles.map((relativePath) => `skipped:${relativePath}`),
+    ...input.files.map((file) => `indexed:${file.path}:${file.byteLength}:${file.hash}`),
+  ];
 }
 
 function pushAll<T>(target: T[], values: T[]): void {
@@ -1255,6 +1289,10 @@ function pushAll<T>(target: T[], values: T[]): void {
   for (let index = 0; index < values.length; index += chunkSize) {
     target.push(...values.slice(index, index + chunkSize));
   }
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
 }
 
 function normalizePatternList(patterns?: string[]): string[] | undefined {
@@ -1292,6 +1330,10 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function normalizeRepoRelativePath(relativePath: string): string {
+  return toRepoPath(relativePath).replace(/^\.\//, "");
+}
+
 function normalizeLineEndings(content: string): string {
   return content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
@@ -1303,31 +1345,30 @@ function countLines(content: string): number {
   return content.split("\n").length;
 }
 
-function createLineStarts(content: string): number[] {
-  const starts = [0];
-  for (let index = 0; index < content.length; index += 1) {
-    if (content[index] === "\n") {
-      starts.push(index + 1);
-    }
-  }
-  return starts;
-}
-
-function lineForOffset(lineStarts: number[], offset: number): number {
-  let low = 0;
-  let high = lineStarts.length - 1;
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    const lineStart = lineStarts[mid] ?? 0;
-    if (lineStart <= offset) {
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-  return high + 1;
-}
-
 function toRepoPath(input: string): string {
   return input.replace(/\\/g, "/");
+}
+
+function createRepoIndexFileFromContent(input: {
+  relativePath: string;
+  content: string;
+  mtimeMs: number;
+}): RepoIndexFile {
+  const language = languageForPath(input.relativePath);
+  const extracted = extractRepoFileFacts({
+    path: input.relativePath,
+    language,
+    content: input.content,
+  });
+  return {
+    path: input.relativePath,
+    language,
+    parser: extracted.parser,
+    lineCount: countLines(input.content),
+    byteLength: Buffer.byteLength(input.content, "utf8"),
+    mtimeMs: input.mtimeMs,
+    hash: createHash("sha256").update(input.content).digest("hex"),
+    symbols: extracted.symbols,
+    content: input.content,
+  };
 }

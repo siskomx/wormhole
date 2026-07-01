@@ -49,7 +49,7 @@ Implemented `orchestration` capabilities include:
 - `orchestration.external-agent-adapters`: generic external agent registration, dispatch, status, interrupt, and completion records for systems such as Hermes Agent and Inflection Pi.
 - `orchestration.printing-press-cli-adapters`: Printing Press generated CLI registration, capability selection, structural verification, native execution, evidence capture, and conversion into Wormhole external agent workers.
 - `orchestration.printed-tool-runtime`: native printed-tool run records with stdout, stderr, exit code, timeout handling, and immutable evidence hashes.
-- `orchestration.repo-index-graph`: deterministic repo-local file, symbol, import, link, reference, provenance, confidence, query, explain, report, dependency-path, SQLite-backed durable query, and JSON compatibility index.
+- `orchestration.repo-index-graph`: deterministic repo-local file, symbol, import, link, reference, provenance, confidence, query, explain, report, dependency-path, SQLite-backed durable query, canonical repo fact tables, typed relation query, hybrid repo-intelligence search, real incremental refresh with explicit fallback reasons, and JSON compatibility index.
 - `orchestration.project-ground-truth-suite`: project contract detection, dependency inventory, structured diagnostics, impact-aware test planning, verification execution, safety scanning, deterministic semantic fallback search, and safe LSP config probes.
 - `orchestration.project-intelligence-sequencing`: one-shot project onboarding, process-local LSP sessions, durable repo and semantic indexes, diff-aware test impact, dependency security reports, action admission policy, and optimization adapter execution.
 - `orchestration.native-project-intelligence-spine`: native architecture maps, entrypoint flow discovery, blast-radius analysis, and task-scoped project context packs derived from typed repo observations with provenance.
@@ -77,9 +77,9 @@ Implemented `adaptive` capabilities include:
 
 - `adaptive.routing-model-selection`: fast/balanced/deep mode selection and model choice from provider manifests.
 - `adaptive.connector-registry`: capability-based connector discovery and selection.
-- `adaptive.graph-first-codebase-query`: query-first codebase discovery workflow that asks the repo graph before broad grep or raw file-reading passes.
-- `adaptive.agent-facing-routing`: curated project snapshots, next-tool recommendations, mission routes, and prepared context packs that keep agents off the full tool surface unless needed.
-- `adaptive.tool-surface-compression`: declarative task profiles, registry search, advisory tool promotion, and prepared-context tool-set compression over the broad MCP surface.
+- `adaptive.graph-first-codebase-query`: query-first codebase discovery workflow that asks `repo_intelligence_search`, canonical fact relations, and durable indexes before broad grep or raw file-reading passes.
+- `adaptive.agent-facing-routing`: curated project snapshots, typed workflow plans, next-tool recommendations, mission routes, and prepared context packs that keep agents off the full tool surface unless needed.
+- `adaptive.tool-surface-compression`: declarative task profiles, registry search, advisory tool-surface audit, advisory tool promotion, and prepared-context tool-set compression over the broad MCP surface.
 - `adaptive.model-profile-learning`: native model-profile registration, deterministic selection, outcome recording, and replayable route trace export.
 - `adaptive.required-python-runtime`: required Python runtime for deterministic graph metrics, graph communities, media extraction, model-profile trace summaries, and offline policy jobs, bounded by TypeScript-owned MCP schemas, startup probes, timeouts, and evidence hashes.
 - `adaptive.deterministic-conductor`: deterministic planner, worker, and verifier scaffolds with replayable conductor traces.

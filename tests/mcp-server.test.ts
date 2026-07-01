@@ -53,6 +53,7 @@ describe("Wormhole MCP server", () => {
         "repo_native_pack_build",
         "feature_slice_query",
         "tool_layer_map",
+        "tool_surface_audit",
         "tool_catalog_query",
         "next_best_tool",
         "mission_route",
@@ -110,8 +111,11 @@ describe("Wormhole MCP server", () => {
         "dependency_audit_live",
         "docs_sync_check",
         "workspace_graph_analyze",
+        "change_impact_analyze",
         "repo_graph_refresh_incremental",
         "repo_graph_refresh_full",
+        "repo_relation_query",
+        "repo_intelligence_search",
         "state_maintenance_run",
         "state_maintenance_status",
         "state_maintenance_retry",
@@ -141,6 +145,7 @@ describe("Wormhole MCP server", () => {
         "workflow_fix_bug",
         "workflow_review_pr",
         "workflow_onboard_repo",
+        "workflow_plan",
         "workflow_write_artifacts",
         "patch_checkpoint",
         "patch_apply",
@@ -176,5 +181,49 @@ describe("Wormhole MCP server", () => {
     expect(schema.safeParse({ repoRoot: "/repo", referencesLimit: -1 }).success).toBe(false);
     expect(schema.safeParse({ repoRoot: "/repo", startupTimeoutMs: 0 }).success).toBe(false);
     expect(schema.safeParse({ repoRoot: "/repo", requestTimeoutMs: 0 }).success).toBe(false);
+  });
+
+  it("exposes repo index traversal caps in MCP schemas", () => {
+    const server = createWormholeMcpServer(createInMemoryKernel());
+    const registeredTools = (server as unknown as {
+      _registeredTools: Record<string, { inputSchema: z.ZodType }>;
+    })._registeredTools;
+
+    for (const toolName of ["repo_index_build", "durable_repo_index_refresh", "durable_index_manifest_refresh"]) {
+      const schema = registeredTools[toolName]?.inputSchema;
+      const shape = (schema as unknown as { shape: Record<string, unknown> }).shape;
+
+      expect(Object.keys(shape)).toEqual(expect.arrayContaining(["maxDepth", "maxDirs", "maxElapsedMs"]));
+      expect(
+        schema.safeParse({
+          repoRoot: "/repo",
+          maxDepth: 0,
+          maxDirs: 1,
+          maxElapsedMs: 1,
+        }).success,
+      ).toBe(true);
+      expect(schema.safeParse({ repoRoot: "/repo", maxDepth: -1 }).success).toBe(false);
+      expect(schema.safeParse({ repoRoot: "/repo", maxDirs: 0 }).success).toBe(false);
+      expect(schema.safeParse({ repoRoot: "/repo", maxElapsedMs: 0 }).success).toBe(false);
+    }
+  });
+
+  it("exposes secret scan file caps in the MCP schema", () => {
+    const server = createWormholeMcpServer(createInMemoryKernel());
+    const secretScanTool = (server as unknown as {
+      _registeredTools: Record<string, { inputSchema: z.ZodType }>;
+    })._registeredTools.secret_scan;
+    const shape = (secretScanTool.inputSchema as unknown as { shape: Record<string, unknown> }).shape;
+
+    expect(Object.keys(shape)).toEqual(expect.arrayContaining(["maxFiles", "maxFileBytes"]));
+    expect(
+      secretScanTool.inputSchema.safeParse({
+        repoRoot: "/repo",
+        maxFiles: 1,
+        maxFileBytes: 128,
+      }).success,
+      ).toBe(true);
+    expect(secretScanTool.inputSchema.safeParse({ repoRoot: "/repo", maxFiles: 0 }).success).toBe(false);
+    expect(secretScanTool.inputSchema.safeParse({ repoRoot: "/repo", maxFileBytes: 0 }).success).toBe(false);
   });
 });

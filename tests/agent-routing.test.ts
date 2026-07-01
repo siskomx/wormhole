@@ -110,8 +110,10 @@ describe("agent-facing routing tools", () => {
       expect(snapshot.toolSequence.map((call) => call.toolName)).toEqual(
         expect.arrayContaining([
           "project_onboard",
+          "repo_intelligence_search",
           "architecture_map",
           "entrypoint_flow_discover",
+          "change_impact_analyze",
           "blast_radius_analyze",
           "context_pack_generate",
         ]),
@@ -128,24 +130,34 @@ describe("agent-facing routing tools", () => {
         repoRoot,
         objective: "Change user loading behavior",
         changedFiles: ["src/services/user-service.ts"],
-        completedTools: ["project_onboard", "architecture_map", "entrypoint_flow_discover"],
+        completedTools: ["project_onboard"],
       });
       const second = recommendNextBestTool({
         repoRoot,
         objective: "Change user loading behavior",
         changedFiles: ["src/services/user-service.ts"],
+        completedTools: ["project_onboard", "architecture_map", "entrypoint_flow_discover"],
+      });
+      const third = recommendNextBestTool({
+        repoRoot,
+        objective: "Change user loading behavior",
+        changedFiles: ["src/services/user-service.ts"],
         completedTools: [
           "project_onboard",
+          "repo_intelligence_search",
           "architecture_map",
           "entrypoint_flow_discover",
+          "change_impact_analyze",
           "blast_radius_analyze",
         ],
       });
 
-      expect(first.recommended.toolName).toBe("blast_radius_analyze");
+      expect(first.recommended.toolName).toBe("repo_intelligence_search");
       expect(first.recommended.input.changedFiles).toEqual(["src/services/user-service.ts"]);
-      expect(second.recommended.toolName).toBe("context_pack_generate");
-      expect(second.alternatives.map((call) => call.toolName)).toContain("test_impact_analyze_v2");
+      expect(second.recommended.toolName).toBe("repo_intelligence_search");
+      expect(second.alternatives.map((call) => call.toolName)).toContain("repo_index_query");
+      expect(third.recommended.toolName).toBe("context_pack_generate");
+      expect(third.alternatives.map((call) => call.toolName)).toContain("test_impact_analyze_v2");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
@@ -157,7 +169,7 @@ describe("agent-facing routing tools", () => {
       const next = recommendNextBestTool({
         repoRoot,
         objective: "Find unused dead code and remove stale files",
-        completedTools: ["project_onboard", "architecture_map", "entrypoint_flow_discover"],
+        completedTools: ["project_onboard", "repo_intelligence_search", "architecture_map", "entrypoint_flow_discover"],
       });
 
       expect(next.recommended.toolName).toBe("repo_reachability_analyze");
@@ -186,6 +198,12 @@ describe("agent-facing routing tools", () => {
       ]);
       expect(route.stages.flatMap((stage) => stage.toolCalls.map((call) => call.toolName))).toEqual(
         expect.arrayContaining(["architecture_map", "blast_radius_analyze", "context_pack_generate", "verification_run"]),
+      );
+      expect(route.stages[0]?.toolCalls.map((call) => call.toolName)).toEqual(
+        expect.arrayContaining(["project_onboard", "repo_intelligence_search", "architecture_map"]),
+      );
+      expect(route.stages[1]?.toolCalls.map((call) => call.toolName)).toEqual(
+        expect.arrayContaining(["change_impact_analyze", "blast_radius_analyze", "test_impact_analyze_v2"]),
       );
       expect(route.stateMaintenance.discovery.firstTools).toEqual([
         "tool_layer_map",
@@ -221,8 +239,11 @@ describe("agent-facing routing tools", () => {
         "agent_context_prepare",
         "mission_route",
         "tool_promote",
+        "project_onboard",
+        "repo_intelligence_search",
         "architecture_map",
         "entrypoint_flow_discover",
+        "change_impact_analyze",
         "blast_radius_analyze",
         "test_impact_analyze_v2",
         "verification_run",
@@ -277,7 +298,9 @@ describe("agent-facing routing tools", () => {
       expect(runtimeAuditInput.recommendedTools.map((tool) => tool.toolName)).toEqual(
         expect.arrayContaining([
           "project_onboard",
+          "repo_intelligence_search",
           "architecture_map",
+          "change_impact_analyze",
           "context_pack_generate",
           "test_plan_select",
           "verification_run",
@@ -314,6 +337,9 @@ describe("agent-facing routing tools", () => {
       expect(prepared.agentInstructions).toContain("Start with tool_layer_map before browsing the full MCP surface.");
       expect(prepared.agentInstructions).toContain(
         "Use tool_search and tool_promote to keep the active tool set small before selecting lower-level tools.",
+      );
+      expect(prepared.agentInstructions).toContain(
+        "Use repo_intelligence_search before lower-level repo_index_query or durable_repo_index_query for task-specific large-repo lookup.",
       );
       expect(prepared.agentInstructions).toContain("Selected tool profile: feature-implementation.");
       expect(prepared.agentInstructions).toContain(

@@ -102,6 +102,28 @@ describe("tool capability profiles", () => {
     );
   });
 
+  it("starts large-repo intelligence from high-level relation-aware primitives", () => {
+    const profile = getToolProfile("large-repo-intelligence");
+
+    expect(profile?.allowedTools.slice(5, 14)).toEqual([
+      "project_onboard",
+      "repo_intelligence_search",
+      "repo_relation_query",
+      "change_impact_analyze",
+      "context_pack_generate",
+      "test_plan_select",
+      "verification_run",
+      "record_evidence",
+      "gate_request",
+    ]);
+    expect(profile?.allowedTools).toEqual(
+      expect.arrayContaining(["repo_index_query", "durable_repo_index_query", "graph_node_semantic_search"]),
+    );
+    expect(profile?.requiredEvidence).toEqual(
+      expect.arrayContaining(["repo_facts_fresh", "relation_paths", "impact_analysis", "verification_output"]),
+    );
+  });
+
   it("requires recovery tools to be allowed profile tools", () => {
     const base = TOOL_CAPABILITY_PROFILES[0]!;
     const invalid = validateToolProfiles(

@@ -7,6 +7,24 @@ function readJson<T>(filePath: string): T {
 }
 
 describe("repo-local Codex plugin metadata", () => {
+  it("keeps source package and plugin versions aligned", () => {
+    const packageJson = readJson<{ version: string }>(path.resolve("package.json"));
+    const packageLock = readJson<{ version: string; packages: { "": { version: string } } }>(
+      path.resolve("package-lock.json"),
+    );
+    const codexPlugin = readJson<{ version: string }>(
+      path.resolve("plugins/wormhole/.codex-plugin/plugin.json"),
+    );
+    const claudeDesktopManifest = readJson<{ version: string }>(
+      path.resolve("plugins/wormhole-claude-desktop/manifest.json"),
+    );
+
+    expect(packageLock.version).toBe(packageJson.version);
+    expect(packageLock.packages[""].version).toBe(packageJson.version);
+    expect(codexPlugin.version).toBe(packageJson.version);
+    expect(claudeDesktopManifest.version).toBe(packageJson.version);
+  });
+
   it("declares the Wormhole MCP server without TODO placeholders", () => {
     const plugin = readJson<{
       name: string;

@@ -88,6 +88,7 @@ describe("tool registry conformance", () => {
     expect(layerMap.entryTools).toEqual(
       expect.arrayContaining([
         "tool_layer_map",
+        "tool_surface_audit",
         "tool_catalog_query",
         "workflow_start_feature",
         "tool_profile_list",
@@ -97,6 +98,7 @@ describe("tool registry conformance", () => {
         "workflow_fix_bug",
         "workflow_review_pr",
         "workflow_onboard_repo",
+        "workflow_plan",
         "workflow_write_artifacts",
         "resume_record",
         "resume_checkpoint",
@@ -113,10 +115,9 @@ describe("tool registry conformance", () => {
     expect(projectOrient.tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining(["project_onboard", "architecture_map", "entrypoint_flow_discover"]),
     );
-    expect(coreDiscovery.tools.map((tool) => tool.name)).toEqual([
-      "tool_layer_map",
-      "tool_catalog_query",
-    ]);
+    expect(coreDiscovery.tools.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["tool_layer_map", "tool_catalog_query"]),
+    );
   });
 
   it("reports optional exposure profiles without changing the guided default", () => {
@@ -130,6 +131,7 @@ describe("tool registry conformance", () => {
       expect.arrayContaining([
         "mission_start",
         "tool_layer_map",
+        "tool_surface_audit",
         "tool_catalog_query",
         "tool_profile_list",
         "tool_profile_get",
@@ -142,6 +144,7 @@ describe("tool registry conformance", () => {
         "workflow_fix_bug",
         "workflow_review_pr",
         "workflow_onboard_repo",
+        "workflow_plan",
         "workflow_write_artifacts",
         "resume_record",
         "resume_checkpoint",
@@ -158,6 +161,7 @@ describe("tool registry conformance", () => {
   it("advertises tool profile and promotion metadata", () => {
     const catalog = queryToolCatalog({
       toolNames: [
+        "tool_surface_audit",
         "tool_profile_list",
         "tool_profile_get",
         "tool_search",
@@ -167,6 +171,14 @@ describe("tool registry conformance", () => {
     });
 
     expect(catalog.tools).toEqual([
+      expect.objectContaining({
+        name: "tool_surface_audit",
+        plane: "mission",
+        phase: "orient",
+        pack: "core",
+        risk: "read",
+        inputs: ["none"],
+      }),
       expect.objectContaining({
         name: "tool_profile_list",
         plane: "policy",
@@ -304,6 +316,62 @@ describe("tool registry conformance", () => {
     expect(inputsByName.get("durable_repo_index_query")).toContain("requireFresh");
   });
 
+  it("advertises relation-aware change impact as a high-level read tool", () => {
+    const catalog = queryToolCatalog({ toolNames: ["change_impact_analyze"] });
+
+    expect(catalog.tools).toEqual([
+      expect.objectContaining({
+        name: "change_impact_analyze",
+        plane: "project",
+        phase: "impact",
+        pack: "large-repo",
+        risk: "read",
+        inputs: expect.arrayContaining(["changedFiles", "requireFresh"]),
+      }),
+    ]);
+  });
+
+  it("advertises hybrid repo intelligence search as a high-level read tool", () => {
+    const catalog = queryToolCatalog({ toolNames: ["repo_intelligence_search"] });
+
+    expect(catalog.tools).toEqual([
+      expect.objectContaining({
+        name: "repo_intelligence_search",
+        plane: "project",
+        phase: "gather",
+        pack: "large-repo",
+        risk: "read",
+        inputs: expect.arrayContaining(["query", "changedFiles", "requireFresh"]),
+      }),
+    ]);
+  });
+
+  it("advertises traversal caps for repo index build and durable refresh metadata", () => {
+    const catalog = queryToolCatalog({
+      toolNames: ["repo_index_build", "durable_repo_index_refresh", "durable_index_manifest_refresh"],
+    });
+    const inputsByName = new Map(catalog.tools.map((tool) => [tool.name, tool.inputs]));
+
+    for (const toolName of ["repo_index_build", "durable_repo_index_refresh", "durable_index_manifest_refresh"]) {
+      expect(inputsByName.get(toolName)).toEqual(expect.arrayContaining(["maxDepth", "maxDirs", "maxElapsedMs"]));
+    }
+  });
+
+  it("advertises project_onboard as a write-risk persist tool with explicit inputs", () => {
+    const projectOnboard = queryToolCatalog({ toolNames: ["project_onboard"] }).tools[0];
+
+    expect(projectOnboard).toEqual(
+      expect.objectContaining({
+        name: "project_onboard",
+        risk: "write",
+      }),
+    );
+    expect(projectOnboard?.summary).toContain("persist");
+    expect(projectOnboard?.inputs).toEqual(
+      expect.arrayContaining(["repoRoot", "changedFiles", "diffText", "semanticRecords", "semanticQuery", "action"]),
+    );
+  });
+
   it("advertises symbol context as live LSP-backed large-repo context", () => {
     const admission = reviewToolAdmission({ toolNames: ["symbol_context"] });
 
@@ -411,6 +479,8 @@ describe("tool registry conformance", () => {
         "graph_wiki_generate",
         "graph_node_semantic_index_refresh",
         "graph_node_semantic_search",
+        "repo_relation_query",
+        "repo_intelligence_search",
         "flows_refresh",
         "list_flows",
         "get_flow",
@@ -425,6 +495,8 @@ describe("tool registry conformance", () => {
         expect.objectContaining({ name: "get_surprising_connections", risk: "read", phase: "impact" }),
         expect.objectContaining({ name: "graph_wiki_generate", plane: "project", pack: "large-repo" }),
         expect.objectContaining({ name: "graph_node_semantic_search", risk: "read", phase: "gather" }),
+        expect.objectContaining({ name: "repo_relation_query", risk: "read", phase: "gather" }),
+        expect.objectContaining({ name: "repo_intelligence_search", risk: "read", phase: "gather" }),
         expect.objectContaining({ name: "flows_refresh", risk: "write", phase: "maintain" }),
         expect.objectContaining({ name: "list_flows", risk: "read", phase: "gather" }),
         expect.objectContaining({ name: "get_flow", risk: "read", phase: "gather" }),

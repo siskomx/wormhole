@@ -58,6 +58,46 @@ describe("project contract detection", () => {
     }
   });
 
+  it("redacts real env files while preserving template env names and ports", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-contract-env-redaction-"));
+    try {
+      writeFileSync(path.join(repoRoot, ".env.example"), "PUBLIC_PORT=3000\nDATABASE_URL=\n");
+      writeFileSync(path.join(repoRoot, ".env"), "STRIPE_SECRET_KEY=not-a-real-payment-secret-placeholder\nPUBLIC_PORT=9999\n");
+      writeFileSync(path.join(repoRoot, ".env.production.local"), "WEBROOT_PASSWORD=super-secret\n");
+      writeFileSync(
+        path.join(repoRoot, "docker-compose.yml"),
+        [
+          "services:",
+          "  api:",
+          "    environment:",
+          "      OPENAI_API_KEY: ${OPENAI_API_KEY}",
+          "    ports:",
+          '      - "8080:3000"',
+          "",
+        ].join("\n"),
+      );
+
+      const contract = detectProjectContract({ repoRoot });
+      const serialized = JSON.stringify(contract);
+
+      expect(contract.envVars.map((envVar) => envVar.name)).toEqual(["DATABASE_URL", "PUBLIC_PORT"]);
+      expect(contract.envSources).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ source: ".env.example", sensitive: false, varCount: 2 }),
+          expect.objectContaining({ source: ".env", sensitive: true, varCount: 2 }),
+          expect.objectContaining({ source: ".env.production.local", sensitive: true, varCount: 1 }),
+        ]),
+      );
+      expect(contract.ports).toEqual([3000, 8080]);
+      expect(serialized).not.toContain("STRIPE_SECRET_KEY");
+      expect(serialized).not.toContain("WEBROOT_PASSWORD");
+      expect(serialized).not.toContain("OPENAI_API_KEY");
+      expect(serialized).not.toContain("9999");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("detects Cargo, Tauri, and Rust language requirements", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-contract-rust-"));
     try {

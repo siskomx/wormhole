@@ -1,5 +1,7 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { isSensitiveEnvFilePath } from "./env-files.js";
+import { walkRepoFiles, type RepoWalkSkipReason, type RepoWalkSkipped } from "./repo-walker.js";
 
 export type SecretSeverity = "medium" | "high";
 export type OperationRiskLevel = "low" | "medium" | "high";
@@ -16,8 +18,19 @@ export type SecretFinding = {
 
 export type RepoSecretScanResult = {
   repoRoot: string;
+  candidateFiles: number;
   scannedFiles: number;
+  truncated: boolean;
+  skippedFiles: RepoSecretScanSkipped[];
+  skipReasons: RepoSecretScanSkipReason[];
   findings: SecretFinding[];
+};
+
+export type RepoSecretScanSkipReason = RepoWalkSkipReason | "file_size_limit";
+
+export type RepoSecretScanSkipped = {
+  path: string;
+  reason: RepoSecretScanSkipReason;
 };
 
 export type OperationRiskReview = {
@@ -131,17 +144,35 @@ export function scanRepoForSecrets(input: {
   const repoRoot = path.resolve(input.repoRoot);
   const maxFiles = input.maxFiles ?? 500;
   const maxFileBytes = input.maxFileBytes ?? 256 * 1024;
-  const files = listScannableFiles(repoRoot).slice(0, maxFiles);
+  const candidateResult = listScannableFiles(repoRoot, maxFiles);
+  const files = candidateResult.files;
+  const skippedFiles: RepoSecretScanSkipped[] = [...candidateResult.skipped];
+  const skipReasons = new Set<RepoSecretScanSkipReason>(candidateResult.reasons);
   const findings: SecretFinding[] = [];
   let scannedFiles = 0;
 
   for (const relativePath of files) {
     const absolutePath = path.join(repoRoot, relativePath);
     const stat = statSync(absolutePath);
-    if (stat.size > maxFileBytes) {
+    const sensitiveEnvFile = isSensitiveEnvFilePath(relativePath);
+    if (stat.size > maxFileBytes && !sensitiveEnvFile) {
+      skippedFiles.push({ path: relativePath, reason: "file_size_limit" });
+      skipReasons.add("file_size_limit");
       continue;
     }
     scannedFiles += 1;
+    if (sensitiveEnvFile) {
+      findings.push({
+        kind: "secret",
+        source: relativePath,
+        line: 1,
+        column: 1,
+        secretType: "sensitive-env-file",
+        severity: "high",
+        redacted: "[sensitive env file]",
+      });
+      continue;
+    }
     findings.push(
       ...scanTextForSecrets({
         source: relativePath,
@@ -150,7 +181,15 @@ export function scanRepoForSecrets(input: {
     );
   }
 
-  return { repoRoot, scannedFiles, findings };
+  return {
+    repoRoot,
+    candidateFiles: files.length,
+    scannedFiles,
+    truncated: candidateResult.hitLimit || skippedFiles.length > 0,
+    skippedFiles: skippedFiles.sort(compareSkippedFiles),
+    skipReasons: [...skipReasons].sort((left, right) => left.localeCompare(right)),
+    findings,
+  };
 }
 
 export function reviewOperationRisk(input: {
@@ -192,28 +231,21 @@ export function reviewOperationRisk(input: {
   };
 }
 
-function listScannableFiles(repoRoot: string): string[] {
-  const files: string[] = [];
-  function visit(directory: string): void {
-    const entries = readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
-      left.name.localeCompare(right.name),
-    );
-    for (const entry of entries) {
-      const absolutePath = path.join(directory, entry.name);
-      const relativePath = toRepoPath(path.relative(repoRoot, absolutePath));
-      if (entry.isDirectory()) {
-        if (!SKIPPED_DIRECTORIES.has(entry.name)) {
-          visit(absolutePath);
-        }
-        continue;
-      }
-      if (entry.isFile() && isTextPath(relativePath)) {
-        files.push(relativePath);
-      }
-    }
-  }
-  visit(repoRoot);
-  return files;
+function listScannableFiles(
+  repoRoot: string,
+  maxFiles: number,
+): { files: string[]; skipped: RepoWalkSkipped[]; hitLimit: boolean; reasons: RepoWalkSkipReason[] } {
+  const result = walkRepoFiles(repoRoot, {
+    excludedDirectories: SKIPPED_DIRECTORIES,
+    maxFiles,
+    shouldIncludeFile: isTextPath,
+  });
+  return {
+    files: result.files.map((file) => file.relativePath),
+    skipped: result.skipped,
+    hitLimit: result.hitLimit,
+    reasons: result.reasons,
+  };
 }
 
 function isTextPath(filePath: string): boolean {
@@ -260,6 +292,9 @@ function isPlaceholderSecret(value: string): boolean {
   return /^(example|changeme|placeholder|your_|xxx)/i.test(value);
 }
 
-function toRepoPath(value: string): string {
-  return value.replace(/\\/g, "/");
+function compareSkippedFiles(left: RepoSecretScanSkipped, right: RepoSecretScanSkipped): number {
+  if (left.reason !== right.reason) {
+    return left.reason.localeCompare(right.reason);
+  }
+  return left.path.localeCompare(right.path);
 }

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   refreshDurableRepoIndex,
   refreshDurableSemanticIndex,
+  durableRepoIndexBuildOptions,
   searchDurableSemanticIndex,
   durableIndexStatus,
   queryDurableShardedRepoIndex,
@@ -109,6 +110,32 @@ describe("durable index store", () => {
       expect(refused.results).toEqual([]);
       expect(refused.indexHealth.status).toBe("stale");
       expect(refused.indexHealth.recommendedAction).toBe("refresh_index");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves traversal bounds from durable repo index build options", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-durable-index-options-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "root.ts"), "export const root = true;\n");
+    writeFileSync(path.join(repoRoot, "src", "nested.ts"), "export const nested = true;\n");
+
+    try {
+      refreshDurableRepoIndex({
+        repoRoot,
+        maxDepth: 0,
+        maxDirs: 1,
+        maxElapsedMs: 1_000,
+      });
+
+      expect(durableRepoIndexBuildOptions({ repoRoot })).toEqual(
+        expect.objectContaining({
+          maxDepth: 0,
+          maxDirs: 1,
+          maxElapsedMs: 1_000,
+        }),
+      );
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

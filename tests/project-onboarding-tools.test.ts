@@ -6,6 +6,43 @@ import { createInMemoryKernel } from "../src/kernel.js";
 import { createToolHandlers } from "../src/tools.js";
 
 describe("project onboarding tool handlers", () => {
+  it("returns only findings for inline secret scans", () => {
+    const tools = createToolHandlers(createInMemoryKernel());
+
+    const result = tools.secretScan({
+      source: "inline",
+      text: "OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz123456\n",
+    });
+
+    expect(Object.keys(result)).toEqual(["findings"]);
+    expect(result.findings[0]?.secretType).toBe("openai-api-key");
+  });
+
+  it("forwards repo secret scan caps and reports file-limit truncation details", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-secret-scan-caps-"));
+    writeFileSync(path.join(repoRoot, "a.txt"), "OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz123456\n");
+    writeFileSync(path.join(repoRoot, "b.txt"), "GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz1234567890\n");
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+      });
+
+      const result = tools.secretScan({ repoRoot, maxFiles: 1 });
+
+      expect("scannedFiles" in result).toBe(true);
+      if (!("scannedFiles" in result)) {
+        throw new Error("expected repo secret scan result");
+      }
+      expect(result.scannedFiles).toBe(1);
+      expect(result.truncated).toBe(true);
+      expect(result.skipReasons).toContain("file_limit");
+      expect(result.skippedFiles).toContainEqual({ path: "b.txt", reason: "file_limit" });
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("exposes project contract, diagnostics, impact, verification, safety, semantic, and LSP helpers", async () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-onboarding-tools-"));
     mkdirSync(path.join(repoRoot, "src"), { recursive: true });

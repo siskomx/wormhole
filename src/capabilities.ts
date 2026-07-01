@@ -54,7 +54,7 @@ export type WormholeCapabilityManifest = {
 export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
   return {
     name: "wormhole",
-    version: "0.14.3",
+    version: "0.15.0",
     maxOrchestrationDepth: 4,
     layers: [
       {

@@ -1,6 +1,11 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { detectFrameworkProfile } from "./framework-profile.js";
+import {
+  walkRepoFiles,
+  type RepoWalkSkipReason,
+  type RepoWalkSkipped,
+} from "./repo-walker.js";
 
 export type LanguageSupportLevel = "supported" | "partial" | "unsupported";
 export type LanguageCoverageStatus = "ok" | "warning" | "blocker";
@@ -23,16 +28,26 @@ export type LanguageProfileHealth = {
   reasons: string[];
 };
 
+export type LanguageProfileWalk = {
+  skipped: RepoWalkSkipped[];
+  hitLimit: boolean;
+  reasons: RepoWalkSkipReason[];
+};
+
 export type RepoLanguageProfile = {
   repoRoot: string;
   languages: LanguageCoverage[];
   frameworks: string[];
   health: LanguageProfileHealth;
+  walk: LanguageProfileWalk;
 };
 
 export type DetectLanguageProfileInput = {
   repoRoot: string;
   indexedFiles?: string[];
+  maxDepth?: number;
+  maxDirs?: number;
+  maxElapsedMs?: number;
 };
 
 export const LANGUAGE_BY_EXTENSION: Record<string, string> = {
@@ -109,7 +124,11 @@ const PARTIAL_LANGUAGES = new Set([
 
 export function detectLanguageProfile(input: DetectLanguageProfileInput): RepoLanguageProfile {
   const repoRoot = path.resolve(input.repoRoot);
-  const repoFiles = existsSync(repoRoot) && statSync(repoRoot).isDirectory() ? listProfileFiles(repoRoot) : [];
+  const profileWalk =
+    existsSync(repoRoot) && statSync(repoRoot).isDirectory()
+      ? listProfileFiles(repoRoot, input)
+      : { files: [], skipped: [], hitLimit: false, reasons: [] };
+  const repoFiles = profileWalk.files;
   const indexedFiles = input.indexedFiles?.map(toRepoPath);
   const indexedCounts = new Map<string, number>();
   if (indexedFiles) {
@@ -162,14 +181,22 @@ export function detectLanguageProfile(input: DetectLanguageProfileInput): RepoLa
       return left.language.localeCompare(right.language);
     });
 
-  const reasons = uniqueSorted(languages.flatMap((language) => language.reasons));
+  const reasons = uniqueSorted([
+    ...languages.flatMap((language) => language.reasons),
+    ...profileWalk.reasons.map((reason) => `profile_walk_${reason}`),
+  ]);
   return {
     repoRoot,
     languages,
     frameworks: detectFrameworks(repoRoot, repoFiles),
     health: {
-      status: healthStatusFor(languages),
+      status: healthStatusFor(languages, profileWalk.hitLimit),
       reasons,
+    },
+    walk: {
+      skipped: profileWalk.skipped,
+      hitLimit: profileWalk.hitLimit,
+      reasons: profileWalk.reasons,
     },
   };
 }
@@ -210,32 +237,24 @@ export function isSupportedTextPath(relativePath: string): boolean {
   return languageForPath(relativePath) !== "unknown";
 }
 
-function listProfileFiles(repoRoot: string): string[] {
-  const files: string[] = [];
-
-  function visit(directory: string): void {
-    const entries = readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
-      left.name.localeCompare(right.name),
-    );
-    for (const entry of entries) {
-      const absolutePath = path.join(directory, entry.name);
-      const relativePath = toRepoPath(path.relative(repoRoot, absolutePath));
-      if (entry.isDirectory()) {
-        if (DEFAULT_EXCLUDED_DIRECTORIES.has(entry.name)) {
-          continue;
-        }
-        visit(absolutePath);
-        continue;
-      }
-      if (!entry.isFile() || !isSupportedTextPath(relativePath) || isGeneratedSourcePath(relativePath)) {
-        continue;
-      }
-      files.push(relativePath);
-    }
-  }
-
-  visit(repoRoot);
-  return files;
+function listProfileFiles(
+  repoRoot: string,
+  options: Pick<DetectLanguageProfileInput, "maxDepth" | "maxDirs" | "maxElapsedMs">,
+): { files: string[]; skipped: RepoWalkSkipped[]; hitLimit: boolean; reasons: RepoWalkSkipReason[] } {
+  const result = walkRepoFiles(repoRoot, {
+    excludedDirectories: DEFAULT_EXCLUDED_DIRECTORIES,
+    maxDepth: options.maxDepth,
+    maxDirs: options.maxDirs,
+    maxElapsedMs: options.maxElapsedMs,
+    shouldIncludeFile: (relativePath) =>
+      isSupportedTextPath(relativePath) && !isGeneratedSourcePath(relativePath),
+  });
+  return {
+    files: result.files.map((file) => file.relativePath),
+    skipped: result.skipped,
+    hitLimit: result.hitLimit,
+    reasons: result.reasons,
+  };
 }
 
 function profileLanguageForPath(relativePath: string): string | undefined {
@@ -286,11 +305,11 @@ function coverageReasons(input: {
   ];
 }
 
-function healthStatusFor(languages: LanguageCoverage[]): LanguageProfileHealth["status"] {
+function healthStatusFor(languages: LanguageCoverage[], walkHitLimit: boolean): LanguageProfileHealth["status"] {
   if (languages.some((language) => language.status === "blocker")) {
     return "blocker";
   }
-  if (languages.some((language) => language.status === "warning")) {
+  if (walkHitLimit || languages.some((language) => language.status === "warning")) {
     return "warning";
   }
   return "ok";
@@ -333,14 +352,6 @@ function isGeneratedSourcePath(relativePath: string): boolean {
     normalized.endsWith(".designer.cs") ||
     normalized.endsWith(".generated.cs")
   );
-}
-
-function safeRead(repoRoot: string, relativePath: string): string {
-  try {
-    return readFileSync(path.join(repoRoot, relativePath), "utf8");
-  } catch {
-    return "";
-  }
 }
 
 function uniqueSorted(values: string[]): string[] {

@@ -104,6 +104,7 @@ export function readSqliteRepoIndexStatus(repoRootInput: string): SqliteRepoInde
       repoRoot,
       builtAt: metadata.builtAt ?? "",
       buildOptions,
+      extractorVersion: metadata.extractorVersion ?? "unknown",
       fingerprint: metadata.fingerprint ?? "",
       files: [],
       symbols: [],

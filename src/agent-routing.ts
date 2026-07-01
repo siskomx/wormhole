@@ -260,6 +260,11 @@ export function recommendMissionRoute(input: AgentRoutingInput): MissionRouteRec
             repoRoot: input.repoRoot,
             changedFiles,
           }),
+          toolCall("repo_intelligence_search", 97, "Search the durable lexical, semantic, and relation indexes for task-specific repo context.", {
+            repoRoot: input.repoRoot,
+            query: input.query ?? objective,
+            changedFiles,
+          }),
           toolCall("architecture_map", 95, "Summarize modules, ownership, dependencies, and evidence.", {
             repoRoot: input.repoRoot,
           }),
@@ -284,6 +289,11 @@ export function recommendMissionRoute(input: AgentRoutingInput): MissionRouteRec
         name: "impact",
         purpose: "Constrain the affected surface before editing.",
         toolCalls: [
+          toolCall("change_impact_analyze", 100, "Use relation-aware impact analysis to identify affected files and tests.", {
+            repoRoot: input.repoRoot,
+            changedFiles,
+            diffText: input.diffText,
+          }),
           toolCall("blast_radius_analyze", 100, "Find impacted files, modules, entrypoints, and likely tests.", {
             repoRoot: input.repoRoot,
             changedFiles,
@@ -409,6 +419,7 @@ export function prepareAgentContext(input: Required<Pick<AgentRoutingInput, "rep
     "Use tool_search and tool_promote to keep the active tool set small before selecting lower-level tools.",
     "Prefer the recommended route over browsing the full MCP tool surface.",
     "Refresh graph and context state only through the stateMaintenance owner tools.",
+    "Use repo_intelligence_search before lower-level repo_index_query or durable_repo_index_query for task-specific large-repo lookup.",
     "Use durable_repo_index_query, ctx_pack_refresh, workflow_write_artifacts, resume_record, resume_checkpoint, resume_validate, and resume_load for durable handoff and resume paths.",
     "Use resume_record for material session decisions, owner approvals, blockers, verification results, tool errors, exact next actions, final responses, and fresh-session recommendations.",
     "Use resume_checkpoint before fresh-chat handoff, final output, or any context-heavy transition; use resume_validate before claiming a session is safely resumable.",
@@ -607,6 +618,11 @@ function createDefaultToolSequence(input: {
       repoRoot: input.repoRoot,
       changedFiles: input.changedFiles,
     }),
+    toolCall("repo_intelligence_search", 97, "Search durable lexical, semantic, and relation indexes for task-specific repo context.", {
+      repoRoot: input.repoRoot,
+      query: input.query,
+      changedFiles: input.changedFiles,
+    }),
     toolCall("architecture_map", 95, "Map modules, owners, and dependencies before reading widely.", {
       repoRoot: input.repoRoot,
     }),
@@ -627,6 +643,10 @@ function createDefaultToolSequence(input: {
       : []),
     ...(input.changedFiles.length > 0
       ? [
+          toolCall("change_impact_analyze", 90, "Analyze relation-aware impacted files and tests.", {
+            repoRoot: input.repoRoot,
+            changedFiles: input.changedFiles,
+          }),
           toolCall("blast_radius_analyze", 88, "Analyze affected files, modules, entrypoints, and likely tests.", {
             repoRoot: input.repoRoot,
             changedFiles: input.changedFiles,
@@ -675,16 +695,44 @@ function alternativesFor(recommended: AgentToolCall, input: AgentRoutingInput): 
         changedFiles,
         diffText: input.diffText,
       }),
-      toolCall("repo_index_query", 70, "Query the native repo index for extra task terms.", {
+      toolCall("repo_intelligence_search", 70, "Query the hybrid repo intelligence search for extra task terms.", {
         repoRoot: input.repoRoot,
         query: input.query ?? input.objective ?? "",
+        changedFiles,
+      }),
+    ];
+  }
+  if (recommended.toolName === "repo_intelligence_search") {
+    return [
+      toolCall("repo_relation_query", 75, "Query typed repo relations directly when graph paths matter.", {
+        repoRoot: input.repoRoot,
+        query: input.query ?? input.objective ?? "",
+      }),
+      toolCall("repo_index_query", 65, "Use native graph search when hybrid search is unavailable.", {
+        repoRoot: input.repoRoot,
+        query: input.query ?? input.objective ?? "project",
+      }),
+    ];
+  }
+  if (recommended.toolName === "change_impact_analyze") {
+    return [
+      toolCall("blast_radius_analyze", 80, "Use legacy blast-radius analysis when relation impact is unavailable.", {
+        repoRoot: input.repoRoot,
+        changedFiles,
+        diffText: input.diffText,
+      }),
+      toolCall("test_impact_analyze_v2", 75, "Use lower-level diff-to-test mapping when symbol detail matters.", {
+        repoRoot: input.repoRoot,
+        changedFiles,
+        diffText: input.diffText,
       }),
     ];
   }
   return [
-    toolCall("repo_index_query", 60, "Use native graph search when the recommended tool is unavailable.", {
+    toolCall("repo_intelligence_search", 60, "Use hybrid repo search when the recommended tool is unavailable.", {
       repoRoot: input.repoRoot,
       query: input.query ?? input.objective ?? "project",
+      changedFiles,
     }),
   ];
 }

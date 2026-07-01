@@ -338,11 +338,11 @@ describe("golden-path workflows", () => {
     expect(workflow.workflow).toBe("workflow_fix_bug");
     expect(workflow.nextCalls.map((call) => call.toolName)).toEqual([
       "diagnostics_from_command",
-      "blast_radius_analyze",
+      "change_impact_analyze",
       "context_pack_generate",
     ]);
     expect(workflow.phases.flatMap((phase) => phase.calls.map((call) => call.toolName))).toEqual(
-      expect.arrayContaining(["diagnostics_from_command", "test_impact_analyze_v2", "test_plan_select"]),
+      expect.arrayContaining(["diagnostics_from_command", "change_impact_analyze", "test_impact_analyze_v2", "test_plan_select"]),
     );
     expect(workflow.stopRule).toContain("reproduction");
   });
@@ -360,6 +360,9 @@ describe("golden-path workflows", () => {
     );
     expect(workflow.phases.flatMap((phase) => phase.calls.map((call) => call.toolName))).toEqual(
       expect.arrayContaining(["repo_change_scan", "secret_scan", "dependency_security_report"]),
+    );
+    expect(workflow.phases.flatMap((phase) => phase.calls.map((call) => call.toolName))).toContain(
+      "change_impact_analyze",
     );
   });
 
@@ -389,7 +392,12 @@ describe("golden-path workflows", () => {
       "entrypoint_flow_discover",
     ]);
     expect(workflow.phases.flatMap((phase) => phase.calls.map((call) => call.toolName))).toEqual(
-      expect.arrayContaining(["project_intelligence_snapshot", "tool_exposure_profile", "tool_catalog_query"]),
+      expect.arrayContaining([
+        "repo_intelligence_search",
+        "project_intelligence_snapshot",
+        "tool_exposure_profile",
+        "tool_catalog_query",
+      ]),
     );
     expect(workflow.artifactWriteStatus).toEqual({
       generated: false,

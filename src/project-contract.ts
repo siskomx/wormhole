@@ -5,6 +5,13 @@ import {
   type LanguageCoverage,
   type RepoLanguageProfile,
 } from "./language-profile.js";
+import {
+  classifyEnvFilePath,
+  countEnvAssignments,
+  envAssignmentNames,
+  type EnvFileKind,
+} from "./env-files.js";
+import { walkRepoFiles } from "./repo-walker.js";
 
 export type ProjectPackageManager = "npm" | "pnpm" | "yarn" | "bun" | "cargo" | "dotnet" | "unknown";
 
@@ -25,6 +32,13 @@ export type ProjectEnvVar = {
   source: string;
 };
 
+export type ProjectEnvSource = {
+  source: string;
+  kind: EnvFileKind;
+  sensitive: boolean;
+  varCount: number;
+};
+
 export type ProjectContract = {
   repoRoot: string;
   packageManager: ProjectPackageManager;
@@ -35,6 +49,7 @@ export type ProjectContract = {
   frameworks: string[];
   languageProfile: RepoLanguageProfile;
   envVars: ProjectEnvVar[];
+  envSources: ProjectEnvSource[];
   ports: number[];
 };
 
@@ -48,14 +63,6 @@ const LOCKFILE_MANAGERS: Array<{ file: string; manager: ProjectPackageManager }>
   { file: "package-lock.json", manager: "npm" },
   { file: "bun.lock", manager: "bun" },
   { file: "bun.lockb", manager: "bun" },
-];
-
-const ENV_FILES = [
-  ".env.example",
-  ".env.local.example",
-  ".env.template",
-  ".env.sample",
-  ".env",
 ];
 
 const PORT_HINT_FILES = [
@@ -78,7 +85,9 @@ export function detectProjectContract(input: DetectProjectContractInput): Projec
   const lockfiles = readLockfiles(repoRoot, packageManager);
   const scripts = readProjectScripts(packageJson, packageManager);
   const dependencies = readPackageDependencies(packageJson, packageManager);
-  const envVars = readEnvVars(repoRoot);
+  const envFiles = readEnvFiles(repoRoot);
+  const envVars = readEnvVars(envFiles);
+  const envSources = readEnvSources(envFiles);
   const ports = readPortHints(repoRoot, envVars);
 
   return {
@@ -91,6 +100,7 @@ export function detectProjectContract(input: DetectProjectContractInput): Projec
     frameworks: languageProfile.frameworks,
     languageProfile,
     envVars,
+    envSources,
     ports,
   };
 }
@@ -220,23 +230,58 @@ function readDependencyBlock(
     .map(([name, version]) => ({ name, version, manager, dev }));
 }
 
-function readEnvVars(repoRoot: string): ProjectEnvVar[] {
-  const vars = new Map<string, ProjectEnvVar>();
-  for (const envFile of ENV_FILES) {
-    const filePath = path.join(repoRoot, envFile);
-    if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+type ProjectEnvFile = {
+  source: string;
+  kind: EnvFileKind;
+  sensitive: boolean;
+  content: string;
+};
+
+function readEnvFiles(repoRoot: string): ProjectEnvFile[] {
+  const files: ProjectEnvFile[] = [];
+  for (const entry of readdirSync(repoRoot, { withFileTypes: true }).sort((left, right) =>
+    left.name.localeCompare(right.name),
+  )) {
+    if (!entry.isFile()) {
       continue;
     }
-    const content = readFileSync(filePath, "utf8");
-    for (const line of content.split(/\r?\n/)) {
-      const match = line.match(/^\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)\s*=/);
-      if (!match?.[1]) {
-        continue;
-      }
-      vars.set(match[1], { name: match[1], source: envFile });
+    const classification = classifyEnvFilePath(entry.name);
+    if (!classification) {
+      continue;
+    }
+    const filePath = path.join(repoRoot, entry.name);
+    files.push({
+      source: entry.name,
+      kind: classification.kind,
+      sensitive: classification.sensitive,
+      content: readFileSync(filePath, "utf8"),
+    });
+  }
+  return files;
+}
+
+function readEnvVars(envFiles: ProjectEnvFile[]): ProjectEnvVar[] {
+  const vars = new Map<string, ProjectEnvVar>();
+  for (const envFile of envFiles) {
+    if (envFile.sensitive) {
+      continue;
+    }
+    for (const name of envAssignmentNames(envFile.content)) {
+      vars.set(name, { name, source: envFile.source });
     }
   }
   return [...vars.values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function readEnvSources(envFiles: ProjectEnvFile[]): ProjectEnvSource[] {
+  return envFiles
+    .map((envFile) => ({
+      source: envFile.source,
+      kind: envFile.kind,
+      sensitive: envFile.sensitive,
+      varCount: countEnvAssignments(envFile.content),
+    }))
+    .sort((left, right) => left.source.localeCompare(right.source));
 }
 
 function readPortHints(repoRoot: string, envVars: ProjectEnvVar[]): number[] {
@@ -291,7 +336,6 @@ export function listProjectFiles(repoRoot: string): string[] {
 
 function findFilesByExtension(repoRoot: string, extension: string): string[] {
   const root = path.resolve(repoRoot);
-  const files: string[] = [];
   const excludedDirectories = new Set([
     ".git",
     ".next",
@@ -307,22 +351,8 @@ function findFilesByExtension(repoRoot: string, extension: string): string[] {
     "out",
     "target",
   ]);
-
-  function visit(directory: string): void {
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const absolutePath = path.join(directory, entry.name);
-      if (entry.isDirectory()) {
-        if (!excludedDirectories.has(entry.name)) {
-          visit(absolutePath);
-        }
-        continue;
-      }
-      if (entry.isFile() && path.extname(entry.name).toLowerCase() === extension) {
-        files.push(path.relative(root, absolutePath).replace(/\\/g, "/"));
-      }
-    }
-  }
-
-  visit(root);
-  return files.sort((left, right) => left.localeCompare(right));
+  return walkRepoFiles(root, {
+    excludedDirectories,
+    shouldIncludeFile: (relativePath) => path.extname(relativePath).toLowerCase() === extension,
+  }).files.map((file) => file.relativePath);
 }

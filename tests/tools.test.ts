@@ -365,6 +365,54 @@ describe("Wormhole MCP tool handlers", () => {
     expect(tools.missionStatus({ missionId: mission.missionId }).gate?.open).toBe(true);
   });
 
+  it("returns optional missing evidence recommendations from gate_request without changing gate semantics", () => {
+    const kernel = createInMemoryKernel();
+    const tools = createToolHandlers(kernel);
+    const mission = tools.missionStart({
+      objective: "Gate evidence requirements.",
+      repoRoot: process.cwd(),
+    });
+    tools.roundStart({ missionId: mission.missionId });
+    tools.recordEvidence({
+      missionId: mission.missionId,
+      sourceType: "file",
+      sourcePath: "README.md",
+      retrievalMethod: "read_file",
+      summary: "Source evidence exists.",
+    });
+
+    const gate = tools.gateRequest({
+      missionId: mission.missionId,
+      evidenceRequirements: ["verification_output", "relation_paths"],
+      completedTools: ["repo_relation_query"],
+    });
+
+    expect(gate.open).toBe(true);
+    expect("evidenceRequirements" in gate).toBe(true);
+    if (!("evidenceRequirements" in gate)) {
+      throw new Error("Expected evidence requirement evaluation");
+    }
+    expect(gate.evidenceRequirements.missingRequirements).toEqual(["verification_output"]);
+    expect(gate.missingEvidenceRecommendations).toEqual(["test_plan_select", "verification_run"]);
+  });
+
+  it("exposes workflow planner and tool surface audit handlers", () => {
+    const tools = createToolHandlers(createInMemoryKernel());
+    const plan = tools.workflowPlan({
+      objective: "Find where token refresh is orchestrated",
+      repoRoot: process.cwd(),
+      intent: "large_repo_query",
+    });
+    const audit = tools.toolSurfaceAudit();
+
+    expect(plan.stages.flatMap((stage) => stage.toolCalls.map((call) => call.toolName))).toEqual(
+      expect.arrayContaining(["repo_intelligence_search", "repo_relation_query"]),
+    );
+    expect(audit.duplicateCapabilityGroups.map((group) => group.recommendedTool)).toContain(
+      "repo_intelligence_search",
+    );
+  });
+
   it("closes the mission gate from stored state-maintenance source conflicts and freshness", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-gate-maintenance-signals-"));
     mkdirSync(path.join(repoRoot, "src"), { recursive: true });
@@ -1429,6 +1477,99 @@ describe("Wormhole MCP tool handlers", () => {
 
       expect(filtered.fileCount).toBe(1);
       expect(query.results[0].path).toBe("docs/notes.md");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("forwards maxDepth to repo index builds", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-index-depth-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "root.ts"), "export const root = true;\n");
+    writeFileSync(path.join(repoRoot, "src", "nested.ts"), "export const nested = true;\n");
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+      });
+
+      const summary = tools.repoIndexBuild({ repoRoot, maxDepth: 0 });
+
+      expect(summary.fileCount).toBe(0);
+      expect(summary.skippedFiles).toContain("src");
+      expect(summary.skippedFiles).toContain("root.ts");
+      expect(summary.indexHealth.reasons).toContain("repo_index_depth_limit");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("forwards maxDepth to durable repo index refreshes", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-durable-index-depth-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "root.ts"), "export const root = true;\n");
+    writeFileSync(path.join(repoRoot, "src", "nested.ts"), "export const nested = true;\n");
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+      });
+
+      const result = tools.durableRepoIndexRefresh({ repoRoot, maxDepth: 0 });
+
+      expect(result.summary.fileCount).toBe(0);
+      expect(result.summary.skippedFiles).toContain("src");
+      expect(result.summary.skippedFiles).toContain("root.ts");
+      expect(result.summary.indexHealth.reasons).toContain("repo_index_depth_limit");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves durable traversal bounds when symbol context loads a graph", async () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-symbol-context-bounds-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "root.ts"), "export const root = true;\n");
+    writeFileSync(path.join(repoRoot, "src", "nested.ts"), "export const nested = true;\n");
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+      });
+
+      tools.durableRepoIndexRefresh({ repoRoot, maxDepth: 0 });
+      const context = await tools.symbolContext({
+        repoRoot,
+        symbol: "root",
+        aspects: [],
+      });
+
+      expect(context.target).toBeUndefined();
+      expect(context.candidates).toEqual([]);
+      expect(context.graph.status).toBe("degraded");
+      expect(context.graph.skippedFiles).toEqual(expect.arrayContaining(["root.ts", "src"]));
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("forwards maxDepth to durable index manifest refreshes", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-tool-manifest-index-depth-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "root.ts"), "export const root = true;\n");
+    writeFileSync(path.join(repoRoot, "src", "nested.ts"), "export const nested = true;\n");
+
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+      });
+
+      const manifest = tools.durableIndexManifestRefresh({ repoRoot, maxDepth: 0 });
+
+      expect(manifest.fullIndex.fileCount).toBe(0);
+      expect(manifest.fullIndex.skippedFiles).toContain("src");
+      expect(manifest.fullIndex.skippedFiles).toContain("root.ts");
+      expect(manifest.fullIndex.truncated).toBe(true);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

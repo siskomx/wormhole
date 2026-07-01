@@ -19,6 +19,28 @@ describe("language profile", () => {
     expect(profile.health.status).toBe("blocker");
   });
 
+  it("preserves profile walk metadata and prefixes walker limit health reasons", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-language-profile-walk-"));
+    mkdirSync(path.join(repoRoot, "src", "deep"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "src", "app.ts"), "export const app = true;\n");
+    writeFileSync(path.join(repoRoot, "src", "deep", "hidden.ts"), "export const hidden = true;\n");
+
+    const profile = detectLanguageProfile({
+      repoRoot,
+      indexedFiles: ["src/app.ts"],
+      maxDepth: 1,
+    });
+
+    expect(profile.walk).toEqual(
+      expect.objectContaining({
+        hitLimit: true,
+        reasons: ["depth_limit"],
+        skipped: expect.arrayContaining([{ path: "src/app.ts", reason: "depth_limit" }]),
+      }),
+    );
+    expect(profile.health.reasons).toContain("profile_walk_depth_limit");
+  });
+
   it("keeps Go and Java outside the supported parser set until package compatibility is verified", () => {
     expect(languageForPath("main.go")).toBe("unknown");
     expect(languageForPath("src/App.java")).toBe("unknown");

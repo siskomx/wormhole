@@ -11,6 +11,7 @@ import {
 } from "./tool-registry.js";
 import { TOOL_PROFILE_IDS } from "./tool-profiles.js";
 import { PROJECT_LANES } from "./project-lanes.js";
+import { repoFactEdgeKindSchema } from "./repo-facts.js";
 
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
@@ -28,7 +29,7 @@ export function createWormholeMcpServer(
 ): McpServer {
   const server = new McpServer({
     name: "wormhole",
-    version: "0.14.3",
+    version: "0.15.0",
   });
   const tools = createToolHandlers(kernel, options);
   const taskStatusSchema = z.enum([
@@ -376,6 +377,36 @@ export function createWormholeMcpServer(
     allowOutOfProfile: z.boolean().optional(),
     overrideReason: z.string().optional(),
   };
+  const evidenceRequirementIdSchema = z.enum([
+    "source_paths",
+    "implementation_diff",
+    "verification_output",
+    "gate_decision",
+    "reproduction",
+    "diagnostics",
+    "changed_files",
+    "diff_findings",
+    "risk_assessment",
+    "impact_analysis",
+    "repo_map",
+    "entrypoints",
+    "project_commands",
+    "index_status",
+    "semantic_results",
+    "domain_results",
+    "relation_paths",
+    "repo_facts_fresh",
+  ]);
+  const workflowIntentSchema = z.enum([
+    "repo_onboarding",
+    "feature_implementation",
+    "bug_fix",
+    "code_review",
+    "large_repo_query",
+    "feature",
+    "bug",
+    "review",
+  ]);
 
   server.registerTool(
     "mission_start",
@@ -549,6 +580,20 @@ export function createWormholeMcpServer(
         loopHealth: z.any().optional(),
         resume: z.any().optional(),
         enforceResume: z.boolean().optional(),
+        evidenceRequirements: z.array(evidenceRequirementIdSchema).optional(),
+        completedTools: z.array(z.string()).optional(),
+        evidenceKinds: z.array(z.string()).optional(),
+        evidence: z
+          .array(
+            z.object({
+              kind: z.string().optional(),
+              toolName: z.string().optional(),
+              freshness: z.string().optional(),
+              summary: z.string().optional(),
+              metadata: z.record(z.string(), z.unknown()).optional(),
+            }),
+          )
+          .optional(),
       },
     },
     async (input) => jsonResult(tools.gateRequest(input)),
@@ -999,6 +1044,9 @@ export function createWormholeMcpServer(
         maxFiles: z.number().optional(),
         maxFileBytes: z.number().optional(),
         maxTotalBytes: z.number().optional(),
+        maxDepth: z.number().int().nonnegative().optional(),
+        maxDirs: z.number().int().positive().optional(),
+        maxElapsedMs: z.number().int().positive().optional(),
       },
     },
     async (input) => jsonResult(tools.repoIndexBuild(input)),
@@ -1783,6 +1831,40 @@ export function createWormholeMcpServer(
   );
 
   server.registerTool(
+    "repo_relation_query",
+    {
+      description: "Query canonical repo facts by typed relation, endpoint, direction, and bounded graph path.",
+      inputSchema: {
+        repoRoot: z.string(),
+        from: z.string().optional(),
+        to: z.string().optional(),
+        kinds: z.array(repoFactEdgeKindSchema).optional(),
+        direction: z.enum(["outbound", "inbound", "both"]).optional(),
+        maxDepth: z.number().int().min(1).max(8).optional(),
+        limit: z.number().int().min(1).max(100).optional(),
+        cursor: z.string().optional(),
+        requireFresh: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.repoRelationQuery(input)),
+  );
+
+  server.registerTool(
+    "repo_intelligence_search",
+    {
+      description: "Search repo intelligence across durable lexical, SQLite, semantic graph-node, and relation evidence.",
+      inputSchema: {
+        repoRoot: z.string(),
+        query: z.string(),
+        changedFiles: z.array(z.string()).optional(),
+        limit: z.number().int().min(1).max(100).optional(),
+        requireFresh: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.repoIntelligenceSearch(input)),
+  );
+
+  server.registerTool(
     "project_contract_detect",
     {
       description: "Detect package manager, scripts, dependencies, env hints, lockfiles, and ports for a repo.",
@@ -1917,6 +1999,21 @@ export function createWormholeMcpServer(
   );
 
   server.registerTool(
+    "change_impact_analyze",
+    {
+      description: "Analyze changed files with relation-backed impacted files, tests, confidence, and risk.",
+      inputSchema: {
+        repoRoot: z.string(),
+        changedFiles: z.array(z.string()),
+        diffText: z.string().optional(),
+        maxDepth: z.number().int().min(1).max(8).optional(),
+        requireFresh: z.boolean().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.changeImpactAnalyze(input)),
+  );
+
+  server.registerTool(
     "test_plan_select",
     {
       description: "Select a focused verification plan from project contract and impact analysis.",
@@ -1948,6 +2045,8 @@ export function createWormholeMcpServer(
         repoRoot: z.string().optional(),
         source: z.string().optional(),
         text: z.string().optional(),
+        maxFiles: z.number().int().positive().optional(),
+        maxFileBytes: z.number().int().positive().optional(),
       },
     },
     async (input) => jsonResult(tools.secretScan(input)),
@@ -2343,6 +2442,15 @@ export function createWormholeMcpServer(
   );
 
   server.registerTool(
+    "tool_surface_audit",
+    {
+      description: "Audit the Wormhole tool surface into guided, expert, and catalog-only advisory tiers.",
+      inputSchema: {},
+    },
+    async () => jsonResult(tools.toolSurfaceAudit()),
+  );
+
+  server.registerTool(
     "tool_catalog_query",
     {
       description: "Query Wormhole tool metadata by structured plane, phase, pack, risk, or tool-name filters.",
@@ -2458,6 +2566,23 @@ export function createWormholeMcpServer(
       inputSchema: workflowInputSchema,
     },
     async (input) => jsonResult(tools.workflowOnboardRepo(input)),
+  );
+
+  server.registerTool(
+    "workflow_plan",
+    {
+      description: "Return a typed deterministic workflow plan with tool contracts, required evidence, missing inputs, and stop rules.",
+      inputSchema: {
+        objective: z.string(),
+        repoRoot: z.string().optional(),
+        query: z.string().optional(),
+        changedFiles: z.array(z.string()).optional(),
+        observedFailure: z.union([z.boolean(), z.string()]).optional(),
+        reviewOnly: z.boolean().optional(),
+        intent: workflowIntentSchema.optional(),
+      },
+    },
+    async (input) => jsonResult(tools.workflowPlan(input)),
   );
 
   server.registerTool(
@@ -2652,6 +2777,9 @@ export function createWormholeMcpServer(
         maxFiles: z.number().optional(),
         maxFileBytes: z.number().optional(),
         maxTotalBytes: z.number().optional(),
+        maxDepth: z.number().int().nonnegative().optional(),
+        maxDirs: z.number().int().positive().optional(),
+        maxElapsedMs: z.number().int().positive().optional(),
       },
     },
     async (input) => jsonResult(tools.durableRepoIndexRefresh(input)),
@@ -2680,6 +2808,9 @@ export function createWormholeMcpServer(
         maxFiles: z.number().optional(),
         maxFileBytes: z.number().optional(),
         maxTotalBytes: z.number().optional(),
+        maxDepth: z.number().int().nonnegative().optional(),
+        maxDirs: z.number().int().positive().optional(),
+        maxElapsedMs: z.number().int().positive().optional(),
       },
     },
     async (input) => jsonResult(tools.durableIndexManifestRefresh(input)),
