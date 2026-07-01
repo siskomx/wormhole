@@ -103,6 +103,35 @@ describe("relation-aware change impact", () => {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
+
+  it("bounds changed-symbol relation expansion for large changed files", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-change-impact-bounded-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(
+      path.join(repoRoot, "src", "large.ts"),
+      [
+        "export function one() { return 1; }",
+        "export function two() { return 2; }",
+        "export function three() { return 3; }",
+        "export function four() { return 4; }",
+      ].join("\n"),
+    );
+
+    try {
+      const index = buildRepoIndex({ repoRoot });
+      const result = analyzeChangeImpact({
+        repoRoot,
+        changedFiles: ["src/large.ts"],
+        index,
+        maxChangedSymbols: 2,
+      } as Parameters<typeof analyzeChangeImpact>[0] & { maxChangedSymbols: number });
+
+      expect(result.changedSymbols.map((symbol) => symbol.name)).toEqual(["one", "two"]);
+      expect(result.warnings.join("\n")).toContain("Changed symbol expansion capped at 2 of 4 symbols.");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 function createImpactFixture(): string {

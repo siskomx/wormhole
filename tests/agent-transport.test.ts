@@ -66,4 +66,38 @@ describe("agent transport execution", () => {
     expect(failed.result?.summary).toContain("runtime.command");
     expect(nextRun.assignedAgentId).toBe("bad-cli");
   });
+
+  it("honors per-dispatch timeoutMs before the registered runtime timeout", async () => {
+    const tools = createToolHandlers(createInMemoryKernel());
+    tools.agentRegister({
+      agentId: "slow-cli",
+      displayName: "Slow CLI",
+      target: "local-cli",
+      transport: "cli",
+      capabilities: ["coding"],
+      installation: "installed",
+      authentication: "none",
+      maxConcurrentTasks: 1,
+      supportsInterrupt: false,
+      runtime: {
+        command: process.execPath,
+        args: ["-e", "process.stdin.resume(); setInterval(() => {}, 1000)"],
+        timeoutMs: 500,
+      },
+    });
+
+    const startedAt = Date.now();
+    const failed = await tools.agentDispatchExecute({
+      missionId: "M1",
+      taskId: "T1",
+      objective: "This should time out quickly",
+      requiredCapabilities: ["coding"],
+      timeoutMs: 25,
+    });
+
+    expect(Date.now() - startedAt).toBeLessThan(250);
+    expect(failed.status).toBe("failed");
+    expect(failed.result?.summary).toContain("25ms");
+    expect(failed.result?.output).toEqual(expect.objectContaining({ transport: "cli" }));
+  });
 });

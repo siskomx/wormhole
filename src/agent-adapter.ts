@@ -38,6 +38,7 @@ export type AgentDispatchInput = {
   requiredCapabilities: string[];
   preferredTargets?: string[];
   payload?: unknown;
+  timeoutMs?: number;
 };
 
 export type AgentRunResult = {

@@ -146,6 +146,23 @@ describe("native project intelligence spine", () => {
     }
   });
 
+  it("applies changed-symbol caps without a shared project model cache", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      const radius = analyzeBlastRadius({
+        repoRoot,
+        changedFiles: ["src/services/user-service.ts"],
+        maxChangedSymbols: 1,
+      });
+
+      expect(radius.verification.reasons).toContain(
+        "Changed symbol expansion capped at 1 of 3 symbols.",
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("generates a task-scoped context pack from the native project model", () => {
     const repoRoot = createFixtureRepo();
     try {
@@ -168,6 +185,24 @@ describe("native project intelligence spine", () => {
       expect(pack.rendered).toContain("Architecture Modules");
       expect(pack.rendered).toContain("Blast Radius");
       expect(pack.stats.renderedChars).toBeLessThanOrEqual(4_000);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("forwards changed-symbol caps into context-pack blast radius", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      const pack = generateProjectContextPack({
+        repoRoot,
+        objective: "Change user loading behavior",
+        query: "load user API tests",
+        changedFiles: ["src/services/user-service.ts"],
+        maxChars: 4_000,
+        maxChangedSymbols: 1,
+      } as Parameters<typeof generateProjectContextPack>[0] & { maxChangedSymbols: number });
+
+      expect(pack.rendered).toContain("Changed symbol expansion capped at 1");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

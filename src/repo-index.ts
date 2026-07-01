@@ -307,6 +307,9 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
   if (!elapsedLimitHit()) {
     const knownFiles = new Set(files.map((file) => file.path));
     for (const draft of edgeDrafts) {
+      if (elapsedLimitHit()) {
+        break;
+      }
       const target = resolveEdgeTarget(draft, knownFiles);
       if (!target) {
         continue;
@@ -321,8 +324,19 @@ export function buildRepoIndex(options: RepoIndexBuildOptions): RepoIndex {
         label: draft.specifier,
       });
     }
-    pushAll(edges, extractReferenceEdges(files, symbols, edges));
-    pushAll(edges, extractCallEdges(files, symbols, edges, callDrafts));
+    const skipGlobalInference = shouldSkipGlobalInference(buildOptions, files.length);
+    if (skipGlobalInference) {
+      skipReasons.add("time_limit");
+    }
+    if (!skipGlobalInference && !elapsedLimitHit()) {
+      pushAll(edges, extractReferenceEdges(files, symbols, edges, elapsedLimitHit));
+    }
+    if (!skipGlobalInference && !elapsedLimitHit()) {
+      pushAll(edges, extractCallEdges(files, symbols, edges, callDrafts, elapsedLimitHit));
+    }
+    if (elapsedLimitHit()) {
+      skipReasons.add("time_limit");
+    }
   } else {
     skipReasons.add("time_limit");
   }
@@ -491,11 +505,91 @@ export function isRepoIndexFresh(index: RepoIndex): boolean {
   if (index.extractorVersion !== REPO_INDEX_EXTRACTOR_VERSION) {
     return false;
   }
+  if (isTimeLimitedIndex(index)) {
+    return storedFingerprintEntriesStillMatch(index);
+  }
   try {
     return index.fingerprint === createRepoIndexFingerprint(index.repoRoot, index.buildOptions);
   } catch {
     return false;
   }
+}
+
+function shouldSkipGlobalInference(buildOptions: NormalizedRepoIndexBuildOptions, fileCount: number): boolean {
+  return buildOptions.maxElapsedMs !== undefined && fileCount > DEFAULT_MAX_FILES;
+}
+
+function isTimeLimitedIndex(index: RepoIndex): boolean {
+  return Boolean(
+    index.skipReasons?.includes("time_limit") ||
+      index.fingerprintEntries?.some((entry) => entry.startsWith("skipped-by-time:")),
+  );
+}
+
+function storedFingerprintEntriesStillMatch(index: RepoIndex): boolean {
+  const entries = index.fingerprintEntries;
+  if (!entries || createRepoIndexFingerprintFromEntries(entries) !== index.fingerprint) {
+    return false;
+  }
+  try {
+    for (const entry of entries) {
+      if (entry === `extractor:${REPO_INDEX_EXTRACTOR_VERSION}`) {
+        continue;
+      }
+      const indexed = parseIndexedFingerprintEntry(entry);
+      if (indexed) {
+        const absolutePath = path.join(index.repoRoot, indexed.path);
+        const stat = statSync(absolutePath);
+        if (!stat.isFile() || stat.size !== indexed.size) {
+          return false;
+        }
+        const contentHash = createHash("sha256")
+          .update(normalizeLineEndings(readFileSync(absolutePath, "utf8")))
+          .digest("hex");
+        if (contentHash !== indexed.hash) {
+          return false;
+        }
+        continue;
+      }
+      const skipped = parseSkippedFingerprintEntry(entry);
+      if (skipped) {
+        const absolutePath = path.join(index.repoRoot, skipped.path);
+        const stat = statSync(absolutePath);
+        if (!stat.isFile() || stat.size !== skipped.size) {
+          return false;
+        }
+        continue;
+      }
+      const skippedByTime = parseSkippedByTimeEntry(entry);
+      if (skippedByTime && !statSync(path.join(index.repoRoot, skippedByTime.path)).isFile()) {
+        return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function parseIndexedFingerprintEntry(entry: string): { path: string; size: number; hash: string } | undefined {
+  const match = /^indexed:(.*):(\d+):([a-f0-9]{64})$/i.exec(entry);
+  if (!match) {
+    return undefined;
+  }
+  return { path: match[1] ?? "", size: Number(match[2] ?? 0), hash: match[3] ?? "" };
+}
+
+function parseSkippedFingerprintEntry(entry: string): { path: string; size: number } | undefined {
+  const match = /^skipped-by-(?:size|count):(.*):(\d+):/.exec(entry);
+  if (!match) {
+    return undefined;
+  }
+  return { path: match[1] ?? "", size: Number(match[2] ?? 0) };
+}
+
+function parseSkippedByTimeEntry(entry: string): { path: string } | undefined {
+  const match = /^skipped-by-time:(.*)$/.exec(entry);
+  return match ? { path: match[1] ?? "" } : undefined;
 }
 
 export function summarizeRepoIndex(index: RepoIndex): RepoIndexSummary {
@@ -809,6 +903,7 @@ function extractReferenceEdges(
   files: RepoIndexFile[],
   symbols: RepoIndexSymbol[],
   existingEdges: RepoIndexEdge[],
+  shouldStop: () => boolean = () => false,
 ): RepoIndexEdge[] {
   const existingKeys = new Set(
     existingEdges.map((edge) => `${edge.from}\0${edge.to}\0${edge.kind}`),
@@ -823,8 +918,14 @@ function extractReferenceEdges(
   const edges: RepoIndexEdge[] = [];
 
   for (const file of files) {
+    if (shouldStop()) {
+      break;
+    }
     let referenceCount = 0;
     for (const token of identifierTokens(file.content)) {
+      if (shouldStop()) {
+        break;
+      }
       const matchingSymbols = symbolsByName.get(token);
       if (!matchingSymbols) {
         continue;
@@ -868,6 +969,7 @@ function extractCallEdges(
   symbols: RepoIndexSymbol[],
   existingEdges: RepoIndexEdge[],
   callDrafts: RepoIndexCallDraft[],
+  shouldStop: () => boolean = () => false,
 ): RepoIndexEdge[] {
   const existingKeys = new Set(
     existingEdges.map((edge) => `${edge.from}\0${edge.to}\0${edge.kind}`),
@@ -912,6 +1014,9 @@ function extractCallEdges(
   }
 
   for (const draft of callDrafts) {
+    if (shouldStop()) {
+      break;
+    }
     const fileSymbols = (symbolsByPath.get(draft.path) ?? []).sort((left, right) => left.line - right.line);
     const caller =
       (draft.callerName
@@ -940,6 +1045,9 @@ function extractCallEdges(
   }
 
   for (const file of files) {
+    if (shouldStop()) {
+      break;
+    }
     if (file.parser?.engine === "tree-sitter") {
       continue;
     }
@@ -956,6 +1064,9 @@ function extractCallEdges(
       const next = fileSymbols[index + 1];
       const body = lines.slice(caller.line - 1, next ? next.line - 1 : lines.length).join("\n");
       for (const callee of symbols) {
+        if (shouldStop()) {
+          break;
+        }
         if (callee.id === caller.id || callee.kind !== "function" || callee.name.length < 3) {
           continue;
         }

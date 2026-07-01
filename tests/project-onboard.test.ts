@@ -20,7 +20,10 @@ describe("project onboarding orchestration", () => {
     writeFileSync(path.join(repoRoot, "package-lock.json"), JSON.stringify({ packages: {} }));
     writeFileSync(path.join(repoRoot, "tsconfig.json"), "{}\n");
     writeFileSync(path.join(repoRoot, ".env.example"), "PORT=3000\n");
-    writeFileSync(path.join(repoRoot, "src", "user.ts"), "export function loadUser() { return 'user'; }\n");
+    writeFileSync(
+      path.join(repoRoot, "src", "user.ts"),
+      "export function loadUser() { return 'user'; }\nexport function formatUser() { return loadUser(); }\n",
+    );
     writeFileSync(path.join(repoRoot, "src", "server.ts"), "import { loadUser } from './user';\nloadUser();\n");
     writeFileSync(path.join(repoRoot, "tests", "user.test.ts"), "import { loadUser } from '../src/user';\nloadUser();\n");
 
@@ -28,14 +31,16 @@ describe("project onboarding orchestration", () => {
       const report = projectOnboard({
         repoRoot,
         changedFiles: ["src/user.ts"],
+        maxChangedSymbols: 1,
         action: { operations: [{ kind: "command", command: "npm", args: ["test"] }] },
         semanticRecords: [{ id: "user", path: "src/user.ts", text: "load user profile" }],
-      });
+      } as Parameters<typeof projectOnboard>[0] & { maxChangedSymbols: number });
 
       expect(report.contract.packageManager).toBe("npm");
       expect(report.repoIndex.fileCount).toBeGreaterThanOrEqual(3);
       expect(report.lsp.status).toBe("configured");
       expect(report.impact.likelyTests).toContain("tests/user.test.ts");
+      expect(report.impact.reasons).toContain("Changed symbol expansion capped at 1 of 2 symbols.");
       expect(report.verificationPlan.commands.map((command) => command.name)).toContain("test");
       expect(report.dependencySecurity.directDependencies).toBeGreaterThanOrEqual(2);
       expect(report.actionPolicy.riskLevel).toBe("low");

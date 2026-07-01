@@ -41,6 +41,7 @@ export function analyzeChangeImpact(input: {
   index?: RepoIndex;
   factGraph?: RepoFactGraph;
   maxDepth?: number;
+  maxChangedSymbols?: number;
   requireFresh?: boolean;
 }): ChangeImpactResult {
   const changedFiles = uniqueSorted(input.changedFiles.map(toRepoPath));
@@ -64,7 +65,17 @@ export function analyzeChangeImpact(input: {
   }
 
   const hunks = parseUnifiedDiff(input.diffText ?? "", changedFiles);
-  const changedSymbols = selectChangedSymbols(index, changedFiles, hunks);
+  const selectedChangedSymbols = selectChangedSymbols(index, changedFiles, hunks);
+  const maxChangedSymbols =
+    input.maxChangedSymbols === undefined
+      ? selectedChangedSymbols.length
+      : Math.max(0, Math.floor(input.maxChangedSymbols));
+  const changedSymbols = selectedChangedSymbols.slice(0, maxChangedSymbols);
+  if (selectedChangedSymbols.length > changedSymbols.length) {
+    warnings.push(
+      `Changed symbol expansion capped at ${changedSymbols.length} of ${selectedChangedSymbols.length} symbols.`,
+    );
+  }
   const impactedFiles = new Map<string, ChangeImpactResult["impactedFiles"][number]>();
   const impactedTests = new Map<string, ChangeImpactResult["impactedTests"][number]>();
 

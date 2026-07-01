@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   REPO_INDEX_EXTRACTOR_VERSION,
   buildRepoIndex,
+  createRepoIndexFingerprintFromEntries,
   type RepoIndex,
 } from "../src/repo-index.js";
 import { refreshRepoIndexIncremental } from "../src/repo-index-incremental.js";
@@ -93,6 +94,92 @@ describe("incremental repo index refresh", () => {
       expect(result.factGraph.nodes).toContainEqual(
         expect.objectContaining({ id: "file:src/a.ts", path: "src/a.ts" }),
       );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("prunes stale outbound edges from changed files while preserving inbound file relations", () => {
+    const repoRoot = createFixtureRepo();
+
+    try {
+      const previousIndex = buildRepoIndex({ repoRoot });
+      writeFileSync(
+        path.join(repoRoot, "src", "b.ts"),
+        [
+          "export function loadB() {",
+          "  return 'b2';",
+          "}",
+        ].join("\n"),
+      );
+
+      const result = refreshRepoIndexIncremental({
+        repoRoot,
+        changedFiles: ["src/b.ts"],
+        previousIndex,
+      });
+
+      expect(result.refreshMode).toBe("incremental");
+      expect(result.index.edges).not.toContainEqual(
+        expect.objectContaining({
+          from: "src/b.ts",
+          to: "src/a.ts",
+          kind: "imports",
+        }),
+      );
+      expect(result.index.edges).toContainEqual(
+        expect.objectContaining({
+          from: "src/b.ts",
+          to: expect.stringContaining("src/b.ts#loadB"),
+          kind: "defines",
+        }),
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("adds changed files that were omitted from a truncated prior index", () => {
+    const repoRoot = createFixtureRepo();
+
+    try {
+      const fullIndex = buildRepoIndex({ repoRoot });
+      const bFile = fullIndex.files.find((file) => file.path === "src/b.ts");
+      expect(bFile).toBeDefined();
+      const fingerprintEntries = (fullIndex.fingerprintEntries ?? []).filter(
+        (entry) => !entry.startsWith("indexed:src/b.ts:"),
+      );
+      const previousIndex = mutateIndex(fullIndex, {
+        files: fullIndex.files.filter((file) => file.path !== "src/b.ts"),
+        symbols: fullIndex.symbols.filter((symbol) => symbol.path !== "src/b.ts"),
+        edges: fullIndex.edges.filter((edge) => !edge.from.includes("src/b.ts") && !edge.to.includes("src/b.ts")),
+        truncated: true,
+        skippedFiles: ["src/b.ts"],
+        skipReasons: ["time_limit"],
+        fingerprintEntries,
+        fingerprint: createRepoIndexFingerprintFromEntries(fingerprintEntries),
+      });
+      writeFileSync(
+        path.join(repoRoot, "src", "b.ts"),
+        [
+          "import { loadA } from './a';",
+          "",
+          "export function loadB() {",
+          "  return `${loadA()} changed`;",
+          "}",
+        ].join("\n"),
+      );
+
+      const result = refreshRepoIndexIncremental({
+        repoRoot,
+        changedFiles: ["src/b.ts"],
+        previousIndex,
+      });
+
+      expect(result.refreshMode).toBe("incremental");
+      expect(result.reindexedFiles).toEqual(["src/b.ts"]);
+      expect(result.index.files.map((file) => file.path)).toEqual(["src/a.ts", "src/b.ts"]);
+      expect(result.index.files.find((file) => file.path === "src/b.ts")?.content).toContain("changed");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

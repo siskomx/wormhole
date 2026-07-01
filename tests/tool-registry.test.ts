@@ -389,12 +389,29 @@ describe("tool registry conformance", () => {
 
   it("advertises traversal caps for repo index build and durable refresh metadata", () => {
     const catalog = queryToolCatalog({
-      toolNames: ["repo_index_build", "durable_repo_index_refresh", "durable_index_manifest_refresh"],
+      toolNames: [
+        "repo_index_build",
+        "durable_repo_index_refresh",
+        "durable_index_manifest_refresh",
+        "repo_graph_refresh_incremental",
+        "repo_graph_refresh_full",
+        "state_maintenance_run",
+      ],
     });
     const inputsByName = new Map(catalog.tools.map((tool) => [tool.name, tool.inputs]));
 
-    for (const toolName of ["repo_index_build", "durable_repo_index_refresh", "durable_index_manifest_refresh"]) {
+    for (const toolName of [
+      "repo_index_build",
+      "durable_repo_index_refresh",
+      "durable_index_manifest_refresh",
+      "repo_graph_refresh_incremental",
+      "repo_graph_refresh_full",
+      "state_maintenance_run",
+    ]) {
       expect(inputsByName.get(toolName)).toEqual(expect.arrayContaining(["maxDepth", "maxDirs", "maxElapsedMs"]));
+    }
+    for (const toolName of ["repo_graph_refresh_incremental", "repo_graph_refresh_full", "state_maintenance_run"]) {
+      expect(inputsByName.get(toolName)).toEqual(expect.arrayContaining(["include", "exclude", "maxChangedSymbols"]));
     }
   });
 
@@ -409,7 +426,15 @@ describe("tool registry conformance", () => {
     );
     expect(projectOnboard?.summary).toContain("persist");
     expect(projectOnboard?.inputs).toEqual(
-      expect.arrayContaining(["repoRoot", "changedFiles", "diffText", "semanticRecords", "semanticQuery", "action"]),
+      expect.arrayContaining([
+        "repoRoot",
+        "changedFiles",
+        "diffText",
+        "maxChangedSymbols",
+        "semanticRecords",
+        "semanticQuery",
+        "action",
+      ]),
     );
   });
 

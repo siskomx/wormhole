@@ -21,6 +21,7 @@ export function analyzeTestImpactV2(input: {
   changedFiles: string[];
   diffText?: string;
   index?: RepoIndex;
+  maxChangedSymbols?: number;
 }): TestImpactV2Result {
   const impact = analyzeChangeImpact(input);
   const hunks = parseUnifiedDiff(input.diffText ?? "", input.changedFiles);

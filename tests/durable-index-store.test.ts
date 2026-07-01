@@ -115,6 +115,26 @@ describe("durable index store", () => {
     }
   });
 
+  it("reports time-limited durable indexes as fresh but degraded immediately after writing", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-durable-time-limited-"));
+    mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "src", "one.ts"), "export const one = 1;\n");
+    writeFileSync(path.join(repoRoot, "src", "two.ts"), "export const two = 2;\n");
+
+    try {
+      refreshDurableRepoIndex({ repoRoot, maxElapsedMs: 0 });
+      const status = durableIndexStatus({ repoRoot });
+
+      expect(status.repoIndex?.fresh).toBe(true);
+      expect(status.repoIndex?.indexHealth.status).toBe("degraded");
+      expect(status.sqliteIndex?.fresh).toBe(true);
+      expect(status.sqliteIndex?.indexHealth.status).toBe("degraded");
+      expect(status.factGraph?.fresh).toBe(true);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("preserves traversal bounds from durable repo index build options", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-durable-index-options-"));
     mkdirSync(path.join(repoRoot, "src"), { recursive: true });

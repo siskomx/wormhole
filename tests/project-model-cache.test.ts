@@ -168,4 +168,98 @@ describe("project model cache", () => {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
+
+  it("threads the shared project model cache through LSP feedback replans", () => {
+    const repoRoot = createFixtureRepo();
+    const counter = { builds: 0 };
+    const projectModelCache = countingCache(counter);
+    try {
+      const kernel = createInMemoryKernel();
+      const mission = kernel.startMission({
+        repoRoot,
+        objective: "Repair user service after LSP feedback",
+      });
+      const tools = createToolHandlers(kernel, {
+        allowedRepoRoots: [repoRoot],
+        projectModelCache,
+      });
+
+      const feedback = tools.lspFeedbackReplan({
+        missionId: mission.missionId,
+        uri: `file://${path.join(repoRoot, "src", "services", "user-service.ts").replace(/\\/g, "/")}`,
+        diagnostics: [
+          {
+            range: { start: { line: 1, character: 16 } },
+            severity: 1,
+            source: "typescript",
+            message: "Dogfood type mismatch.",
+          },
+        ],
+        maxContextChars: 2_000,
+      });
+
+      expect(feedback.replan.contextPack.rendered).toContain("Context Pack");
+      expect(counter.builds).toBe(1);
+      expect(projectModelCache.stats().hits).toBeGreaterThan(0);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("threads the shared project model cache through state maintenance route refresh", () => {
+    const repoRoot = createFixtureRepo();
+    const counter = { builds: 0 };
+    const projectModelCache = countingCache(counter);
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+        projectModelCache,
+      });
+
+      const result = tools.stateMaintenanceRun({
+        repoRoot,
+        objective: "Change user loading behavior",
+        query: "load user API tests",
+        changedFiles: ["src/services/user-service.ts"],
+        refreshGraph: false,
+      });
+
+      expect(result.status).toBe("completed");
+      expect(result.route?.route).toBeDefined();
+      expect(counter.builds).toBe(1);
+      expect(projectModelCache.stats().hits).toBeGreaterThan(0);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("primes the shared project model cache from state maintenance graph refreshes", () => {
+    const repoRoot = createFixtureRepo();
+    const counter = { builds: 0 };
+    const projectModelCache = countingCache(counter);
+    try {
+      const tools = createToolHandlers(createInMemoryKernel(), {
+        allowedRepoRoots: [repoRoot],
+        projectModelCache,
+      });
+
+      const result = tools.stateMaintenanceRun({
+        repoRoot,
+        objective: "Change user loading behavior",
+        query: "load user API tests",
+        changedFiles: ["src/services/user-service.ts"],
+        refreshGraph: true,
+        sourceConflicts: true,
+      });
+
+      expect(result.status).toBe("completed");
+      expect(result.graph?.testImpact.changedSymbols.length).toBeGreaterThan(0);
+      expect(result.sourceConflicts?.indexFingerprint).toBe(result.graph?.index.summary.indexHealth.fingerprint);
+      expect(result.route?.route).toBeDefined();
+      expect(counter.builds).toBe(0);
+      expect(projectModelCache.stats().hits).toBeGreaterThan(0);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
 });

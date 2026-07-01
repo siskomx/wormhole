@@ -74,7 +74,7 @@ Domain tools:
 - Command diagnostics, LSP diagnostics, dependency reports, secret scanning, action policy review, and operation risk review.
 - Anti-slop lifecycle gates for changed-code smells, diff scope, test quality, and coverage deltas.
 - Git lifecycle tools for status, branch preparation/creation, commit preparation/creation, PR preparation, and bounded conflict analysis.
-- Dependency risk tools that combine local lockfile/package metadata with parsed or live npm audit/outdated results.
+- Dependency risk tools that combine local lockfile/package metadata with parsed or live npm, pnpm, or bun audit/outdated results.
 - Documentation sync checks for public-surface changes and stale source-backed claims.
 - Workspace graph analysis for npm, pnpm, and Cargo workspaces, including local package roots and dependency edges.
 - Optional strict diff-scope enforcement on `patch_apply` so patch transactions can refuse unrelated writes before files are changed.
@@ -168,7 +168,7 @@ The lifecycle gap-closure tools cover the parts of a coding loop that previously
 - `git_pr_prepare`: prepares a PR title, body, checklist, changed-file summary, and local command hints without provider tokens or network calls.
 - `git_conflict_analyze`: inspects bounded unmerged files and conflict markers so agents can scope merge-conflict work before editing.
 - `dependency_risk_report`: combines local dependency security metadata with parsed audit and outdated JSON.
-- `dependency_audit_live`: runs bounded npm audit/outdated probes when live package-manager evidence is needed. Unsupported managers are refused with a hint instead of silently returning partial results.
+- `dependency_audit_live`: runs bounded npm, pnpm, or bun audit/outdated probes when live package-manager evidence is needed. Unsupported managers are refused with a hint instead of silently returning partial results.
 - `docs_sync_check`: surfaces missing documentation updates for public API/config/schema/README-facing changes and reuses source-conflict analysis for stale claims.
 - `workspace_graph_analyze`: detects npm workspaces, pnpm workspace globs, and Cargo workspace members, then reports local package edges and unresolved internal dependencies.
 - `repo_reachability_analyze`: combines repo-index edges, entrypoint flows, workspace/package boundaries, dynamic import hints, framework conventions, manual known-used files, and optional Knip output into review categories for dead-code deletion decisions. It is advisory only and always requires human approval before removal.

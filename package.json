@@ -1,6 +1,6 @@
 {
   "name": "wormhole",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "description": "Evidence-aware planning state for AI coding agents.",
@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "benchmarks:run": "tsx scripts/run-benchmarks.ts",
     "benchmarks:validate": "tsx scripts/validate-benchmarks.ts",
+    "dogfood:selftest": "tsx scripts/dogfood-selftest.ts",
     "test": "vitest run tests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

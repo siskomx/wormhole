@@ -454,13 +454,20 @@ function collectStaleReasons(input: {
     ? canonicalJson(input.currentIndex.buildOptions)
     : undefined;
   const durableBuildOptionsJson = canonicalJsonFromString(input.durableMetadata?.buildOptionsJson);
+  const durableMatchesFacts =
+    input.durableMetadata?.fingerprint === input.meta.fingerprint &&
+    input.durableMetadata?.extractorVersion === input.meta.extractorVersion &&
+    durableBuildOptionsJson === input.meta.buildOptionsJson;
+  const durableFresh = input.durableMetadata ? safeDurableSqliteFresh(input.repoRoot) : false;
 
   if (input.meta.extractorVersion !== REPO_INDEX_EXTRACTOR_VERSION) {
     staleReasons.add("fact_extractor_version_mismatch");
   }
 
   if (!input.currentIndex) {
-    staleReasons.add("current_index_missing");
+    if (!durableMatchesFacts || !durableFresh) {
+      staleReasons.add("current_index_missing");
+    }
   } else {
     if (!isRepoIndexFresh(input.currentIndex)) {
       staleReasons.add("current_index_stale");
@@ -500,7 +507,7 @@ function collectStaleReasons(input: {
     if (currentBuildOptionsJson !== undefined && durableBuildOptionsJson !== currentBuildOptionsJson) {
       staleReasons.add("build_options_mismatch");
     }
-    if (!safeDurableSqliteFresh(input.repoRoot)) {
+    if (!durableFresh) {
       staleReasons.add("durable_index_stale");
     }
   }

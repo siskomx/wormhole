@@ -161,6 +161,11 @@ export type ProjectModelCache = {
     repoRoot: string;
     indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">;
   }): ProjectModel;
+  prime(input: {
+    repoRoot: string;
+    index: RepoIndex;
+    indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">;
+  }): ProjectModel;
   getDerived<T>(input: ProjectModelDerivedCacheInput<T>): T;
   delete(repoRoot: string): void;
   clear(): void;
@@ -256,6 +261,16 @@ export function createProjectModelCache(options: ProjectModelCacheOptions = {}):
 
   return {
     get,
+    prime(input) {
+      const repoRoot = path.resolve(input.repoRoot);
+      const indexOptions = { ...(input.indexOptions ?? input.index.buildOptions), repoRoot };
+      const cacheKey = createRepoIndexCacheKey(indexOptions);
+      const model = createProjectModelFromIndex(repoRoot, input.index);
+      entries.set(cacheKey, { model, lastFreshCheckMs: Date.now() });
+      deleteDerivedForRepo(repoRoot);
+      evictOldestModel();
+      return model;
+    },
     getDerived<T>(input: ProjectModelDerivedCacheInput<T>): T {
       const model = get({
         repoRoot: input.repoRoot,
@@ -413,6 +428,7 @@ export function analyzeBlastRadius(input: {
   repoRoot: string;
   changedFiles: string[];
   diffText?: string;
+  maxChangedSymbols?: number;
 } & ProjectModelCacheInput): BlastRadiusAnalysis {
   const changedFiles = uniqueSorted(input.changedFiles.map(toRepoPath));
   if (input.projectModelCache) {
@@ -423,11 +439,13 @@ export function analyzeBlastRadius(input: {
       keyParts: [
         ...changedFiles,
         input.diffText ? `diff:${hashParts([input.diffText])}` : "diff:",
+        input.maxChangedSymbols === undefined ? "maxSymbols:" : `maxSymbols:${input.maxChangedSymbols}`,
       ],
       create: (model) =>
         analyzeBlastRadiusFromModel(model, {
           changedFiles,
           diffText: input.diffText,
+          maxChangedSymbols: input.maxChangedSymbols,
           projectModelCache: input.projectModelCache,
           indexOptions: input.indexOptions,
         }),
@@ -436,6 +454,7 @@ export function analyzeBlastRadius(input: {
   return analyzeBlastRadiusFromModel(getProjectModel(input), {
     changedFiles,
     diffText: input.diffText,
+    maxChangedSymbols: input.maxChangedSymbols,
   });
 }
 
@@ -444,6 +463,7 @@ function analyzeBlastRadiusFromModel(
   input: {
     changedFiles: string[];
     diffText?: string;
+    maxChangedSymbols?: number;
   } & ProjectModelCacheInput,
 ): BlastRadiusAnalysis {
   const changedFiles = uniqueSorted(input.changedFiles.map(toRepoPath));
@@ -453,12 +473,14 @@ function analyzeBlastRadiusFromModel(
     repoRoot: model.repoRoot,
     changedFiles,
     diffText: input.diffText,
+    maxChangedSymbols: input.maxChangedSymbols,
     index: model.index,
   });
   const relationImpact = analyzeChangeImpact({
     repoRoot: model.repoRoot,
     changedFiles,
     diffText: input.diffText,
+    maxChangedSymbols: input.maxChangedSymbols,
     index: model.index,
   });
   for (const symbol of impact.changedSymbols) {
@@ -554,6 +576,7 @@ export function generateProjectContextPack(input: {
   query: string;
   changedFiles?: string[];
   maxChars: number;
+  maxChangedSymbols?: number;
 } & ProjectModelCacheInput): ProjectContextPack {
   const changedFiles = uniqueSorted((input.changedFiles ?? []).map(toRepoPath));
   const preferredSources = uniqueSorted((input.preferredSources ?? []).map(toRepoPath));
@@ -566,6 +589,7 @@ export function generateProjectContextPack(input: {
         input.objective,
         input.query,
         String(input.maxChars),
+        input.maxChangedSymbols === undefined ? "maxSymbols:" : `maxSymbols:${input.maxChangedSymbols}`,
         JSON.stringify(input.indexOptions ?? {}),
         ...changedFiles,
         ...preferredSources.map((source) => `preferred:${source}`),
@@ -579,6 +603,7 @@ export function generateProjectContextPack(input: {
             changedFiles,
             preferredSources,
             maxChars: input.maxChars,
+            maxChangedSymbols: input.maxChangedSymbols,
           },
           input.projectModelCache,
           input.indexOptions,
@@ -591,6 +616,7 @@ export function generateProjectContextPack(input: {
     changedFiles,
     preferredSources,
     maxChars: input.maxChars,
+    maxChangedSymbols: input.maxChangedSymbols,
   });
 }
 
@@ -602,6 +628,7 @@ function generateProjectContextPackFromModel(
     changedFiles: string[];
     preferredSources: string[];
     maxChars: number;
+    maxChangedSymbols?: number;
   },
   projectModelCache?: ProjectModelCache,
   indexOptions?: Omit<RepoIndexBuildOptions, "repoRoot">,
@@ -618,11 +645,13 @@ function generateProjectContextPackFromModel(
         ? analyzeBlastRadius({
             repoRoot: model.repoRoot,
             changedFiles: input.changedFiles,
+            maxChangedSymbols: input.maxChangedSymbols,
             projectModelCache,
             indexOptions,
           })
         : analyzeBlastRadiusFromModel(model, {
             changedFiles: input.changedFiles,
+            maxChangedSymbols: input.maxChangedSymbols,
           })
       : undefined;
   const sources = selectContextSources(model, input.query, input.changedFiles, input.preferredSources, blast);
@@ -681,6 +710,11 @@ function createProjectModel(
 ): ProjectModel {
   const repoRoot = path.resolve(repoRootInput);
   const index = indexBuilder({ ...(indexOptions ?? {}), repoRoot });
+  return createProjectModelFromIndex(repoRoot, index);
+}
+
+function createProjectModelFromIndex(repoRootInput: string, index: RepoIndex): ProjectModel {
+  const repoRoot = path.resolve(repoRootInput);
   return {
     repoRoot,
     index,
@@ -1040,9 +1074,12 @@ function renderProjectContextPack(input: {
         `- ${entrypoint.kind} ${entrypoint.name} (${entrypoint.path}) -> ${entrypoint.downstreamFiles.join(", ") || "none"}`,
     );
   const blastLines = input.blast
-    ? input.blast.impactedFiles.map(
-        (file) => `- ${file.path}: ${file.reasons.join("; ")} confidence=${file.confidence.toFixed(2)}`,
-      )
+    ? [
+        ...input.blast.verification.reasons.map((reason) => `- ${reason}`),
+        ...input.blast.impactedFiles.map(
+          (file) => `- ${file.path}: ${file.reasons.join("; ")} confidence=${file.confidence.toFixed(2)}`,
+        ),
+      ]
     : ["- No changed files supplied."];
   const fileLines = input.files.flatMap((file) => [
     `## File: ${file.path}`,
@@ -1104,7 +1141,8 @@ function clampToBudget(value: string, maxChars: number): string {
   if (maxChars <= 80) {
     return value.slice(0, Math.max(0, maxChars));
   }
-  return `${value.slice(0, maxChars - 34).trimEnd()}\n\n[truncated to fit context budget]`;
+  const suffix = "\n\n[truncated to fit context budget]";
+  return `${value.slice(0, Math.max(0, maxChars - suffix.length)).trimEnd()}${suffix}`;
 }
 
 function readRepoFile(repoRoot: string, repoPath: string): string {

@@ -6,6 +6,7 @@ import {
   buildRepoNativePack,
   queryFeatureSlice,
 } from "../src/repo-native-pack.js";
+import { buildRepoIndex } from "../src/repo-index.js";
 
 function createTicketRepo(): string {
   const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-native-"));
@@ -170,6 +171,30 @@ describe("repo native pack", () => {
       expect(result.slices[0]?.keyFiles).not.toContain("backend/src/modules/billing/BillingRoutes.ts");
       expect(result.slices[0]?.schemaTables).toContain("ticket_messages");
       expect(result.slices[0]?.apiEndpoints.map((endpoint) => endpoint.pathTemplate)).toContain("/tickets");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reuses a caller-provided repo index instead of rebuilding", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-repo-native-supplied-index-"));
+    try {
+      mkdirSync(path.join(repoRoot, "migrations"), { recursive: true });
+      writeFileSync(path.join(repoRoot, "package.json"), JSON.stringify({ scripts: { test: "vitest run tests" } }));
+      writeFileSync(path.join(repoRoot, "package-lock.json"), JSON.stringify({ packages: {} }));
+      writeFileSync(
+        path.join(repoRoot, "migrations", "001_create_ticket_tables.sql"),
+        "create table ticket_messages(id text primary key);\n",
+      );
+      const packageOnlyIndex = buildRepoIndex({ repoRoot, include: ["package.json"] });
+      const pack = buildRepoNativePack({
+        repoRoot,
+        query: "tickets",
+        index: packageOnlyIndex,
+      } as Parameters<typeof buildRepoNativePack>[0] & { index: ReturnType<typeof buildRepoIndex> });
+
+      expect(pack.schema.migrationFiles).toEqual([]);
+      expect(pack.schema.tables.map((table) => table.name)).not.toContain("ticket_messages");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

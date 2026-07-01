@@ -9,10 +9,13 @@ import { classifyProjectLane, PROJECT_LANES, type ProjectLane } from "./project-
 import {
   buildRepoIndex,
   isRepoIndexFresh,
+  normalizeRepoIndexBuildOptions,
   queryRepoIndex,
   summarizeRepoIndex,
+  type NormalizedRepoIndexBuildOptions,
   type RepoIndex,
   type RepoIndexBuildOptions,
+  type RepoIndexEdge,
   type RepoIndexQueryResult,
   type RepoIndexSearchResult,
   type RepoIndexSummary,
@@ -174,11 +177,20 @@ export function durableRepoIndexBuildOptions(
 
 export function refreshDurableIndexManifest(input: RepoIndexBuildOptions): DurableIndexManifest {
   const repoRoot = path.resolve(input.repoRoot);
-  const index = buildRepoIndex({ ...input, repoRoot });
+  const requestedBuildOptions = normalizeRepoIndexBuildOptions({ ...input, repoRoot });
+  const reusableIndex = readReusableDurableRepoIndex({ repoRoot, requestedBuildOptions });
+  const reusableManifest = reusableIndex ? readReusableIndexManifest({ repoRoot, index: reusableIndex }) : undefined;
+  if (reusableManifest) {
+    return reusableManifest;
+  }
+  const index = reusableIndex ?? buildRepoIndex({ ...input, repoRoot });
   const indexPath = repoIndexPath(repoRoot);
-  writeJson(indexPath, index);
-  writeSqliteRepoIndex(index);
-  writeRepoFactGraph(createRepoFactGraphFromIndex({ index }));
+  if (!reusableIndex) {
+    writeJson(indexPath, index);
+    writeSqliteRepoIndex(index);
+    writeRepoFactGraph(createRepoFactGraphFromIndex({ index }));
+  }
+  const edgeLookup = createEdgeLookup(index);
 
   const lanes = PROJECT_LANES
     .map((lane) => {
@@ -186,6 +198,7 @@ export function refreshDurableIndexManifest(input: RepoIndexBuildOptions): Durab
         index,
         index.files.filter((file) => classifyProjectLane(file.path) === lane).map((file) => file.path),
         `lane:${lane}`,
+        edgeLookup,
       );
       if (shard.files.length === 0) {
         return undefined;
@@ -195,7 +208,7 @@ export function refreshDurableIndexManifest(input: RepoIndexBuildOptions): Durab
       return createManifestEntry(shard, lane, shardPath) as DurableIndexLaneEntry;
     })
     .filter((entry): entry is DurableIndexLaneEntry => Boolean(entry));
-  const shards = createRootShards(index, repoRoot);
+  const shards = createRootShards(index, repoRoot, edgeLookup);
 
   const manifest: DurableIndexManifest = {
     version: 1,
@@ -213,6 +226,37 @@ export function refreshDurableIndexManifest(input: RepoIndexBuildOptions): Durab
   };
   writeJson(manifest.manifestPath, manifest);
   return manifest;
+}
+
+function readReusableDurableRepoIndex(input: {
+  repoRoot: string;
+  requestedBuildOptions: NormalizedRepoIndexBuildOptions;
+}): RepoIndex | undefined {
+  const index = readJson<RepoIndex>(repoIndexPath(input.repoRoot));
+  if (!index) {
+    return undefined;
+  }
+  if (!sameBuildOptions(index.buildOptions, input.requestedBuildOptions)) {
+    return undefined;
+  }
+  return isRepoIndexFresh(index) ? index : undefined;
+}
+
+function sameBuildOptions(left: NormalizedRepoIndexBuildOptions, right: NormalizedRepoIndexBuildOptions): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function readReusableIndexManifest(input: { repoRoot: string; index: RepoIndex }): DurableIndexManifest | undefined {
+  const manifest = readJson<DurableIndexManifest>(indexManifestPath(input.repoRoot));
+  if (!manifest || manifest.fullIndex.fingerprint !== input.index.fingerprint) {
+    return undefined;
+  }
+  const referencedPaths = [
+    manifest.fullIndex.indexPath,
+    ...manifest.lanes.map((lane) => lane.indexPath),
+    ...(manifest.shards ?? []).map((shard) => shard.indexPath),
+  ];
+  return referencedPaths.every((manifestPath) => existsSync(manifestPath)) ? manifest : undefined;
 }
 
 export function refreshDurableSemanticIndex(input: {
@@ -474,7 +518,21 @@ function readJson<T>(filePath: string): T | undefined {
   }
 }
 
-function createRootShards(index: RepoIndex, repoRoot: string): DurableIndexShardEntry[] {
+type EdgeLookup = Map<string, RepoIndexEdge[]>;
+
+function createEdgeLookup(index: RepoIndex): EdgeLookup {
+  const edgesBySourcePath: EdgeLookup = new Map();
+  for (const edge of index.edges) {
+    const sourcePath = fileForNode(edge.from);
+    if (!sourcePath) {
+      continue;
+    }
+    edgesBySourcePath.set(sourcePath, [...(edgesBySourcePath.get(sourcePath) ?? []), edge]);
+  }
+  return edgesBySourcePath;
+}
+
+function createRootShards(index: RepoIndex, repoRoot: string, edgeLookup: EdgeLookup): DurableIndexShardEntry[] {
   const filesByRoot = new Map<string, string[]>();
   for (const file of index.files) {
     const shardRoot = shardRootForPath(file.path);
@@ -486,7 +544,7 @@ function createRootShards(index: RepoIndex, repoRoot: string): DurableIndexShard
     .map(([shardRoot, filePaths]) => {
       const lane = dominantLane(filePaths);
       const shardId = `root:${shardRoot}`;
-      const shard = createFilteredShard(index, filePaths, shardId);
+      const shard = createFilteredShard(index, filePaths, shardId, edgeLookup);
       const shardPath = shardIndexPath(repoRoot, shardId);
       writeJson(shardPath, shard);
       return {
@@ -498,19 +556,17 @@ function createRootShards(index: RepoIndex, repoRoot: string): DurableIndexShard
     });
 }
 
-function createFilteredShard(index: RepoIndex, shardFilePaths: string[], fingerprintSeed: string): RepoIndex {
+function createFilteredShard(
+  index: RepoIndex,
+  shardFilePaths: string[],
+  fingerprintSeed: string,
+  edgeLookup: EdgeLookup,
+): RepoIndex {
   const shardFilePathSet = new Set(shardFilePaths);
   const files = index.files.filter((file) => shardFilePathSet.has(file.path));
   const filePaths = new Set(files.map((file) => file.path));
   const symbols = index.symbols.filter((symbol) => filePaths.has(symbol.path));
-  const sourceNodeIds = new Set<string>([...filePaths, ...symbols.map((symbol) => symbol.id)]);
-  const edges = index.edges.filter((edge) => {
-    const fromPath = fileForNode(edge.from);
-    return (
-      sourceNodeIds.has(edge.from) ||
-      (fromPath !== undefined && filePaths.has(fromPath))
-    );
-  });
+  const edges = uniqueEdges(files.flatMap((file) => edgeLookup.get(file.path) ?? []));
   const skippedFiles = index.skippedFiles.filter((file) => filePaths.has(file));
   const fingerprint = createHash("sha256")
     .update([
@@ -533,6 +589,20 @@ function createFilteredShard(index: RepoIndex, shardFilePaths: string[], fingerp
     skippedFiles,
     truncated: skippedFiles.length > 0,
   };
+}
+
+function uniqueEdges(edges: RepoIndexEdge[]): RepoIndexEdge[] {
+  const seen = new Set<string>();
+  const output: RepoIndexEdge[] = [];
+  for (const edge of edges) {
+    const key = `${edge.from}\0${edge.to}\0${edge.kind}\0${edge.line ?? ""}\0${edge.label ?? ""}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    output.push(edge);
+  }
+  return output;
 }
 
 function shardRootForPath(repoPath: string): string {

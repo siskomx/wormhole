@@ -109,6 +109,47 @@ export function parseDependencyAuditJson(input: { repoRoot: string; auditJson: s
       ...(isRecord(fix) && typeof fix.version === "string" ? { fixVersion: fix.version } : {}),
     });
   }
+  const rawAdvisories = isRecord(parsedRecord.advisories) ? parsedRecord.advisories : {};
+  for (const raw of Object.values(rawAdvisories)) {
+    if (!isRecord(raw)) {
+      continue;
+    }
+    const packageName = stringValue(raw.module_name) ?? stringValue(raw.name);
+    if (!packageName) {
+      continue;
+    }
+    const patchedVersions = stringValue(raw.patched_versions);
+    vulnerabilities.push({
+      packageName,
+      severity: normalizeSeverity(stringValue(raw.severity)),
+      ...(typeof raw.vulnerable_versions === "string" ? { range: raw.vulnerable_versions } : {}),
+      ...(typeof raw.title === "string" ? { title: raw.title } : {}),
+      ...(typeof raw.url === "string" ? { url: raw.url } : {}),
+      identifiers: advisoryIdentifiers(raw),
+      nodes: advisoryFindingPaths(raw.findings),
+      fixAvailable: Boolean(patchedVersions && patchedVersions !== "<0.0.0"),
+    });
+  }
+  for (const [packageName, raw] of Object.entries(parsedRecord)) {
+    if (packageName === "vulnerabilities" || packageName === "advisories" || !Array.isArray(raw)) {
+      continue;
+    }
+    for (const advisory of raw) {
+      if (!isRecord(advisory)) {
+        continue;
+      }
+      vulnerabilities.push({
+        packageName,
+        severity: normalizeSeverity(stringValue(advisory.severity)),
+        ...(typeof advisory.vulnerable_versions === "string" ? { range: advisory.vulnerable_versions } : {}),
+        ...(typeof advisory.title === "string" ? { title: advisory.title } : {}),
+        ...(typeof advisory.url === "string" ? { url: advisory.url } : {}),
+        identifiers: advisoryIdentifiers(advisory),
+        nodes: [],
+        fixAvailable: false,
+      });
+    }
+  }
   const countsBySeverity: Partial<Record<DependencySeverity, number>> = {};
   for (const vulnerability of vulnerabilities) {
     countsBySeverity[vulnerability.severity] = (countsBySeverity[vulnerability.severity] ?? 0) + 1;
@@ -123,24 +164,35 @@ export function parseDependencyAuditJson(input: { repoRoot: string; auditJson: s
 
 export function parseDependencyOutdatedJson(input: { repoRoot: string; outdatedJson: string }): DependencyOutdatedReport {
   const warnings: string[] = [];
-  const parsed = safeJson(input.outdatedJson, warnings);
+  const json = parseJsonPayload(input.outdatedJson);
+  const parsed = json.value;
   const outdated: DependencyOutdatedRow[] = [];
   if (isRecord(parsed)) {
     for (const [packageName, raw] of Object.entries(parsed)) {
-      if (!isRecord(raw) || typeof raw.current !== "string") {
+      if (!isRecord(raw)) {
+        continue;
+      }
+      const current = stringValue(raw.current) ?? stringValue(raw.installed) ?? stringValue(raw.wanted);
+      if (!current) {
         continue;
       }
       const wanted = stringValue(raw.wanted);
       const latest = stringValue(raw.latest);
       outdated.push({
         packageName,
-        current: raw.current,
+        current,
         ...(wanted ? { wanted } : {}),
         ...(latest ? { latest } : {}),
         ...(typeof raw.type === "string" ? { type: raw.type } : {}),
-        drift: classifyVersionDrift(raw.current, latest ?? wanted),
+        ...(typeof raw.dependencyType === "string" ? { type: raw.dependencyType } : {}),
+        drift: classifyVersionDrift(current, latest ?? wanted),
       });
     }
+  } else {
+    outdated.push(...parseBunOutdatedTable(input.outdatedJson));
+  }
+  if (outdated.length === 0 && json.error) {
+    warnings.push(json.error);
   }
   return {
     repoRoot: path.resolve(input.repoRoot),
@@ -185,28 +237,29 @@ export function runDependencyAuditLive(
   const timeoutMs = clampTimeout(input.timeoutMs, DEFAULT_DEPENDENCY_AUDIT_TIMEOUT_MS, MAX_DEPENDENCY_AUDIT_TIMEOUT_MS);
   const commands: DependencyAuditLiveCommand[] = [];
   const warnings: string[] = [];
-  if (packageManager !== "npm") {
+  const commandSpec = dependencyAuditCommandSpec(packageManager);
+  if (!commandSpec) {
     return {
       refused: true,
       repoRoot,
       packageManager,
       commands,
-      hint: "Live dependency audit currently supports npm. Run your package manager's audit command and pass JSON to dependency_risk_report.",
+      hint: "Live dependency audit currently supports npm, pnpm, and bun. Run your package manager's audit command and pass JSON to dependency_risk_report.",
       warnings,
     };
   }
-  const auditRun = runner("npm", ["audit", "--json"], { cwd: repoRoot, timeoutMs });
-  commands.push(commandRecord("npm", ["audit", "--json"], auditRun, timeoutMs));
+  const auditRun = runner(commandSpec.command, commandSpec.auditArgs, { cwd: repoRoot, timeoutMs });
+  commands.push(commandRecord(commandSpec.command, commandSpec.auditArgs, auditRun, timeoutMs));
   const audit = auditRun.stdout.trim()
     ? parseDependencyAuditJson({ repoRoot, auditJson: auditRun.stdout })
     : emptyAudit(repoRoot);
   if (auditRun.status !== 0 && audit.vulnerabilities.length === 0) {
-    warnings.push(auditRun.stderr || "npm audit exited non-zero without parseable vulnerability JSON.");
+    warnings.push(auditRun.stderr || `${commandSpec.command} audit exited non-zero without parseable vulnerability JSON.`);
   }
   let outdated: DependencyOutdatedReport | undefined;
   if (input.includeOutdated) {
-    const outdatedRun = runner("npm", ["outdated", "--json"], { cwd: repoRoot, timeoutMs });
-    commands.push(commandRecord("npm", ["outdated", "--json"], outdatedRun, timeoutMs));
+    const outdatedRun = runner(commandSpec.command, commandSpec.outdatedArgs, { cwd: repoRoot, timeoutMs });
+    commands.push(commandRecord(commandSpec.command, commandSpec.outdatedArgs, outdatedRun, timeoutMs));
     outdated = outdatedRun.stdout.trim()
       ? parseDependencyOutdatedJson({ repoRoot, outdatedJson: outdatedRun.stdout })
       : emptyOutdated(repoRoot);
@@ -222,17 +275,34 @@ export function runDependencyAuditLive(
   };
 }
 
+function dependencyAuditCommandSpec(packageManager: ProjectPackageManager): {
+  command: "npm" | "pnpm" | "bun";
+  auditArgs: string[];
+  outdatedArgs: string[];
+} | undefined {
+  switch (packageManager) {
+    case "npm":
+      return { command: "npm", auditArgs: ["audit", "--json"], outdatedArgs: ["outdated", "--json"] };
+    case "pnpm":
+      return { command: "pnpm", auditArgs: ["audit", "--json"], outdatedArgs: ["outdated", "--format", "json"] };
+    case "bun":
+      return { command: "bun", auditArgs: ["audit", "--json"], outdatedArgs: ["outdated"] };
+    default:
+      return undefined;
+  }
+}
+
 function defaultRunner(command: string, args: string[], options: { cwd: string; timeoutMs: number }) {
   const result = spawnSync(command, args, {
     cwd: options.cwd,
     encoding: "utf8",
-    shell: false,
+    shell: process.platform === "win32",
     timeout: options.timeoutMs,
   });
   return {
     status: result.status,
     stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
+    stderr: result.stderr || result.error?.message || "",
   };
 }
 
@@ -260,12 +330,155 @@ function emptyOutdated(repoRoot: string): DependencyOutdatedReport {
 }
 
 function safeJson(value: string, warnings: string[]): unknown {
-  try {
-    return JSON.parse(value) as unknown;
-  } catch (error) {
-    warnings.push(error instanceof Error ? error.message : String(error));
+  const parsed = parseJsonPayload(value);
+  if (!parsed.error) {
+    return parsed.value;
+  }
+  warnings.push(parsed.error);
+  return undefined;
+}
+
+function parseJsonPayload(value: string): { value?: unknown; error?: string } {
+  const candidates = uniqueSorted([value, stripAnsi(value).trim(), extractJsonPayload(stripAnsi(value)) ?? ""]);
+  let lastError = "";
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    try {
+      return { value: JSON.parse(candidate) as unknown };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  return { error: lastError || "No JSON payload found." };
+}
+
+function extractJsonPayload(value: string): string | undefined {
+  const objectStart = value.indexOf("{");
+  const arrayStart = value.indexOf("[");
+  const starts = [objectStart, arrayStart].filter((index) => index >= 0);
+  const start = Math.min(...starts);
+  if (!Number.isFinite(start)) {
     return undefined;
   }
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < value.length; index += 1) {
+    const char = value[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+    if (char === "{" || char === "[") {
+      stack.push(char === "{" ? "}" : "]");
+      continue;
+    }
+    if (char === "}" || char === "]") {
+      const expected = stack.pop();
+      if (char !== expected) {
+        return undefined;
+      }
+      if (stack.length === 0) {
+        return value.slice(start, index + 1);
+      }
+    }
+  }
+  return undefined;
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
+function advisoryIdentifiers(raw: Record<string, unknown>): string[] {
+  const identifiers = new Set<string>();
+  const candidates = [
+    raw.name,
+    raw.github_advisory_id,
+    raw.cve,
+    raw.cves,
+    raw.url,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string") {
+      addIdentifiers(identifiers, candidate);
+    } else if (Array.isArray(candidate)) {
+      for (const item of candidate) {
+        if (typeof item === "string") {
+          addIdentifiers(identifiers, item);
+        }
+      }
+    }
+  }
+  return [...identifiers].sort((left, right) => left.localeCompare(right));
+}
+
+function addIdentifiers(target: Set<string>, value: string): void {
+  for (const match of value.matchAll(/\b(?:CVE-\d{4}-\d{4,}|GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4})\b/gi)) {
+    target.add(match[0].toUpperCase().startsWith("CVE-") ? match[0].toUpperCase() : match[0]);
+  }
+}
+
+function advisoryFindingPaths(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const paths = new Set<string>();
+  for (const finding of value) {
+    if (!isRecord(finding) || !Array.isArray(finding.paths)) {
+      continue;
+    }
+    for (const item of finding.paths) {
+      if (typeof item === "string") {
+        paths.add(item);
+      }
+    }
+  }
+  return [...paths].sort((left, right) => left.localeCompare(right));
+}
+
+function parseBunOutdatedTable(value: string): DependencyOutdatedRow[] {
+  const rows: DependencyOutdatedRow[] = [];
+  for (const line of stripAnsi(value).split(/\r?\n/)) {
+    if (!line.includes("|")) {
+      continue;
+    }
+    const cells = line
+      .split("|")
+      .map((cell) => cell.trim())
+      .filter(Boolean);
+    if (cells.length < 4 || cells[0] === "Package" || cells.every((cell) => /^-+$/.test(cell))) {
+      continue;
+    }
+    const [packageName, current, wanted, latest] = cells;
+    if (!packageName || !current) {
+      continue;
+    }
+    rows.push({
+      packageName,
+      current,
+      ...(wanted ? { wanted } : {}),
+      ...(latest ? { latest } : {}),
+      drift: classifyVersionDrift(current, latest ?? wanted),
+    });
+  }
+  return rows;
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values)].sort((left, right) => left.length - right.length);
 }
 
 function normalizeSeverity(value: string | undefined): DependencySeverity {

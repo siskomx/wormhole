@@ -2,12 +2,12 @@ import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import {
   REPO_INDEX_EXTRACTOR_VERSION,
-  assembleRepoIndex,
   buildRepoIndex,
   createRepoIndexFingerprintFromEntries,
   extractRepoIndexFile,
   normalizeRepoIndexBuildOptions,
   type NormalizedRepoIndexBuildOptions,
+  type RepoIndexEdge,
   type RepoIndex,
   type RepoIndexBuildOptions,
   type RepoIndexFile,
@@ -132,13 +132,34 @@ export function refreshRepoIndexIncremental(input: {
 
   for (const changedFile of changedFiles.paths) {
     if (!previousFiles.has(changedFile)) {
-      return fullRebuildResult({
-        repoRoot,
-        changedFiles: changedFiles.paths,
-        buildOptions,
-        fallbackReason: "changed_file_outside_index_scope",
-        previousIndex,
-      });
+      if (!previousIndex.truncated) {
+        return fullRebuildResult({
+          repoRoot,
+          changedFiles: changedFiles.paths,
+          buildOptions,
+          fallbackReason: "changed_file_outside_index_scope",
+          previousIndex,
+        });
+      }
+      const status = inspectChangedFile(repoRoot, changedFile, buildOptions);
+      if (status.kind === "removed") {
+        removedFiles.push(changedFile);
+        continue;
+      }
+      if (status.kind === "outside_scope" || status.kind === "read_failed") {
+        return fullRebuildResult({
+          repoRoot,
+          changedFiles: changedFiles.paths,
+          buildOptions,
+          fallbackReason:
+            status.kind === "outside_scope"
+              ? "changed_file_outside_index_scope"
+              : "file_read_failed",
+          previousIndex,
+        });
+      }
+      reindexedFiles.set(changedFile, { file: status.file, statSize: status.statSize });
+      continue;
     }
 
     const status = inspectChangedFile(repoRoot, changedFile, buildOptions);
@@ -181,13 +202,14 @@ export function refreshRepoIndexIncremental(input: {
     mergedFiles,
     reindexedFiles,
   });
-  const index = assembleRepoIndex({
+  const index = assembleIncrementalRepoIndex({
+    previousIndex,
     repoRoot,
     buildOptions,
     files: mergedFiles,
-    skippedFiles: previousIndex.skippedFiles,
-    skipReasons: previousIndex.skipReasons,
     fingerprintEntries,
+    changedFiles: changedFiles.paths,
+    removedFiles,
   });
   const factGraph = createRepoFactGraphFromIndex({ index });
   const reindexed = [...reindexedFiles.keys()].sort((left, right) => left.localeCompare(right));
@@ -208,6 +230,120 @@ export function refreshRepoIndexIncremental(input: {
     factGraph,
     warnings: [],
   };
+}
+
+function assembleIncrementalRepoIndex(input: {
+  previousIndex: RepoIndex;
+  repoRoot: string;
+  buildOptions: NormalizedRepoIndexBuildOptions;
+  files: RepoIndexFile[];
+  fingerprintEntries: string[];
+  changedFiles: string[];
+  removedFiles: string[];
+}): RepoIndex {
+  const changedFileSet = new Set(input.changedFiles);
+  const removedFileSet = new Set(input.removedFiles);
+  const oldChangedSymbolIds = new Set(
+    input.previousIndex.symbols
+      .filter((symbol) => changedFileSet.has(normalizeRepoPath(symbol.path)) || removedFileSet.has(normalizeRepoPath(symbol.path)))
+      .map((symbol) => symbol.id),
+  );
+  const files = [...input.files].sort((left, right) => left.path.localeCompare(right.path));
+  const symbols = files.flatMap((file) => file.symbols);
+  const changedFiles = files.filter((file) => changedFileSet.has(normalizeRepoPath(file.path)));
+  const edges = uniqueEdges([
+    ...input.previousIndex.edges.filter((edge) =>
+      preservesIncrementalEdge({
+        edge,
+        changedFileSet,
+        removedFileSet,
+        oldChangedSymbolIds,
+      }),
+    ),
+    ...changedFiles.flatMap((file) => defineEdgesForFile(file)),
+  ]);
+
+  return {
+    repoRoot: input.repoRoot,
+    builtAt: new Date().toISOString(),
+    buildOptions: input.buildOptions,
+    extractorVersion: REPO_INDEX_EXTRACTOR_VERSION,
+    fingerprint: createRepoIndexFingerprintFromEntries(input.fingerprintEntries),
+    fingerprintEntries: input.fingerprintEntries,
+    files,
+    symbols,
+    edges,
+    truncated: input.previousIndex.truncated,
+    skippedFiles: [...input.previousIndex.skippedFiles].sort((left, right) => left.localeCompare(right)),
+    skipReasons: [...(input.previousIndex.skipReasons ?? [])].sort((left, right) => left.localeCompare(right)),
+  };
+}
+
+function preservesIncrementalEdge(input: {
+  edge: RepoIndexEdge;
+  changedFileSet: Set<string>;
+  removedFileSet: Set<string>;
+  oldChangedSymbolIds: Set<string>;
+}): boolean {
+  const fromPath = repoPathForNodeId(input.edge.from);
+  const toPath = repoPathForNodeId(input.edge.to);
+  if (fromPath && input.removedFileSet.has(fromPath)) {
+    return false;
+  }
+  if (toPath && input.removedFileSet.has(toPath)) {
+    return false;
+  }
+  if (fromPath && input.changedFileSet.has(fromPath)) {
+    return false;
+  }
+  if (input.oldChangedSymbolIds.has(input.edge.from) || input.oldChangedSymbolIds.has(input.edge.to)) {
+    return false;
+  }
+  return true;
+}
+
+function defineEdgesForFile(file: RepoIndexFile): RepoIndexEdge[] {
+  return file.symbols.map((symbol) => ({
+    from: file.path,
+    to: symbol.id,
+    kind: "defines",
+    provenance: "extracted",
+    confidence: 1,
+    line: symbol.line,
+    label: symbol.name,
+  }));
+}
+
+function repoPathForNodeId(nodeId: string): string | undefined {
+  if (nodeId.startsWith("external:")) {
+    return undefined;
+  }
+  const pathPart = nodeId.split("#", 1)[0] ?? nodeId;
+  return normalizeRepoPath(pathPart);
+}
+
+function uniqueEdges(edges: RepoIndexEdge[]): RepoIndexEdge[] {
+  const seen = new Set<string>();
+  const output: RepoIndexEdge[] = [];
+  for (const edge of edges) {
+    const key = `${edge.from}\0${edge.to}\0${edge.kind}\0${edge.line ?? ""}\0${edge.label ?? ""}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    output.push(edge);
+  }
+  return output.sort(compareEdges);
+}
+
+function compareEdges(left: RepoIndexEdge, right: RepoIndexEdge): number {
+  return (
+    left.from.localeCompare(right.from) ||
+    left.to.localeCompare(right.to) ||
+    left.kind.localeCompare(right.kind) ||
+    (left.line ?? 0) - (right.line ?? 0) ||
+    (left.label ?? "").localeCompare(right.label ?? "")
+  );
 }
 
 type NormalizedChangedFiles = {

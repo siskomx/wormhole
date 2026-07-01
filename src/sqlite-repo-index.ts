@@ -99,6 +99,9 @@ export function readSqliteRepoIndexStatus(repoRootInput: string): SqliteRepoInde
     const metadata = readMetadata(db);
     const buildOptions = JSON.parse(metadata.buildOptions ?? "{}") as NormalizedRepoIndexBuildOptions;
     const summary = JSON.parse(metadata.summary ?? "{}") as RepoIndexSummary;
+    const skippedFiles = JSON.parse(metadata.skippedFiles ?? "[]") as string[];
+    const skipReasons = JSON.parse(metadata.skipReasons ?? "[]") as RepoIndex["skipReasons"];
+    const fingerprintEntries = JSON.parse(metadata.fingerprintEntries ?? "null") as RepoIndex["fingerprintEntries"];
     const ftsAvailable = metadata.ftsAvailable === "true" && hasFtsTables(db);
     const fresh = isRepoIndexFresh({
       repoRoot,
@@ -110,9 +113,11 @@ export function readSqliteRepoIndexStatus(repoRootInput: string): SqliteRepoInde
       symbols: [],
       edges: [],
       truncated: metadata.truncated === "true",
-      skippedFiles: JSON.parse(metadata.skippedFiles ?? "[]") as string[],
+      skippedFiles,
+      ...(skipReasons ? { skipReasons } : {}),
+      ...(fingerprintEntries ? { fingerprintEntries } : {}),
     });
-    const skippedFiles = Array.isArray(summary.skippedFiles) ? summary.skippedFiles : [];
+    const summarySkippedFiles = Array.isArray(summary.skippedFiles) ? summary.skippedFiles : skippedFiles;
     const metadataReasons =
       metadata.extractorVersion === REPO_INDEX_EXTRACTOR_VERSION
         ? []
@@ -127,7 +132,7 @@ export function readSqliteRepoIndexStatus(repoRootInput: string): SqliteRepoInde
       builtAt: summary.builtAt,
       indexPath,
       fileCount: summary.fileCount,
-      skippedFiles,
+      skippedFiles: summarySkippedFiles,
       languageCoverage: summary.indexHealth?.languageCoverage ?? [],
       reasons: [
         ...(summary.indexHealth?.languageCoverage?.flatMap((coverage) => coverage.reasons) ?? []),
@@ -141,7 +146,7 @@ export function readSqliteRepoIndexStatus(repoRootInput: string): SqliteRepoInde
       retrievalModes: ftsAvailable ? ["sqlite_fts", "sqlite_like"] : ["sqlite_like"],
       summary: {
         ...summary,
-        skippedFiles,
+        skippedFiles: summarySkippedFiles,
         indexHealth: summary.indexHealth ?? indexHealth,
       },
       indexHealth,
@@ -328,6 +333,8 @@ function writeMetadata(db: DatabaseSync, index: RepoIndex, schema: SqliteRepoInd
     fingerprint: index.fingerprint,
     truncated: String(index.truncated),
     skippedFiles: JSON.stringify(index.skippedFiles),
+    skipReasons: JSON.stringify(index.skipReasons ?? []),
+    fingerprintEntries: JSON.stringify(index.fingerprintEntries ?? []),
     summary: JSON.stringify(summary),
   };
   for (const [key, value] of Object.entries(values)) {

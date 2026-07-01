@@ -208,6 +208,123 @@ describe("Wormhole MCP server", () => {
     }
   });
 
+  it("exposes agent dispatch timeout and state maintenance retry skip overrides in MCP schemas", () => {
+    const server = createWormholeMcpServer(createInMemoryKernel());
+    const registeredTools = (server as unknown as {
+      _registeredTools: Record<string, { inputSchema: z.ZodType }>;
+    })._registeredTools;
+
+    const agentDispatchExecute = registeredTools.agent_dispatch_execute.inputSchema;
+    const agentShape = (agentDispatchExecute as unknown as { shape: Record<string, unknown> }).shape;
+    expect(Object.keys(agentShape)).toContain("timeoutMs");
+    expect(
+      agentDispatchExecute.safeParse({
+        missionId: "M",
+        taskId: "T",
+        objective: "Run agent",
+        requiredCapabilities: ["coding"],
+        timeoutMs: 25,
+      }).success,
+    ).toBe(true);
+    expect(
+      agentDispatchExecute.safeParse({
+        missionId: "M",
+        taskId: "T",
+        objective: "Run agent",
+        requiredCapabilities: ["coding"],
+        timeoutMs: 0,
+      }).success,
+    ).toBe(false);
+
+    const retry = registeredTools.state_maintenance_retry.inputSchema;
+    expect(
+      retry.safeParse({
+        runId: "state-maintenance:1",
+        overrides: {
+          refreshGraph: false,
+          sourceConflicts: false,
+          freshness: true,
+          recordEvidence: false,
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("exposes traversal caps on repo graph refresh MCP schemas", () => {
+    const server = createWormholeMcpServer(createInMemoryKernel());
+    const registeredTools = (server as unknown as {
+      _registeredTools: Record<string, { inputSchema: z.ZodType }>;
+    })._registeredTools;
+
+    for (const toolName of ["repo_graph_refresh_incremental", "repo_graph_refresh_full"]) {
+      const schema = registeredTools[toolName]?.inputSchema;
+      const shape = (schema as unknown as { shape: Record<string, unknown> }).shape;
+
+      expect(Object.keys(shape)).toEqual(
+        expect.arrayContaining([
+          "preset",
+          "include",
+          "exclude",
+          "maxFiles",
+          "maxFileBytes",
+          "maxTotalBytes",
+          "maxDepth",
+          "maxDirs",
+          "maxElapsedMs",
+          "maxChangedSymbols",
+        ]),
+      );
+      expect(
+        schema.safeParse({
+          repoRoot: "/repo",
+          changedFiles: ["src/app.ts"],
+          include: ["src/**"],
+          exclude: ["dist/**"],
+          maxFiles: 1,
+          maxFileBytes: 512,
+          maxTotalBytes: 1024,
+          maxDepth: 0,
+          maxDirs: 1,
+          maxElapsedMs: 1,
+          maxChangedSymbols: 0,
+        }).success,
+      ).toBe(true);
+      expect(schema.safeParse({ repoRoot: "/repo", changedFiles: ["src/app.ts"], maxFiles: 0 }).success).toBe(false);
+      expect(schema.safeParse({ repoRoot: "/repo", changedFiles: ["src/app.ts"], maxElapsedMs: 0 }).success).toBe(false);
+      expect(schema.safeParse({ repoRoot: "/repo", changedFiles: ["src/app.ts"], maxChangedSymbols: -1 }).success).toBe(false);
+    }
+  });
+
+  it("exposes changed-symbol caps in large-repo intelligence MCP schemas", () => {
+    const server = createWormholeMcpServer(createInMemoryKernel());
+    const registeredTools = (server as unknown as {
+      _registeredTools: Record<string, { inputSchema: z.ZodType }>;
+    })._registeredTools;
+
+    for (const toolName of [
+      "project_onboard",
+      "repo_native_pack_build",
+      "blast_radius_analyze",
+      "context_pack_generate",
+    ]) {
+      const schema = registeredTools[toolName]?.inputSchema;
+      const shape = (schema as unknown as { shape: Record<string, unknown> }).shape;
+
+      expect(Object.keys(shape)).toContain("maxChangedSymbols");
+      expect(
+        schema.safeParse({
+          repoRoot: "/repo",
+          changedFiles: ["src/index.ts"],
+          objective: "Bound large-file impact",
+          query: "impact",
+          maxChars: 500,
+          maxChangedSymbols: 0,
+        }).success,
+      ).toBe(true);
+      expect(schema.safeParse({ repoRoot: "/repo", maxChangedSymbols: -1 }).success).toBe(false);
+    }
+  });
+
   it("exposes secret scan file caps in the MCP schema", () => {
     const server = createWormholeMcpServer(createInMemoryKernel());
     const secretScanTool = (server as unknown as {

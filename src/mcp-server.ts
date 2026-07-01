@@ -30,7 +30,7 @@ export function createWormholeMcpServer(
 ): McpServer {
   const server = new McpServer({
     name: "wormhole",
-    version: "0.16.0",
+    version: "0.17.0",
   });
   const tools = createToolHandlers(kernel, options);
   const taskStatusSchema = z.enum([
@@ -327,6 +327,17 @@ export function createWormholeMcpServer(
   const toolProfileIdSchema = z.enum(TOOL_PROFILE_IDS);
   const projectLaneSchema = z.enum(PROJECT_LANES);
   const repoIndexPresetSchema = z.enum(["default", "large_repo"]);
+  const repoIndexCapSchema = {
+    preset: repoIndexPresetSchema.optional(),
+    include: z.array(z.string()).optional(),
+    exclude: z.array(z.string()).optional(),
+    maxFiles: z.number().int().positive().optional(),
+    maxFileBytes: z.number().int().positive().optional(),
+    maxTotalBytes: z.number().int().positive().optional(),
+    maxDepth: z.number().int().nonnegative().optional(),
+    maxDirs: z.number().int().positive().optional(),
+    maxElapsedMs: z.number().int().positive().optional(),
+  };
   const domainCoverageGapKindSchema = z.enum([
     "manifest-missing",
     "feature-without-manifest",
@@ -362,6 +373,7 @@ export function createWormholeMcpServer(
     query: z.string().optional(),
     changedFiles: z.array(z.string()).optional(),
     diffText: z.string().optional(),
+    maxChangedSymbols: z.number().int().nonnegative().optional(),
     limit: z.number().optional(),
   };
   const toolPromotionInputSchema = {
@@ -1272,6 +1284,7 @@ export function createWormholeMcpServer(
         requiredCapabilities: z.array(z.string()),
         preferredTargets: z.array(z.string()).optional(),
         payload: z.unknown().optional(),
+        timeoutMs: z.number().int().positive().max(600000).optional(),
       },
     },
     async (input) => jsonResult(tools.agentDispatch(input)),
@@ -1288,6 +1301,7 @@ export function createWormholeMcpServer(
         requiredCapabilities: z.array(z.string()),
         preferredTargets: z.array(z.string()).optional(),
         payload: z.unknown().optional(),
+        timeoutMs: z.number().int().positive().max(600000).optional(),
       },
     },
     async (input) => jsonResult(await tools.agentDispatchExecute(input)),
@@ -1939,6 +1953,8 @@ export function createWormholeMcpServer(
         repoRoot: z.string(),
         changedFiles: z.array(z.string()),
         diffText: z.string().optional(),
+        maxChangedSymbols: z.number().int().nonnegative().optional(),
+        ...repoIndexCapSchema,
       },
     },
     async (input) => jsonResult(tools.repoGraphRefreshIncremental(input)),
@@ -1952,6 +1968,8 @@ export function createWormholeMcpServer(
         repoRoot: z.string(),
         changedFiles: z.array(z.string()),
         diffText: z.string().optional(),
+        maxChangedSymbols: z.number().int().nonnegative().optional(),
+        ...repoIndexCapSchema,
       },
     },
     async (input) => jsonResult(tools.repoGraphRefreshFull(input)),
@@ -2278,6 +2296,7 @@ export function createWormholeMcpServer(
         repoRoot: z.string(),
         changedFiles: z.array(z.string()).optional(),
         diffText: z.string().optional(),
+        maxChangedSymbols: z.number().int().nonnegative().optional(),
         semanticRecords: z.array(semanticRecordSchema).optional(),
         semanticQuery: z.string().optional(),
         action: z.object({ operations: z.array(actionPolicyOperationSchema) }).optional(),
@@ -2511,6 +2530,7 @@ export function createWormholeMcpServer(
         repoRoot: z.string(),
         changedFiles: z.array(z.string()),
         diffText: z.string().optional(),
+        maxChangedSymbols: z.number().int().nonnegative().optional(),
       },
     },
     async (input) => jsonResult(tools.blastRadiusAnalyze(input)),
@@ -2526,6 +2546,7 @@ export function createWormholeMcpServer(
         query: z.string(),
         changedFiles: z.array(z.string()).optional(),
         maxChars: z.number(),
+        maxChangedSymbols: z.number().int().nonnegative().optional(),
       },
     },
     async (input) => jsonResult(tools.contextPackGenerate(input)),
@@ -2793,7 +2814,9 @@ export function createWormholeMcpServer(
         refreshGraph: z.boolean().optional(),
         sourceConflicts: z.boolean().optional(),
         freshness: z.boolean().optional(),
+        maxChangedSymbols: z.number().int().nonnegative().optional(),
         recordEvidence: z.boolean().optional(),
+        ...repoIndexCapSchema,
         context: z
           .object({
             maxChars: z.number(),
@@ -2847,7 +2870,11 @@ export function createWormholeMcpServer(
             watchId: z.string().optional(),
             scanWatch: z.boolean().optional(),
             refreshGraph: z.boolean().optional(),
+            sourceConflicts: z.boolean().optional(),
+            freshness: z.boolean().optional(),
+            maxChangedSymbols: z.number().int().nonnegative().optional(),
             recordEvidence: z.boolean().optional(),
+            ...repoIndexCapSchema,
             context: z
               .object({
                 maxChars: z.number(),
@@ -3271,7 +3298,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "dependency_risk_report",
     {
-      description: "Combine local dependency license metadata with npm audit and outdated JSON risk signals.",
+      description: "Combine local dependency license metadata with npm, pnpm, or bun audit and outdated risk signals.",
       inputSchema: {
         repoRoot: z.string(),
         auditJson: z.string().optional(),
@@ -3284,7 +3311,7 @@ export function createWormholeMcpServer(
   server.registerTool(
     "dependency_audit_live",
     {
-      description: "Run bounded npm audit/outdated commands and parse dependency risk output.",
+      description: "Run bounded npm, pnpm, or bun audit/outdated commands and parse dependency risk output.",
       inputSchema: {
         repoRoot: z.string(),
         includeOutdated: z.boolean().optional(),

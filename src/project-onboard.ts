@@ -34,6 +34,7 @@ export function projectOnboard(input: {
   repoRoot: string;
   changedFiles?: string[];
   diffText?: string;
+  maxChangedSymbols?: number;
   semanticRecords?: SemanticRecordInput[];
   semanticQuery?: string;
   action?: { operations: ActionPolicyOperation[] };
@@ -46,6 +47,7 @@ export function projectOnboard(input: {
     repoRoot: input.repoRoot,
     changedFiles: input.changedFiles ?? [],
     diffText: input.diffText,
+    maxChangedSymbols: input.maxChangedSymbols,
   });
   const impactForPlan = {
     ...impact,
@@ -64,6 +66,7 @@ export function projectOnboard(input: {
     query: input.semanticQuery,
     changedFiles: input.changedFiles ?? [],
     diffText: input.diffText,
+    maxChangedSymbols: input.maxChangedSymbols,
   });
 
   let semantic: SemanticSearchResult | undefined;

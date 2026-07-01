@@ -3,6 +3,7 @@ import {
   generateProjectContextPack,
   type BlastRadiusAnalysis,
   type ProjectContextPack,
+  type ProjectModelCacheInput,
 } from "./project-intelligence.js";
 import type { DiagnosticRecord, DiagnosticSeverity } from "./diagnostics.js";
 import type { SourceType } from "./kernel.js";
@@ -29,7 +30,8 @@ export type MissionDeltaReplanInput = {
   diagnostics?: DiagnosticRecord[];
   evidenceRecords?: MissionDeltaEvidenceRecord[];
   maxContextChars?: number;
-};
+  maxChangedSymbols?: number;
+} & ProjectModelCacheInput;
 
 export type MissionDeltaReplanReport = {
   missionId?: string;
@@ -67,14 +69,27 @@ export type MissionDeltaReplanReport = {
   };
 };
 
+const DEFAULT_MISSION_DELTA_MAX_CHANGED_SYMBOLS = 50;
+
 export function createMissionDeltaReplan(input: MissionDeltaReplanInput): MissionDeltaReplanReport {
   const changedFiles = uniqueSorted(input.changedFiles.map(normalizeRepoPath));
   const diagnostics = [...(input.diagnostics ?? [])].sort(compareDiagnostic);
+  const modelInput = {
+    projectModelCache: input.projectModelCache,
+    indexOptions: input.indexOptions,
+  };
+  const maxChangedSymbols = input.maxChangedSymbols ?? DEFAULT_MISSION_DELTA_MAX_CHANGED_SYMBOLS;
+  const cachedModel = input.projectModelCache?.get({
+    repoRoot: input.repoRoot,
+    indexOptions: input.indexOptions,
+  });
   const blastRadius = analyzeBlastRadius({
     repoRoot: input.repoRoot,
     changedFiles,
-      diffText: input.diffText,
-    });
+    diffText: input.diffText,
+    maxChangedSymbols,
+    ...modelInput,
+  });
   const contextQuery = contextQueryFor(input.objective, changedFiles, diagnostics);
   const repoNativePack = buildRepoNativePack({
     repoRoot: input.repoRoot,
@@ -82,6 +97,8 @@ export function createMissionDeltaReplan(input: MissionDeltaReplanInput): Missio
     query: contextQuery,
     changedFiles,
     diffText: input.diffText,
+    index: cachedModel?.index,
+    maxChangedSymbols,
   });
   const schemaChanged = changedFiles.some((file) =>
     repoNativePack.schema.migrationFiles.includes(file) || repoNativePack.schema.schemaFiles.includes(file),
@@ -92,6 +109,8 @@ export function createMissionDeltaReplan(input: MissionDeltaReplanInput): Missio
     query: contextQuery,
     changedFiles,
     maxChars: input.maxContextChars ?? 6_000,
+    maxChangedSymbols,
+    ...modelInput,
   });
   const staleEvidence = findStaleEvidence(input.evidenceRecords ?? [], changedFiles, blastRadius);
   const diagnosticsSummary = summarizeDiagnostics(diagnostics);

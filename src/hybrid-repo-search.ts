@@ -1,6 +1,5 @@
 import path from "node:path";
 import {
-  durableIndexStatus,
   queryDurableShardedRepoIndex,
 } from "./durable-index-store.js";
 import {
@@ -44,8 +43,6 @@ export function hybridRepoSearch(input: {
 }): HybridRepoSearchResult {
   const repoRoot = path.resolve(input.repoRoot);
   const limit = normalizeLimit(input.limit);
-  const status = durableIndexStatus({ repoRoot });
-  const fingerprint = status.repoIndex?.summary.indexHealth.fingerprint ?? status.sqliteIndex?.summary.indexHealth.fingerprint;
   const warnings: string[] = [];
   const byKey = new Map<string, HybridResultItem>();
 
@@ -55,6 +52,7 @@ export function hybridRepoSearch(input: {
     limit: Math.max(limit * 2, 10),
     requireFresh: input.requireFresh,
   });
+  const fingerprint = lexical.indexHealth.fingerprint;
   warnings.push(...lexical.warnings);
   for (const result of lexical.results) {
     addResult(byKey, {
@@ -98,30 +96,33 @@ export function hybridRepoSearch(input: {
     }
   }
 
-  for (const changedFile of uniqueSorted((input.changedFiles ?? []).map(toRepoPath))) {
-    const relations = queryRepoRelations({
-      repoRoot,
-      from: changedFile,
-      direction: "both",
-      maxDepth: 1,
-      limit: 50,
-      requireFresh: input.requireFresh,
-    });
-    warnings.push(...relations.warnings);
-    for (const edge of relations.edges) {
-      const relatedPath = relatedPathFor(changedFile, edge.from, edge.to);
-      if (!relatedPath) {
-        continue;
+  const relationAugmentationNeeded = byKey.size < limit || !lexical.usedSqlite || lexical.results.length < limit;
+  if (relationAugmentationNeeded) {
+    for (const changedFile of uniqueSorted((input.changedFiles ?? []).map(toRepoPath))) {
+      const relations = queryRepoRelations({
+        repoRoot,
+        from: changedFile,
+        direction: "both",
+        maxDepth: 1,
+        limit: 50,
+        requireFresh: input.requireFresh,
+      });
+      warnings.push(...relations.warnings);
+      for (const edge of relations.edges) {
+        const relatedPath = relatedPathFor(changedFile, edge.from, edge.to);
+        if (!relatedPath) {
+          continue;
+        }
+        addResult(byKey, {
+          path: relatedPath,
+          kind: "file",
+          title: relatedPath,
+          score: 0.2,
+          sources: ["relation", "graph_distance"],
+          evidence: [`relation:${edge.from}-${edge.kind}->${edge.to}`],
+          excerpt: `Related to changed file ${changedFile} by ${edge.kind}.`,
+        }, input.query);
       }
-      addResult(byKey, {
-        path: relatedPath,
-        kind: "file",
-        title: relatedPath,
-        score: 0.2,
-        sources: ["relation", "graph_distance"],
-        evidence: [`relation:${edge.from}-${edge.kind}->${edge.to}`],
-        excerpt: `Related to changed file ${changedFile} by ${edge.kind}.`,
-      }, input.query);
     }
   }
 

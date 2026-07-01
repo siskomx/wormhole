@@ -13,7 +13,7 @@ import {
   type DomainCoverageGap,
   type DomainIndex,
 } from "./domain-index.js";
-import { buildRepoIndex, type RepoIndexFile } from "./repo-index.js";
+import { buildRepoIndex, type RepoIndex, type RepoIndexFile } from "./repo-index.js";
 import type { SourceConflict, SourceProvenance } from "./source-authority.js";
 import { analyzeSourceConflicts } from "./source-conflicts.js";
 import { analyzeTestImpactV2 } from "./test-impact-v2.js";
@@ -26,6 +26,8 @@ export type RepoNativePackInput = {
   changedFiles?: string[];
   diffText?: string;
   limit?: number;
+  index?: RepoIndex;
+  maxChangedSymbols?: number;
 };
 
 export type RepoNativeScript = ProjectScript & {
@@ -157,11 +159,17 @@ export function buildRepoNativePack(input: RepoNativePackInput): RepoNativePack 
   const query = input.query ?? objective;
   const changedFiles = normalizePaths(input.changedFiles ?? []);
   const contract = detectProjectContract({ repoRoot });
-  const index = buildRepoIndex({ repoRoot, preset: "large_repo" });
+  const index = input.index ?? buildRepoIndex({ repoRoot, preset: "large_repo" });
   const featureIndex = createFeatureIndex({ repoRoot });
   const domainIndex = buildRepoNativeDomainIndex(repoRoot);
   const sourceConflicts = analyzeSourceConflicts({ repoRoot, index, contract }).conflicts;
-  const impact = analyzeTestImpactV2({ repoRoot, changedFiles, diffText: input.diffText, index });
+  const impact = analyzeTestImpactV2({
+    repoRoot,
+    changedFiles,
+    diffText: input.diffText,
+    index,
+    maxChangedSymbols: input.maxChangedSymbols,
+  });
   const verificationPlan = createVerificationPlan({
     contract,
     impact: {

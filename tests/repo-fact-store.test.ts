@@ -124,9 +124,8 @@ describe("repo fact store", () => {
         }).staleReasons,
       ).toEqual(expect.arrayContaining(["build_options_mismatch"]));
 
-      expect(repoFactStoreStatus({ repoRoot }).staleReasons).toEqual(
-        expect.arrayContaining(["current_index_missing"]),
-      );
+      expect(repoFactStoreStatus({ repoRoot }).staleReasons).not.toContain("current_index_missing");
+      expect(repoFactStoreStatus({ repoRoot }).fresh).toBe(true);
 
       writeFileSync(path.join(repoRoot, "src", "app.ts"), "export function runApp() { return false; }\n");
       expect(repoFactStoreStatus({ repoRoot, currentIndex: index, requireFresh: true }).staleReasons).toEqual(

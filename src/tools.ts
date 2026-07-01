@@ -473,10 +473,11 @@ export type StateMaintenanceRunInput = {
   refreshGraph?: boolean;
   sourceConflicts?: boolean;
   freshness?: boolean;
+  maxChangedSymbols?: number;
   recordEvidence?: boolean;
   context?: StateMaintenanceContextInput;
   workspace?: StateMaintenanceWorkspaceInput;
-};
+} & Partial<Omit<RepoIndexBuildOptions, "repoRoot">>;
 
 export type StateMaintenanceRunStatus = "running" | "completed" | "failed";
 
@@ -793,6 +794,47 @@ export function createToolHandlers(
     return durableRepoIndexBuildOptions({ repoRoot });
   }
 
+  function repoIndexOptionsFromInput(
+    input: Partial<Omit<RepoIndexBuildOptions, "repoRoot">>,
+  ): Omit<RepoIndexBuildOptions, "repoRoot"> | undefined {
+    const options: Omit<RepoIndexBuildOptions, "repoRoot"> = {};
+    if (input.preset !== undefined) {
+      options.preset = input.preset;
+    }
+    if (input.include !== undefined) {
+      options.include = input.include;
+    }
+    if (input.exclude !== undefined) {
+      options.exclude = input.exclude;
+    }
+    if (input.maxFiles !== undefined) {
+      options.maxFiles = input.maxFiles;
+    }
+    if (input.maxFileBytes !== undefined) {
+      options.maxFileBytes = input.maxFileBytes;
+    }
+    if (input.maxTotalBytes !== undefined) {
+      options.maxTotalBytes = input.maxTotalBytes;
+    }
+    if (input.maxDepth !== undefined) {
+      options.maxDepth = input.maxDepth;
+    }
+    if (input.maxDirs !== undefined) {
+      options.maxDirs = input.maxDirs;
+    }
+    if (input.maxElapsedMs !== undefined) {
+      options.maxElapsedMs = input.maxElapsedMs;
+    }
+    return Object.keys(options).length > 0 ? options : undefined;
+  }
+
+  function mergeRepoIndexOptions(
+    base: Omit<RepoIndexBuildOptions, "repoRoot"> | undefined,
+    override: Omit<RepoIndexBuildOptions, "repoRoot"> | undefined,
+  ): Omit<RepoIndexBuildOptions, "repoRoot"> | undefined {
+    return base || override ? { ...(base ?? {}), ...(override ?? {}) } : undefined;
+  }
+
   function loadSymbolContextIndex(repoRoot: string): {
     index?: RepoIndex;
     graphStatus: SymbolContextGraphStatus;
@@ -930,16 +972,22 @@ export function createToolHandlers(
     repoRoot: string;
     changedFiles: string[];
     diffText?: string;
-  }) {
+    maxChangedSymbols?: number;
+    onRepoIndex?: (index: RepoIndex) => void;
+  } & Partial<Omit<RepoIndexBuildOptions, "repoRoot">>) {
     const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
     const changedFiles = uniqueSorted(input.changedFiles.map((file) => repoRelativePath(repoRoot, file)));
-    const indexOptions = preservedRepoIndexOptions(repoRoot);
-    const index = refreshDurableRepoIndex({ ...(indexOptions ?? {}), repoRoot });
+    const indexOptions = mergeRepoIndexOptions(preservedRepoIndexOptions(repoRoot), repoIndexOptionsFromInput(input));
+    const refreshedIndex = buildRepoIndex({ ...(indexOptions ?? {}), repoRoot });
+    const index = writeDurableRepoIndexArtifacts(refreshedIndex);
     clearRepoIndexCaches(repoRoot, indexOptions);
+    input.onRepoIndex?.(refreshedIndex);
     const testImpact = analyzeTestImpactV2({
       repoRoot,
       changedFiles,
       diffText: input.diffText,
+      index: refreshedIndex,
+      maxChangedSymbols: input.maxChangedSymbols,
     });
     const activity = repoActivityStore.recordActivity({
       repoRoot,
@@ -967,10 +1015,12 @@ export function createToolHandlers(
     repoRoot: string;
     changedFiles: string[];
     diffText?: string;
-  }) {
+    maxChangedSymbols?: number;
+    onRepoIndex?: (index: RepoIndex) => void;
+  } & Partial<Omit<RepoIndexBuildOptions, "repoRoot">>) {
     const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
     const changedFiles = uniqueSorted(input.changedFiles.map((file) => repoRelativePath(repoRoot, file)));
-    const indexOptions = preservedRepoIndexOptions(repoRoot);
+    const indexOptions = mergeRepoIndexOptions(preservedRepoIndexOptions(repoRoot), repoIndexOptionsFromInput(input));
     const incremental = refreshRepoIndexIncremental({
       repoRoot,
       changedFiles,
@@ -978,10 +1028,13 @@ export function createToolHandlers(
     });
     const index = writeDurableRepoIndexArtifacts(incremental.index);
     clearRepoIndexCaches(repoRoot, indexOptions);
+    input.onRepoIndex?.(incremental.index);
     const testImpact = analyzeTestImpactV2({
       repoRoot,
       changedFiles,
       diffText: input.diffText,
+      index: incremental.index,
+      maxChangedSymbols: input.maxChangedSymbols,
     });
     const activity = repoActivityStore.recordActivity({
       repoRoot,
@@ -1105,6 +1158,9 @@ export function createToolHandlers(
     const actions: StateMaintenanceAction[] = [];
     const recordedEvidence: EvidenceRecord[] = [];
     let changedFiles = uniqueSorted((input.changedFiles ?? []).map((file) => repoRelativePath(repoRoot, file)));
+    const explicitIndexOptions = repoIndexOptionsFromInput(input);
+    const maintenanceIndexOptions = mergeRepoIndexOptions(preservedRepoIndexOptions(repoRoot), explicitIndexOptions);
+    let maintenanceIndex: RepoIndex | undefined;
     const startedAt = new Date().toISOString();
     const runRecord: StateMaintenanceRunRecord = {
       runId: `state-maintenance:${randomUUID()}`,
@@ -1146,6 +1202,23 @@ export function createToolHandlers(
       | undefined;
     let route: ReturnType<typeof recommendMissionRoute> | undefined;
     let currentToolName = "state_maintenance_run";
+
+    function getMaintenanceIndex(): RepoIndex {
+      maintenanceIndex ??= projectModelCache.get({
+        repoRoot,
+        ...(maintenanceIndexOptions ? { indexOptions: maintenanceIndexOptions } : {}),
+      }).index;
+      return maintenanceIndex;
+    }
+
+    function primeMaintenanceIndex(index: RepoIndex): void {
+      maintenanceIndex = index;
+      projectModelCache.prime({
+        repoRoot,
+        index,
+        ...(maintenanceIndexOptions ? { indexOptions: maintenanceIndexOptions } : {}),
+      });
+    }
 
     function addAction(action: StateMaintenanceAction): void {
       actions.push(action);
@@ -1210,6 +1283,9 @@ export function createToolHandlers(
             repoRoot,
             changedFiles,
             diffText: input.diffText,
+            maxChangedSymbols: input.maxChangedSymbols,
+            ...(explicitIndexOptions ?? {}),
+            onRepoIndex: primeMaintenanceIndex,
           });
           addAction({ toolName: "repo_graph_refresh_incremental", status: "ran" });
         } else {
@@ -1237,10 +1313,9 @@ export function createToolHandlers(
 
       if (input.sourceConflicts) {
         currentToolName = "source_conflicts_analyze";
-        const indexOptions = preservedRepoIndexOptions(repoRoot);
         sourceConflicts = analyzeSourceConflicts({
           repoRoot,
-          index: getRepoIndex(repoRoot, indexOptions),
+          index: getMaintenanceIndex(),
           contract: detectProjectContract({ repoRoot }),
         });
         addAction({ toolName: "source_conflicts_analyze", status: "ran" });
@@ -1318,7 +1393,8 @@ export function createToolHandlers(
       }
 
       currentToolName = "derived_graph_artifacts_status";
-      derivedGraphArtifacts = createDerivedGraphArtifactsReport(repoRoot, getRepoIndex(repoRoot));
+      derivedGraphArtifacts = createDerivedGraphArtifactsReport(repoRoot, getMaintenanceIndex());
+      addAction({ toolName: "derived_graph_artifacts_status", status: "ran" });
 
       if (input.workspace) {
         workspace = {};
@@ -1362,6 +1438,8 @@ export function createToolHandlers(
         query,
         changedFiles,
         diffText: input.diffText,
+        projectModelCache,
+        ...(maintenanceIndexOptions ? { indexOptions: maintenanceIndexOptions } : {}),
       });
       addAction({ toolName: "mission_route", status: "ran" });
     } catch (error) {
@@ -2456,7 +2534,8 @@ export function createToolHandlers(
       repoRoot: string;
       changedFiles: string[];
       diffText?: string;
-    }) {
+      maxChangedSymbols?: number;
+    } & Partial<Omit<RepoIndexBuildOptions, "repoRoot">>) {
       return refreshRepoGraphIncrementalForChangedFiles(input);
     },
 
@@ -2464,7 +2543,8 @@ export function createToolHandlers(
       repoRoot: string;
       changedFiles: string[];
       diffText?: string;
-    }) {
+      maxChangedSymbols?: number;
+    } & Partial<Omit<RepoIndexBuildOptions, "repoRoot">>) {
       return refreshRepoGraphForChangedFiles(input);
     },
 
@@ -2565,13 +2645,15 @@ export function createToolHandlers(
           objective,
           changedFiles,
           diagnostics,
+          projectModelCache,
         }),
       };
     },
 
     impactAnalyze(input: { repoRoot: string; changedFiles: string[] }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      const model = projectModelCache.get({ repoRoot });
+      const indexOptions = preservedRepoIndexOptions(repoRoot);
+      const model = projectModelCache.get({ repoRoot, ...(indexOptions ? { indexOptions } : {}) });
       return analyzeImpact({ ...input, repoRoot, index: model.index });
     },
 
@@ -2580,16 +2662,19 @@ export function createToolHandlers(
       changedFiles: string[];
       diffText?: string;
       maxDepth?: number;
+      maxChangedSymbols?: number;
       requireFresh?: boolean;
     }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      const model = projectModelCache.get({ repoRoot });
+      const indexOptions = preservedRepoIndexOptions(repoRoot);
+      const model = projectModelCache.get({ repoRoot, ...(indexOptions ? { indexOptions } : {}) });
       return analyzeChangeImpact({ ...input, repoRoot, index: model.index });
     },
 
     testPlanSelect(input: { repoRoot: string; changedFiles: string[]; tier?: VerificationCommand["tier"] }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      const model = projectModelCache.get({ repoRoot });
+      const indexOptions = preservedRepoIndexOptions(repoRoot);
+      const model = projectModelCache.get({ repoRoot, ...(indexOptions ? { indexOptions } : {}) });
       const contract = model.contract;
       const impact = analyzeImpact({ repoRoot, changedFiles: input.changedFiles, index: model.index });
       return createVerificationPlan({ contract, impact, changedFiles: input.changedFiles, tier: input.tier });
@@ -2812,7 +2897,12 @@ export function createToolHandlers(
       return discoverEntrypointFlows({ repoRoot, projectModelCache });
     },
 
-    blastRadiusAnalyze(input: { repoRoot: string; changedFiles: string[]; diffText?: string }) {
+    blastRadiusAnalyze(input: {
+      repoRoot: string;
+      changedFiles: string[];
+      diffText?: string;
+      maxChangedSymbols?: number;
+    }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return analyzeBlastRadius({ ...input, repoRoot, projectModelCache });
     },
@@ -2823,6 +2913,7 @@ export function createToolHandlers(
       query: string;
       changedFiles?: string[];
       maxChars: number;
+      maxChangedSymbols?: number;
     }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
       return generateProjectContextPack({ ...input, repoRoot, projectModelCache });
@@ -3029,6 +3120,7 @@ export function createToolHandlers(
         ...input,
         repoRoot,
         objective,
+        projectModelCache,
       });
     },
 
@@ -3251,12 +3343,16 @@ export function createToolHandlers(
       timeoutMs?: number;
     }) {
       const repoRoot = resolveAllowedRepoRoot(input.repoRoot, allowedRepoRoots);
-      assertPrivilegedAction({
-        toolName: "dependency_audit_live",
-        kind: "command",
-        operations: [{ kind: "command", command: "npm", args: ["audit", "--json"] }],
-        target: { repoRoot, command: "npm", args: ["audit", "--json"] },
-      });
+      const packageManager = detectProjectContract({ repoRoot }).packageManager;
+      if (packageManager === "npm" || packageManager === "pnpm" || packageManager === "bun") {
+        const command = packageManager;
+        assertPrivilegedAction({
+          toolName: "dependency_audit_live",
+          kind: "command",
+          operations: [{ kind: "command", command, args: ["audit", "--json"] }],
+          target: { repoRoot, command, args: ["audit", "--json"] },
+        });
+      }
       return runDependencyAuditLive({ ...input, repoRoot }, options.dependencyAuditRunner);
     },
 

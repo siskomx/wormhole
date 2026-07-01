@@ -150,6 +150,11 @@ describe("repo activity MCP tool handlers", () => {
         query: "lifecycleAccountingMarker",
         requireFresh: true,
       });
+      const impact = tools.changeImpactAnalyze({
+        repoRoot,
+        changedFiles: ["src/f0000.ts"],
+        maxChangedSymbols: 20,
+      });
 
       expect(before.repoIndex?.summary.fileCount).toBeGreaterThan(1000);
       expect(before.repoIndex?.summary.skippedFiles).not.toContain("src/f1004.ts");
@@ -159,6 +164,8 @@ describe("repo activity MCP tool handlers", () => {
       expect(after.repoIndex?.summary.fileCount).toBeGreaterThan(1000);
       expect(after.repoIndex?.summary.skippedFiles).not.toContain("src/f1004.ts");
       expect(query.results.map((entry) => entry.path)).toContain("src/f1004.ts");
+      expect(impact.indexHealth.fileCount).toBeGreaterThan(1000);
+      expect(impact.indexHealth.skippedFiles).not.toContain("src/f1004.ts");
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

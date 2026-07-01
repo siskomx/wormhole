@@ -54,7 +54,7 @@ export type WormholeCapabilityManifest = {
 export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
   return {
     name: "wormhole",
-    version: "0.16.0",
+    version: "0.17.0",
     maxOrchestrationDepth: 4,
     layers: [
       {
@@ -263,7 +263,7 @@ export function createDefaultCapabilityManifest(): WormholeCapabilityManifest {
         id: "orchestration.dependency-risk-intelligence",
         area: "orchestration",
         status: "implemented",
-        description: "Dependency risk reporting that combines local lockfile/license metadata with npm audit, outdated, CVE/GHSA, and bounded live audit signals.",
+        description: "Dependency risk reporting that combines local lockfile/license metadata with npm, pnpm, or bun audit/outdated, CVE/GHSA, and bounded live audit signals.",
       },
       {
         id: "orchestration.docs-sync-gate",

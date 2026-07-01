@@ -15,6 +15,17 @@ export type AgentTransportEvidence = {
   durationMs: number;
 };
 
+const DEFAULT_AGENT_TIMEOUT_MS = 30_000;
+const MAX_AGENT_TIMEOUT_MS = 10 * 60_000;
+
+function clampAgentTimeout(timeoutMs: number | undefined): number {
+  const value = timeoutMs ?? DEFAULT_AGENT_TIMEOUT_MS;
+  if (!Number.isFinite(value)) {
+    return DEFAULT_AGENT_TIMEOUT_MS;
+  }
+  return Math.min(Math.max(Math.trunc(value), 1), MAX_AGENT_TIMEOUT_MS);
+}
+
 function sha256(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
@@ -25,7 +36,7 @@ function runCliAgent(agent: AgentDescriptor, run: AgentRunRecord): Promise<Agent
     throw new Error(`CLI agent ${agent.agentId} requires runtime.command`);
   }
   const startedAt = Date.now();
-  const timeoutMs = runtime.timeoutMs ?? 30_000;
+  const timeoutMs = clampAgentTimeout(run.timeoutMs ?? runtime.timeoutMs);
   const stdin = JSON.stringify({
     missionId: run.missionId,
     taskId: run.taskId,
@@ -42,7 +53,7 @@ function runCliAgent(agent: AgentDescriptor, run: AgentRunRecord): Promise<Agent
     let stderr = "";
     let settled = false;
 
-    const finish = (exitCode: number | null, timedOut = false) => {
+    const finish = (exitCode: number | null, timedOut = false, startError?: string) => {
       if (settled) {
         return;
       }
@@ -60,11 +71,13 @@ function runCliAgent(agent: AgentDescriptor, run: AgentRunRecord): Promise<Agent
       };
       resolve({
         status: exitCode === 0 && !timedOut ? "completed" : "failed",
-        summary: timedOut
-          ? `CLI agent timed out after ${timeoutMs}ms`
-          : exitCode === 0
-            ? "CLI agent completed."
-            : `CLI agent failed with exit code ${exitCode}`,
+        summary: startError
+          ? `CLI agent failed to start: ${startError}`
+          : timedOut
+            ? `CLI agent timed out after ${timeoutMs}ms`
+            : exitCode === 0
+              ? "CLI agent completed."
+              : `CLI agent failed with exit code ${exitCode}`,
         output: evidence,
       });
     };
@@ -83,10 +96,15 @@ function runCliAgent(agent: AgentDescriptor, run: AgentRunRecord): Promise<Agent
     });
     child.on("error", (error) => {
       stderr += error.message;
+      finish(null, false, error.message);
+    });
+    child.stdin.on("error", (error) => {
+      stderr += error.message;
+      child.kill("SIGTERM");
+      finish(null, false, error.message);
     });
     child.on("close", (code) => finish(code));
-    child.stdin.write(stdin);
-    child.stdin.end();
+    child.stdin.end(stdin);
   });
 }
 
@@ -97,7 +115,7 @@ async function runHttpAgent(agent: AgentDescriptor, run: AgentRunRecord): Promis
   }
   const startedAt = Date.now();
   const controller = new AbortController();
-  const timeoutMs = runtime.timeoutMs ?? 30_000;
+  const timeoutMs = clampAgentTimeout(run.timeoutMs ?? runtime.timeoutMs);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(runtime.endpoint, {

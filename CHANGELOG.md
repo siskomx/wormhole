@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.17.0 - 2026-07-01
+
+- Added clean-state Wormhole dogfood self-test coverage with called, guarded, and failed tool dispositions plus result classification for returned failure records.
+- Hardened large-repo durable intelligence refresh paths, including time-limited index freshness, reusable manifest refreshes, incremental changed-file updates, and preserved large-repo index options across impact and state-maintenance workflows.
+- Expanded live dependency audit support from npm to npm, pnpm, and bun, including provider-specific audit/outdated parsing and Windows package-manager shim execution.
+
 ## 0.16.0 - 2026-07-01
 
 - Added a typed claim/proof ledger for deterministic repo and workflow claims, including evidence IDs, invalidation keys, support status, and persisted query/update handlers.
