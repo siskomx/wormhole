@@ -218,6 +218,16 @@ import {
   queryRepoRelations,
   type RelationQueryInput,
 } from "./relation-query.js";
+import {
+  createClaimLedgerStore,
+  type ClaimGateInput,
+  type ClaimInvalidationInput,
+  type ClaimLedgerSnapshot,
+  type ClaimQueryInput,
+  type ClaimRecord,
+  type ClaimRecordInput,
+  type ClaimVerificationInput,
+} from "./claim-ledger.js";
 import { hybridRepoSearch } from "./hybrid-repo-search.js";
 import { reconcileArtifacts, type ArtifactProposal } from "./reconciliation.js";
 import { createDagSchedule, type ScheduledTask } from "./scheduler.js";
@@ -524,6 +534,12 @@ export type StateMaintenanceRetryInput = {
   overrides?: Partial<StateMaintenanceRunInput>;
 };
 
+export type GateClaimCheckInput = {
+  claimIds?: string[];
+  claims?: ClaimRecord[];
+  enforce?: boolean;
+};
+
 type RuntimeToolState = {
   agents?: Partial<AgentRegistrySnapshot>;
   printingPress?: Partial<PrintingPressRegistrySnapshot>;
@@ -542,6 +558,7 @@ type RuntimeToolState = {
   patchTransactions?: Partial<PatchTransactionSnapshot>;
   stateMaintenance?: Partial<StateMaintenanceSnapshot>;
   toolPromotion?: Partial<{ records: ToolPromotionRecord[] }>;
+  claimLedger?: Partial<ClaimLedgerSnapshot>;
 };
 
 function resolveCacheRoot(cacheRoot: string, repoRoot: string = process.cwd()): string {
@@ -670,6 +687,9 @@ export function createToolHandlers(
   );
   const patchTransactionStore = createPatchTransactionStore(runtimeState.patchTransactions, (snapshot) =>
     persistRuntimeState("patchTransactions", snapshot),
+  );
+  const claimLedgerStore = createClaimLedgerStore(runtimeState.claimLedger, (snapshot) =>
+    persistRuntimeState("claimLedger", snapshot),
   );
   const stateMaintenanceRuns = new Map<string, StateMaintenanceRunRecord>(
     (runtimeState.stateMaintenance?.runs ?? []).map((run) => [run.runId, run]),
@@ -1410,6 +1430,24 @@ export function createToolHandlers(
       });
   }
 
+  function resolveClaimChecks(input: GateClaimCheckInput | undefined): ClaimGateInput | undefined {
+    if (!input) {
+      return undefined;
+    }
+    const claimsById = new Map<string, ClaimRecord>();
+    for (const claim of input.claims ?? []) {
+      claimsById.set(claim.claimId, claim);
+    }
+    for (const claimId of input.claimIds ?? []) {
+      const claim = claimLedgerStore.get(claimId);
+      claimsById.set(claim.claimId, claim);
+    }
+    return {
+      claims: [...claimsById.values()],
+      enforce: input.enforce,
+    };
+  }
+
   return {
     missionStart(input: { objective: string; repoRoot: string }) {
       return kernel.startMission(input);
@@ -1422,6 +1460,22 @@ export function createToolHandlers(
     recordEvidence(input: { missionId: string } & EvidenceInput) {
       const { missionId, ...evidence } = input;
       return kernel.recordEvidence(missionId, evidence);
+    },
+
+    claimRecord(input: ClaimRecordInput) {
+      return claimLedgerStore.record(input);
+    },
+
+    claimVerify(input: ClaimVerificationInput) {
+      return claimLedgerStore.verify(input);
+    },
+
+    claimSearch(input: ClaimQueryInput) {
+      return claimLedgerStore.query(input);
+    },
+
+    claimInvalidate(input: ClaimInvalidationInput) {
+      return claimLedgerStore.invalidate(input);
     },
 
     recordQuestion(input: { missionId: string } & QuestionInput) {
@@ -1477,6 +1531,7 @@ export function createToolHandlers(
       completedTools?: string[];
       evidenceKinds?: string[];
       evidence?: EvidenceRequirementRecord[];
+      claimChecks?: GateClaimCheckInput;
     }) {
       const storedSignals = latestMaintenanceSignalsForMission(input.missionId);
       // enforceResume blocks only on an existing resume validation: the A2-populated
@@ -1494,6 +1549,7 @@ export function createToolHandlers(
         runtimeBehavior: input.runtimeBehavior,
         loopHealth: input.loopHealth,
         resume,
+        claimChecks: resolveClaimChecks(input.claimChecks),
       });
       if (!input.evidenceRequirements || input.evidenceRequirements.length === 0) {
         return gate;

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.16.0 - 2026-07-01
+
+- Added a typed claim/proof ledger for deterministic repo and workflow claims, including evidence IDs, invalidation keys, support status, and persisted query/update handlers.
+- Added claim gate checks so `gate_request` can warn or block on stale, unsupported, conflicted, or unverified claims before final agent assertions.
+- Added MCP, registry, guided tool-surface, and test coverage for `claim_record`, `claim_verify`, `claim_search`, and `claim_invalidate`.
+
 ## 0.15.0 - 2026-07-01
 
 - Added large-repo intelligence gap-closure tools: canonical repo facts/fact store, typed relation queries, relation-aware change impact, hybrid repo-intelligence search, typed workflow planning, shared evidence requirements, and advisory tool-surface audit.

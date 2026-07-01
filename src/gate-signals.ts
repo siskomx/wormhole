@@ -1,6 +1,7 @@
 import type { SourceConflict } from "./source-authority.js";
 import type { IndexHealthSnapshot } from "./index-health.js";
 import type { ResumeValidationResult } from "./resume-store.js";
+import { evaluateClaimGate, type ClaimGateInput } from "./claim-ledger.js";
 
 export type GateSourceConflictsInput = SourceConflict[] | { conflicts: SourceConflict[] };
 
@@ -70,6 +71,7 @@ export type GateSignalInput = {
   runtimeBehavior?: GateRuntimeBehaviorInput;
   loopHealth?: GateLoopHealthInput;
   resume?: GateResumeInput;
+  claimChecks?: ClaimGateInput;
   enforce?: boolean;
 };
 
@@ -77,6 +79,7 @@ export type GateSignalFinding = {
   ruleId: string;
   severity: "warn" | "block";
   message: string;
+  claimId?: string;
 };
 
 export function evaluateGateSignals(input: GateSignalInput): GateSignalFinding[] {
@@ -125,6 +128,12 @@ export function evaluateGateSignals(input: GateSignalInput): GateSignalFinding[]
   }
 
   findings.push(...gateFindingsForResume(input.resume));
+  findings.push(
+    ...evaluateClaimGate({
+      ...(input.claimChecks ?? {}),
+      enforce: input.claimChecks?.enforce ?? enforce,
+    }),
+  );
 
   if (
     !input.freshness?.durableIndex?.repoIndex?.indexHealth &&

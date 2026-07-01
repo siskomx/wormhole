@@ -15,6 +15,7 @@ import {
   type GateRuntimeBehaviorInput,
   type GateSourceConflictsInput,
 } from "./gate-signals.js";
+import type { ClaimGateInput } from "./claim-ledger.js";
 
 export type SourceType = "file" | "command_output" | "user_input" | "derived_note";
 
@@ -683,6 +684,7 @@ export function createInMemoryKernel(
         runtimeBehavior?: GateRuntimeBehaviorInput;
         loopHealth?: GateLoopHealthInput;
         resume?: GateResumeInput;
+        claimChecks?: ClaimGateInput;
       } = {},
     ): GateResult {
       const state = getMissionState(missionId);

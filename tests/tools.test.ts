@@ -116,6 +116,65 @@ describe("Wormhole MCP tool handlers", () => {
     expect(status.records.map((record) => record.scope.missionId)).toEqual(["Mission/A", "Mission:A"]);
   });
 
+  it("records, invalidates, persists, and gates deterministic claims", () => {
+    const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-claim-tools-"));
+    try {
+      mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+      writeFileSync(path.join(repoRoot, "src", "kernel.ts"), "export const kernel = true;\n");
+      const runtimeStatePath = path.join(repoRoot, ".wormhole", "runtime-state.json");
+      const kernel = createInMemoryKernel();
+      const tools = createToolHandlers(kernel, { runtimeStatePath });
+      const mission = tools.missionStart({
+        objective: "Verify claim ledger wiring",
+        repoRoot,
+      });
+      tools.roundStart({ missionId: mission.missionId });
+      const evidence = tools.recordEvidence({
+        missionId: mission.missionId,
+        sourceType: "file",
+        sourcePath: "src/kernel.ts",
+        retrievalMethod: "read_file",
+        summary: "Kernel evidence supports the claim.",
+      });
+
+      const claim = tools.claimRecord({
+        kind: "verification_passed",
+        subject: "npm test",
+        predicate: "passed",
+        object: "test suite",
+        claimText: "npm test passed for the current change.",
+        producer: { toolName: "verification_run" },
+        evidenceIds: [evidence.evidenceId],
+        invalidationKeys: [{ kind: "file", value: "src/kernel.ts" }],
+      });
+      const invalidated = tools.claimInvalidate({
+        changedFiles: ["src/kernel.ts"],
+        reason: "src/kernel.ts changed after verification.",
+      });
+      const reloadedTools = createToolHandlers(createInMemoryKernel(), { runtimeStatePath });
+      const staleClaims = reloadedTools.claimSearch({ status: "stale" });
+      const gate = tools.gateRequest({
+        missionId: mission.missionId,
+        claimChecks: { claimIds: [claim.claimId], enforce: true },
+      });
+
+      expect(claim.status).toBe("supported");
+      expect(invalidated.invalidatedClaimIds).toEqual([claim.claimId]);
+      expect(staleClaims.claims).toEqual([
+        expect.objectContaining({
+          claimId: claim.claimId,
+          status: "stale",
+        }),
+      ]);
+      expect(gate.open).toBe(false);
+      expect(gate.reasons).toContain(
+        "Claim claim-1 is stale: npm test passed for the current change.",
+      );
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("runs repo reachability review through generic tool handlers", () => {
     const repoRoot = mkdtempSync(path.join(os.tmpdir(), "wormhole-reachability-tools-"));
     try {

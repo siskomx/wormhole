@@ -331,6 +331,47 @@ describe("tool registry conformance", () => {
     ]);
   });
 
+  it("advertises claim ledger tools as evidence-gate support", () => {
+    const catalog = queryToolCatalog({
+      toolNames: ["claim_record", "claim_verify", "claim_search", "claim_invalidate"],
+    });
+
+    expect(catalog.tools).toEqual([
+      expect.objectContaining({
+        name: "claim_record",
+        plane: "mission",
+        phase: "gate",
+        pack: "core",
+        risk: "write",
+        inputs: expect.arrayContaining(["kind", "subject", "predicate", "claimText", "evidenceIds"]),
+      }),
+      expect.objectContaining({
+        name: "claim_verify",
+        plane: "mission",
+        phase: "gate",
+        pack: "core",
+        risk: "write",
+        inputs: expect.arrayContaining(["claimId"]),
+      }),
+      expect.objectContaining({
+        name: "claim_search",
+        plane: "mission",
+        phase: "gate",
+        pack: "core",
+        risk: "read",
+        inputs: expect.arrayContaining(["status", "kind", "producerToolName"]),
+      }),
+      expect.objectContaining({
+        name: "claim_invalidate",
+        plane: "mission",
+        phase: "maintain",
+        pack: "core",
+        risk: "write",
+        inputs: expect.arrayContaining(["changedFiles", "reason"]),
+      }),
+    ]);
+  });
+
   it("advertises hybrid repo intelligence search as a high-level read tool", () => {
     const catalog = queryToolCatalog({ toolNames: ["repo_intelligence_search"] });
 

@@ -12,6 +12,7 @@ import {
 import { TOOL_PROFILE_IDS } from "./tool-profiles.js";
 import { PROJECT_LANES } from "./project-lanes.js";
 import { repoFactEdgeKindSchema } from "./repo-facts.js";
+import { CLAIM_KINDS } from "./claim-ledger.js";
 
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
@@ -29,7 +30,7 @@ export function createWormholeMcpServer(
 ): McpServer {
   const server = new McpServer({
     name: "wormhole",
-    version: "0.15.0",
+    version: "0.16.0",
   });
   const tools = createToolHandlers(kernel, options);
   const taskStatusSchema = z.enum([
@@ -397,6 +398,46 @@ export function createWormholeMcpServer(
     "relation_paths",
     "repo_facts_fresh",
   ]);
+  const claimKindSchema = z.enum(CLAIM_KINDS);
+  const claimStatusSchema = z.enum(["supported", "unsupported", "stale", "conflicted", "unverified"]);
+  const claimEvidenceAnchorSchema = z.object({
+    evidenceId: z.string().optional(),
+    sourcePath: z.string().optional(),
+    lineStart: z.number().optional(),
+    lineEnd: z.number().optional(),
+    repoFactId: z.string().optional(),
+    toolName: z.string().optional(),
+    sourceHash: z.string().optional(),
+  });
+  const claimInvalidationKeySchema = z.object({
+    kind: z.enum(["file", "repo_fingerprint", "repo_fact", "symbol", "verification"]),
+    value: z.string(),
+  });
+  const claimProducerSchema = z.object({
+    toolName: z.string(),
+    missionId: z.string().optional(),
+    artifactId: z.string().optional(),
+    runId: z.string().optional(),
+    agentId: z.string().optional(),
+  });
+  const claimRecordSchema = z.object({
+    claimId: z.string(),
+    kind: claimKindSchema,
+    subject: z.string(),
+    predicate: z.string(),
+    object: z.string().optional(),
+    claimText: z.string(),
+    producer: claimProducerSchema,
+    evidenceIds: z.array(z.string()),
+    evidenceAnchors: z.array(claimEvidenceAnchorSchema),
+    invalidationKeys: z.array(claimInvalidationKeySchema),
+    status: claimStatusSchema,
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    staleReason: z.string().optional(),
+    unsupportedReason: z.string().optional(),
+    conflictedReason: z.string().optional(),
+  });
   const workflowIntentSchema = z.enum([
     "repo_onboarding",
     "feature_implementation",
@@ -583,6 +624,13 @@ export function createWormholeMcpServer(
         evidenceRequirements: z.array(evidenceRequirementIdSchema).optional(),
         completedTools: z.array(z.string()).optional(),
         evidenceKinds: z.array(z.string()).optional(),
+        claimChecks: z
+          .object({
+            claimIds: z.array(z.string()).optional(),
+            claims: z.array(claimRecordSchema).optional(),
+            enforce: z.boolean().optional(),
+          })
+          .optional(),
         evidence: z
           .array(
             z.object({
@@ -597,6 +645,85 @@ export function createWormholeMcpServer(
       },
     },
     async (input) => jsonResult(tools.gateRequest(input)),
+  );
+
+  server.registerTool(
+    "claim_record",
+    {
+      description: "Record a typed, evidence-bound claim for later gate checks and invalidation.",
+      inputSchema: {
+        kind: claimKindSchema,
+        subject: z.string(),
+        predicate: z.string(),
+        object: z.string().optional(),
+        claimText: z.string(),
+        producer: claimProducerSchema,
+        evidenceIds: z.array(z.string()).optional(),
+        evidenceAnchors: z.array(claimEvidenceAnchorSchema).optional(),
+        invalidationKeys: z.array(claimInvalidationKeySchema).optional(),
+        status: claimStatusSchema.optional(),
+        sourceAuthority: z
+          .enum([
+            "current_code",
+            "current_test",
+            "current_migration",
+            "current_config",
+            "derived_code_fact",
+            "verified_doc",
+            "supporting_doc",
+            "generated_note",
+            "unknown",
+          ])
+          .optional(),
+        repoFingerprint: z.string().optional(),
+        confidence: z.number().optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
+      },
+    },
+    async (input) => jsonResult(tools.claimRecord(input)),
+  );
+
+  server.registerTool(
+    "claim_verify",
+    {
+      description: "Update or re-check a recorded claim status.",
+      inputSchema: {
+        claimId: z.string(),
+        status: claimStatusSchema.optional(),
+        evidenceIds: z.array(z.string()).optional(),
+        reason: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.claimVerify(input)),
+  );
+
+  server.registerTool(
+    "claim_search",
+    {
+      description: "Search recorded claims by id, kind, status, subject, or producer tool.",
+      inputSchema: {
+        claimIds: z.array(z.string()).optional(),
+        status: claimStatusSchema.optional(),
+        kind: claimKindSchema.optional(),
+        subject: z.string().optional(),
+        producerToolName: z.string().optional(),
+        limit: z.number().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.claimSearch(input)),
+  );
+
+  server.registerTool(
+    "claim_invalidate",
+    {
+      description: "Mark claims stale when changed files or invalidation keys affect supporting evidence.",
+      inputSchema: {
+        changedFiles: z.array(z.string()).optional(),
+        invalidationKeys: z.array(claimInvalidationKeySchema).optional(),
+        reason: z.string().optional(),
+      },
+    },
+    async (input) => jsonResult(tools.claimInvalidate(input)),
   );
 
   server.registerTool(

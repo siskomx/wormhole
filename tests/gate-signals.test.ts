@@ -182,6 +182,38 @@ describe("gate index health signals", () => {
       }),
     );
   });
+
+  it("blocks enforced gates on high-risk stale claim checks", () => {
+    const findings = evaluateGateSignals({
+      claimChecks: {
+        claims: [
+          {
+            claimId: "claim-1",
+            kind: "impact_tests_found",
+            subject: "src/kernel.ts",
+            predicate: "has_impacted_tests",
+            claimText: "src/kernel.ts has impacted tests.",
+            status: "stale",
+            evidenceIds: ["E1"],
+            evidenceAnchors: [],
+            invalidationKeys: [{ kind: "file", value: "src/kernel.ts" }],
+            producer: { toolName: "change_impact_analyze" },
+            createdAt: "2026-07-01T00:00:00.000Z",
+            updatedAt: "2026-07-01T00:00:00.000Z",
+          },
+        ],
+        enforce: true,
+      },
+    });
+
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "claim-ledger:stale",
+        severity: "block",
+        message: expect.stringContaining("claim-1"),
+      }),
+    );
+  });
 });
 
 describe("gate resume signals", () => {
